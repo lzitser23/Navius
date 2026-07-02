@@ -1,0 +1,107 @@
+@namespace Navius.Primitives.Components.Toolbar
+@inherits ToolbarPart
+
+@*
+    A set of toggle buttons inside a toolbar (the spec Toolbar.ToggleGroup). role=group;
+    data-orientation mirrors the toolbar. type="single" => at most one pressed value
+    (radio-like); type="multiple" => any number pressed. Controlled via @bind-Value
+    (IReadOnlyList<string>) or uncontrolled via DefaultValue.
+
+    Crucially this does NOT create its own roving-focus controller: its items carry the
+    toolbar's data-navius-toolbar-item marker and register with the ToolbarContext, so
+    they share the toolbar's single Tab stop and the toolbar's roving arrow navigation.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div role="group"
+         data-navius-toolbar-togglegroup
+         data-orientation="@Context.Orientation"
+         data-disabled="@(Disabled ? "" : null)"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary><c>"single"</c> (at most one pressed) or <c>"multiple"</c> (many pressed).</summary>
+    [Parameter] public string Type { get; set; } = "single";
+
+    /// <summary>Controlled pressed set. Provide together with <see cref="ValueChanged"/>.</summary>
+    [Parameter] public IReadOnlyList<string>? Value { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<string>> ValueChanged { get; set; }
+
+    /// <summary>Initial pressed set for uncontrolled use.</summary>
+    [Parameter] public IReadOnlyList<string>? DefaultValue { get; set; }
+
+    /// <summary>Disables every item in the group.</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ToolbarToggleGroupContext _context = default!;
+    private List<string> _internal = new();
+
+    private bool IsControlled => ValueChanged.HasDelegate;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _internal = DefaultValue is null ? new List<string>() : new List<string>(DefaultValue);
+        _context = new ToolbarToggleGroupContext(ToggleAsync, Type, Disabled);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var current = IsControlled ? (Value ?? Array.Empty<string>()) : _internal;
+        await _context.SetValueInternalAsync(current);
+    }
+
+    private async Task ToggleAsync(string value)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        var current = IsControlled ? (Value ?? Array.Empty<string>()) : _internal;
+        var next = ComputeNext(current, value);
+
+        if (IsControlled)
+        {
+            await ValueChanged.InvokeAsync(next);
+        }
+        else
+        {
+            _internal = next;
+            await _context.SetValueInternalAsync(next);
+            StateHasChanged();
+        }
+    }
+
+    private List<string> ComputeNext(IReadOnlyList<string> current, string value)
+    {
+        var pressed = current.Contains(value, StringComparer.Ordinal);
+
+        if (Type == "single")
+        {
+            // Radio-like: pressing the active one clears it; otherwise it becomes the sole value.
+            return pressed ? new List<string>() : new List<string> { value };
+        }
+
+        var next = new List<string>(current);
+        if (pressed)
+        {
+            next.RemoveAll(v => string.Equals(v, value, StringComparison.Ordinal));
+        }
+        else
+        {
+            next.Add(value);
+        }
+
+        return next;
+    }
+}

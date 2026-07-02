@@ -1,0 +1,14 @@
+@namespace Navius.Primitives.Components.Autocomplete
+
+@*
+    The Base UI Autocomplete.Icon — a presentational chevron slot inside the Trigger.
+*@
+
+<span aria-hidden="true" data-navius-autocomplete-icon @attributes="Attributes">@ChildContent</span>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

@@ -1,0 +1,43 @@
+@namespace Navius.Primitives.Components.Popover
+@implements IDisposable
+
+@*
+    The spec Popover.Description. Describes the popup: registers its presence so the
+    Popup wires aria-describedby only when a Description is mounted (no dangling IDREF).
+*@
+
+<p id="@Context.DescriptionId" data-navius-popover-description @attributes="Attributes">@ChildContent</p>
+
+@code {
+    [CascadingParameter] private PopoverContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool _registered;
+
+    protected override void OnInitialized()
+    {
+        Context.RegisterDescription();
+        _registered = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Context.NotifyChangedAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_registered)
+        {
+            Context.UnregisterDescription();
+            _registered = false;
+        }
+    }
+}

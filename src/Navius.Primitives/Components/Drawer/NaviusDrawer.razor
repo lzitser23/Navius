@@ -1,0 +1,63 @@
+@namespace Navius.Primitives.Components.Drawer
+@inherits ComponentBase
+
+@*
+    Root of the drawer (Base UI Drawer.Root). Owns open state (controlled via @bind-Open
+    or uncontrolled via DefaultOpen) and the docked Side, cascading a DrawerContext to
+    its parts. Renders no DOM of its own.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    private DrawerContext _context = default!;
+    private bool _internalOpen;
+
+    /// <summary>Controlled open state. Use with <see cref="OpenChanged"/> (i.e. @bind-Open).</summary>
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>Initial open state when used uncontrolled (no @bind-Open).</summary>
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    /// <summary>Modal (default true): traps focus + locks scroll while open.</summary>
+    [Parameter] public bool Modal { get; set; } = true;
+
+    /// <summary>The edge the sheet docks to and is dragged toward: bottom (default) | top | left | right.</summary>
+    [Parameter] public string Side { get; set; } = "bottom";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsControlled => OpenChanged.HasDelegate;
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _context = new DrawerContext(RequestSetAsync) { Modal = Modal, Side = Side };
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.Modal = Modal;
+        _context.Side = Side;
+        var authoritative = IsControlled ? Open : _internalOpen;
+        await _context.SetOpenInternalAsync(authoritative);
+    }
+
+    private async Task RequestSetAsync(bool value)
+    {
+        if (IsControlled)
+        {
+            await OpenChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internalOpen = value;
+            await _context.SetOpenInternalAsync(value);
+            StateHasChanged();
+        }
+    }
+}

@@ -1,0 +1,23 @@
+@namespace Navius.Primitives.Components.DirectionProvider
+
+@*
+    DOM-transparent, like the spec's DirectionProvider: renders no element, only
+    cascades the reading direction. Descendants read it via
+    [CascadingParameter(Name = "NaviusDirection")] and apply a dir attribute
+    themselves if they need one.
+*@
+
+<CascadingValue Name="NaviusDirection" Value="@Dir" IsFixed="false">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    /// <summary>
+    /// Reading direction to cascade to descendants. Either "ltr" or "rtl".
+    /// </summary>
+    [Parameter]
+    public string Dir { get; set; } = "ltr";
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,197 @@
+@namespace Navius.Primitives.Components.DataGrid
+@typeparam TItem
+@inherits ComponentBase
+
+@*
+    Root of the data grid. A pure logic provider: it owns the controlled/uncontrolled
+    source of truth for every state slice (sorting, global filter, pagination, row
+    selection, column visibility) and cascades a DataGridContext<TItem> the helm
+    styles. It renders NO element of its own — the helm fully controls table markup.
+
+    Each slice follows the brain's controlled-vs-uncontrolled contract:
+      X / @bind-X / XChanged  +  DefaultX
+    Controlled-ness is tracked per slice in SetParametersAsync by whether a NON-NULL
+    value was supplied this render (a present-but-null bind stays uncontrolled — the
+    Accordion lesson). XChanged fires as a pure observer in the uncontrolled case too.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    /// <summary>The rows. Sorting/filtering/paging derive from this; pass a stable reference.</summary>
+    [Parameter] public IEnumerable<TItem>? Items { get; set; }
+
+    /// <summary>Column descriptors (header, accessor, sortable/hideable, optional cell template + filter).</summary>
+    [Parameter] public IReadOnlyList<DataGridColumn<TItem>>? Columns { get; set; }
+
+    /// <summary>Row identity for selection. Defaults to the row object itself.</summary>
+    [Parameter] public Func<TItem, object>? RowKey { get; set; }
+
+    // ---- sorting ----
+    /// <summary>Controlled single-column sort state. Use @bind-Sorting.</summary>
+    [Parameter] public DataGridSort? Sorting { get; set; }
+    [Parameter] public EventCallback<DataGridSort?> SortingChanged { get; set; }
+    /// <summary>Uncontrolled initial sort state.</summary>
+    [Parameter] public DataGridSort? DefaultSorting { get; set; }
+
+    // ---- global filter ----
+    /// <summary>Controlled global filter text. Use @bind-GlobalFilter.</summary>
+    [Parameter] public string? GlobalFilter { get; set; }
+    [Parameter] public EventCallback<string?> GlobalFilterChanged { get; set; }
+    /// <summary>Uncontrolled initial global filter text.</summary>
+    [Parameter] public string? DefaultGlobalFilter { get; set; }
+
+    // ---- pagination ----
+    /// <summary>Controlled pagination (page index + size). Use @bind-Pagination.</summary>
+    [Parameter] public DataGridPagination? Pagination { get; set; }
+    [Parameter] public EventCallback<DataGridPagination?> PaginationChanged { get; set; }
+    /// <summary>Uncontrolled initial pagination (defaults to page 0, size 10).</summary>
+    [Parameter] public DataGridPagination? DefaultPagination { get; set; }
+
+    // ---- row selection ----
+    /// <summary>Controlled set of selected row keys. Use @bind-RowSelection.</summary>
+    [Parameter] public IEnumerable<object>? RowSelection { get; set; }
+    [Parameter] public EventCallback<IEnumerable<object>> RowSelectionChanged { get; set; }
+    /// <summary>Uncontrolled initial selected row keys.</summary>
+    [Parameter] public IEnumerable<object>? DefaultRowSelection { get; set; }
+
+    // ---- column visibility ----
+    /// <summary>Controlled set of HIDDEN column keys. Use @bind-ColumnVisibility.</summary>
+    [Parameter] public IEnumerable<string>? ColumnVisibility { get; set; }
+    [Parameter] public EventCallback<IEnumerable<string>> ColumnVisibilityChanged { get; set; }
+    /// <summary>Uncontrolled initial hidden column keys.</summary>
+    [Parameter] public IEnumerable<string>? DefaultColumnVisibility { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private DataGridContext<TItem> _context = default!;
+
+    private DataGridSort _internalSorting = DataGridSort.None;
+    private string _internalGlobalFilter = string.Empty;
+    private DataGridPagination _internalPagination = DataGridPagination.Default;
+    private HashSet<object> _internalRowSelection = new();
+    private HashSet<string> _internalColumnVisibility = new();
+
+    // Whether a non-null controlling value was supplied this render (per slice).
+    private bool _sortingSet;
+    private bool _globalFilterSet;
+    private bool _paginationSet;
+    private bool _rowSelectionSet;
+    private bool _columnVisibilitySet;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        _sortingSet = false;
+        _globalFilterSet = false;
+        _paginationSet = false;
+        _rowSelectionSet = false;
+        _columnVisibilitySet = false;
+
+        // A present-but-null controlling value must NOT flip a slice to controlled
+        // (that would freeze it and route changes into an unhandled callback).
+        if (parameters.TryGetValue<DataGridSort?>(nameof(Sorting), out var s) && s is not null)
+            _sortingSet = true;
+        if (parameters.TryGetValue<string?>(nameof(GlobalFilter), out var g) && g is not null)
+            _globalFilterSet = true;
+        if (parameters.TryGetValue<DataGridPagination?>(nameof(Pagination), out var p) && p is not null)
+            _paginationSet = true;
+        if (parameters.TryGetValue<IEnumerable<object>?>(nameof(RowSelection), out var rs) && rs is not null)
+            _rowSelectionSet = true;
+        if (parameters.TryGetValue<IEnumerable<string>?>(nameof(ColumnVisibility), out var cv) && cv is not null)
+            _columnVisibilitySet = true;
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _internalSorting = DefaultSorting ?? DataGridSort.None;
+        _internalGlobalFilter = DefaultGlobalFilter ?? string.Empty;
+        _internalPagination = DefaultPagination ?? DataGridPagination.Default;
+        _internalRowSelection = DefaultRowSelection is null ? new() : new HashSet<object>(DefaultRowSelection);
+        _internalColumnVisibility = DefaultColumnVisibility is null ? new() : new HashSet<string>(DefaultColumnVisibility);
+
+        var rowKey = RowKey ?? (item => (object)item!);
+        _context = new DataGridContext<TItem>(
+            rowKey,
+            OnSortingChangeAsync,
+            OnGlobalFilterChangeAsync,
+            OnPaginationChangeAsync,
+            OnRowSelectionChangeAsync,
+            OnColumnVisibilityChangeAsync);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await _context.SetItemsAsync(Items);
+        await _context.SetColumnsAsync(Columns);
+
+        await _context.SetSortingInternalAsync(_sortingSet ? Sorting! : _internalSorting);
+        await _context.SetGlobalFilterInternalAsync(_globalFilterSet ? GlobalFilter! : _internalGlobalFilter);
+        await _context.SetPaginationInternalAsync(_paginationSet ? Pagination! : _internalPagination);
+        await _context.SetRowSelectionInternalAsync(_rowSelectionSet ? RowSelection! : _internalRowSelection);
+        await _context.SetColumnVisibilityInternalAsync(_columnVisibilitySet ? ColumnVisibility! : _internalColumnVisibility);
+    }
+
+    private async Task OnSortingChangeAsync(DataGridSort next)
+    {
+        await SortingChanged.InvokeAsync(next);
+        if (!_sortingSet)
+        {
+            _internalSorting = next;
+            await _context.SetSortingInternalAsync(next);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnGlobalFilterChangeAsync(string next)
+    {
+        await GlobalFilterChanged.InvokeAsync(next);
+        if (!_globalFilterSet)
+        {
+            _internalGlobalFilter = next;
+            await _context.SetGlobalFilterInternalAsync(next);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnPaginationChangeAsync(DataGridPagination next)
+    {
+        await PaginationChanged.InvokeAsync(next);
+        if (!_paginationSet)
+        {
+            _internalPagination = next;
+            await _context.SetPaginationInternalAsync(next);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnRowSelectionChangeAsync(IReadOnlyCollection<object> next)
+    {
+        await RowSelectionChanged.InvokeAsync(next);
+        if (!_rowSelectionSet)
+        {
+            _internalRowSelection = new HashSet<object>(next);
+            await _context.SetRowSelectionInternalAsync(_internalRowSelection);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnColumnVisibilityChangeAsync(IReadOnlyCollection<string> next)
+    {
+        await ColumnVisibilityChanged.InvokeAsync(next);
+        if (!_columnVisibilitySet)
+        {
+            _internalColumnVisibility = new HashSet<string>(next);
+            await _context.SetColumnVisibilityInternalAsync(_internalColumnVisibility);
+        }
+
+        StateHasChanged();
+    }
+}

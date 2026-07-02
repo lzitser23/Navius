@@ -1,0 +1,146 @@
+@namespace Navius.Primitives.Components.Menu
+
+@*
+    role="menuitemcheckbox" item. Tri-state checked: true | false | null
+    (indeterminate => aria-checked="mixed"). Controlled via @bind-Checked (bool?),
+    uncontrolled via DefaultChecked. On select it toggles its checked state, fires
+    OnSelect (cancelable), and closes the menu unless OnSelect calls PreventDefault().
+    Cascades an item-state context the ItemIndicator reads.
+*@
+
+<div role="menuitemcheckbox"
+     tabindex="-1"
+     data-navius-menu-item
+     data-navius-menu-checkbox-item
+     aria-checked="@AriaChecked"
+     data-checked="@(CurrentChecked == true ? "" : null)"
+     data-unchecked="@(CurrentChecked == false ? "" : null)"
+     data-indeterminate="@(CurrentChecked is null ? "" : null)"
+     data-disabled="@(Disabled ? "" : null)"
+     aria-disabled="@(Disabled ? "true" : null)"
+     data-navius-text-value="@TextValue"
+     @onclick="ActivateAsync"
+     @onkeydown="OnKeyDownAsync"
+     @attributes="Attributes">
+    <CascadingValue Value="_stateContext" IsFixed="true">
+        @ChildContent
+    </CascadingValue>
+</div>
+
+@code {
+    [CascadingParameter] private MenuContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Controlled checked state: true | false | null (indeterminate). Use @bind-Checked.</summary>
+    [Parameter] public bool? Checked { get; set; }
+
+    [Parameter] public EventCallback<bool?> CheckedChanged { get; set; }
+
+    /// <summary>Uncontrolled initial checked state (null = indeterminate).</summary>
+    [Parameter] public bool? DefaultChecked { get; set; }
+
+    /// <summary>Cancelable select. PreventDefault() keeps the menu open after toggling.</summary>
+    [Parameter] public EventCallback<NaviusSelectEventArgs> OnSelect { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public string? TextValue { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private readonly MenuItemStateContext _stateContext = new();
+
+    private bool? _internalChecked;
+    private bool _initialized;
+    private bool _checkedSet;
+
+    private bool IsControlled => _checkedSet;
+
+    private bool? CurrentChecked => IsControlled ? Checked : _internalChecked;
+
+    private string AriaChecked => CurrentChecked switch
+    {
+        true => "true",
+        false => "false",
+        null => "mixed",
+    };
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        _checkedSet = false;
+        foreach (var p in parameters)
+        {
+            if (p.Name == nameof(Checked))
+            {
+                _checkedSet = true;
+            }
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!_initialized)
+        {
+            _internalChecked = DefaultChecked;
+            _initialized = true;
+        }
+
+        SyncState();
+    }
+
+    private void SyncState()
+    {
+        _stateContext.Checked = CurrentChecked;
+        _stateContext.NotifyChanged();
+    }
+
+    private async Task ActivateAsync()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        // the spec: indeterminate toggles to checked; otherwise flip.
+        var next = CurrentChecked switch
+        {
+            true => false,
+            false => true,
+            null => true,
+        };
+
+        if (IsControlled)
+        {
+            await CheckedChanged.InvokeAsync(next);
+        }
+        else
+        {
+            _internalChecked = next;
+            await CheckedChanged.InvokeAsync(next);
+            SyncState();
+        }
+
+        var args = new NaviusSelectEventArgs();
+        if (OnSelect.HasDelegate)
+        {
+            await OnSelect.InvokeAsync(args);
+        }
+
+        if (!args.DefaultPrevented)
+        {
+            await Context.RequestCloseAsync();
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            await ActivateAsync();
+        }
+    }
+}

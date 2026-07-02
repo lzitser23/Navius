@@ -1,0 +1,28 @@
+@namespace Navius.Primitives.Components.Toast
+
+@*
+    The Base UI Toast.Portal. A flag-setter: records the custom mount container + keepMounted
+    into the provider context. The actual teleport is performed by the Viewport via
+    <NaviusPortal> (the viewport, not each root, is the portalled element for toasts), so a
+    single shared portal implementation is reused across every overlay. Renders no DOM.
+*@
+
+@ChildContent
+
+@code {
+    [CascadingParameter] private ToastProviderContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>CSS selector of a custom mount container; null teleports into <c>document.body</c>.</summary>
+    [Parameter] public string? Container { get; set; }
+
+    /// <summary>Keep the viewport mounted while empty (for exit animations).</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        Context.PortalContainer = Container;
+        Context.PortalKeepMounted = KeepMounted;
+    }
+}

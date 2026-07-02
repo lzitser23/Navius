@@ -1,0 +1,40 @@
+@namespace Navius.Primitives.Components.NavigationMenu
+@inherits Navius.Primitives.Components.Overlays.OverlayPresence
+@using Navius.Primitives.Components.Overlays
+@using Navius.Primitives.Portal
+
+@*
+    Base UI's NavigationMenu.Backdrop — a presentational scrim behind the popup, open
+    whenever any item is active. A non-modal navigation menu usually has none; this thin
+    part is provided for anatomy parity. Carries discrete data-open / data-closed +
+    data-starting-style / data-ending-style. Outside dismissal is owned by the Popup's
+    dismissable layer, not this element.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="Element"
+             data-open="@(Context.Open ? "" : null)"
+             data-closed="@(Context.Open ? null : "")"
+             data-starting-style="@(Entering ? "" : null)"
+             data-ending-style="@(Exiting ? "" : null)"
+             data-navius-navigationmenu-backdrop
+             @attributes="Attributes">
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private NavigationMenuContext Context { get; set; } = default!;
+
+    /// <summary>Keep the backdrop mounted while closed (for exit animations).</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override IOverlayContext OverlayContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+}

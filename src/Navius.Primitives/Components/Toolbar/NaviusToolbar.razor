@@ -1,0 +1,90 @@
+@namespace Navius.Primitives.Components.Toolbar
+@inherits ComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    Root of a toolbar (WAI-ARIA APG "Toolbar"). role=toolbar; data-orientation drives
+    the arrow-key axis. The toolbar is a single Tab stop: the first enabled item carries
+    tabindex=0 and the rest tabindex=-1 (computed in C# via the context). The engine's
+    roving-focus controller moves DOM focus between items on Left/Right (horizontal) or
+    Up/Down (vertical) plus Home/End. aria-label / aria-labelledby are supplied by the
+    consumer through @attributes.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div @ref="_element"
+         role="toolbar"
+         aria-orientation="@Orientation"
+         data-navius-toolbar
+         data-orientation="@Orientation"
+         dir="@DirAttr"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary><c>"horizontal"</c> (default) or <c>"vertical"</c>.</summary>
+    [Parameter] public string Orientation { get; set; } = "horizontal";
+
+    /// <summary>When <c>true</c> (default) arrow navigation wraps past first/last; when <c>false</c> it stops at the ends.</summary>
+    [Parameter] public bool Loop { get; set; } = true;
+
+    /// <summary>Reading direction (<c>"ltr"</c> | <c>"rtl"</c>). In RTL, horizontal Left/Right arrow semantics swap.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")]
+    public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ToolbarContext _context = default!;
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private RovingFocus? _roving;
+    private bool _engaged;
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    // Emit dir only when it was explicitly set (param or cascade), matching the spec.
+    private string? DirAttr => Dir ?? CascadedDir;
+
+    protected override void OnInitialized()
+    {
+        _context = new ToolbarContext(Orientation);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_engaged)
+        {
+            _engaged = true;
+            _interop ??= new NaviusJsInterop(JS);
+            _roving = await _interop.CreateRovingFocusAsync(
+                _element,
+                new RovingFocusOptions(
+                    Orientation,
+                    "[data-navius-toolbar-item]:not([disabled]):not([data-disabled])",
+                    Loop: Loop,
+                    Dir: EffectiveDir));
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_roving is not null)
+        {
+            await _roving.DisposeAsync();
+            _roving = null;
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+    }
+}

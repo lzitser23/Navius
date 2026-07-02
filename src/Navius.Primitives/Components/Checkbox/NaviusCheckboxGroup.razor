@@ -1,0 +1,128 @@
+@namespace Navius.Primitives.Components.Checkbox
+@inherits ComponentBase
+
+@*
+    Base UI Checkbox Group — a <div role="group"> providing shared state to a set of
+    child NaviusCheckbox. The group's Value is the list of checked child Names;
+    children derive their checked state from membership and route toggles back here.
+    A child with Parent="true" + the group's AllValues shows a select-all checkbox
+    with automatic indeterminate roll-up. Controlled via @bind-Value, uncontrolled
+    via DefaultValue. Emits discrete data-disabled (never data-state).
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div role="group"
+         data-disabled="@(Disabled ? "" : null)"
+         data-navius-checkbox-group
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled set of checked child names. Use <c>@bind-Value</c>.</summary>
+    [Parameter] public IReadOnlyList<string>? Value { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<string>> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial set of checked child names.</summary>
+    [Parameter] public IReadOnlyList<string>? DefaultValue { get; set; }
+
+    /// <summary>Every child name in the group — required to drive a <c>Parent</c> checkbox.</summary>
+    [Parameter] public IReadOnlyList<string>? AllValues { get; set; }
+
+    /// <summary>Disables every checkbox in the group.</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private CheckboxGroupContext _context = default!;
+    private List<string> _internal = new();
+    private bool _valueSet;
+    private bool _initialized;
+
+    private bool IsControlled => _valueSet;
+    private IReadOnlyList<string> CurrentValue => IsControlled ? (Value ?? Array.Empty<string>()) : _internal;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<IReadOnlyList<string>>(nameof(Value), out var v) && v is not null)
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _internal = DefaultValue is not null ? new List<string>(DefaultValue) : new List<string>();
+        _initialized = true;
+
+        _context = new CheckboxGroupContext(
+            () => CurrentValue,
+            () => AllValues,
+            SetMemberAsync,
+            SetAllAsync,
+            Disabled);
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Disabled is read-only on the context; rebuild it if Disabled changed so the
+        // new value cascades to children.
+        if (_context.Disabled != Disabled)
+        {
+            _context = new CheckboxGroupContext(
+                () => CurrentValue,
+                () => AllValues,
+                SetMemberAsync,
+                SetAllAsync,
+                Disabled);
+        }
+    }
+
+    private async Task CommitAsync(IReadOnlyList<string> next)
+    {
+        if (!IsControlled)
+        {
+            _internal = new List<string>(next);
+        }
+
+        await ValueChanged.InvokeAsync(next);
+        _context.NotifyChanged();
+        StateHasChanged();
+    }
+
+    private Task SetMemberAsync(string name, bool isChecked)
+    {
+        var next = new List<string>(CurrentValue);
+        if (isChecked)
+        {
+            if (!next.Contains(name))
+            {
+                next.Add(name);
+            }
+        }
+        else
+        {
+            next.Remove(name);
+        }
+
+        return CommitAsync(next);
+    }
+
+    private Task SetAllAsync(bool isChecked)
+    {
+        if (AllValues is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var next = isChecked ? new List<string>(AllValues) : new List<string>();
+        return CommitAsync(next);
+    }
+}

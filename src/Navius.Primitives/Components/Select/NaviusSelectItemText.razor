@@ -1,0 +1,39 @@
+@namespace Navius.Primitives.Components.Select
+@inherits ComponentBase
+
+@*
+    the spec Select.ItemText — the label content for an item. It both renders the
+    label inside the item AND (the spec role) supplies the text the trigger's
+    NaviusSelectValue shows for this value.
+
+    Because Razor render fragments are opaque, the trigger label can't be read back
+    from arbitrary ChildContent. Supply a plain-string Text to register the label
+    for the value (Text takes priority over a parent Item's TextValue). When Text
+    is omitted, ChildContent still renders here but the trigger falls back to the
+    Item's TextValue, then the raw value key.
+*@
+
+<span data-navius-select-item-text @attributes="Attributes">@ChildContent</span>
+
+@code {
+    [CascadingParameter] private SelectItemContext ItemContext { get; set; } = default!;
+
+    /// <summary>
+    /// Plain-string label registered for this item's value so the trigger can show
+    /// it. Optional; falls back to the parent Item's TextValue when omitted.
+    /// </summary>
+    [Parameter] public string? Text { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Text is not null && ItemContext is not null)
+        {
+            ItemContext.RegisterText(Text);
+        }
+    }
+}

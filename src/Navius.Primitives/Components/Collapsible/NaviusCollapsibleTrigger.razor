@@ -1,0 +1,25 @@
+@namespace Navius.Primitives.Components.Collapsible
+@inherits CollapsiblePart
+
+<button type="button"
+        aria-expanded="@(Context.Open ? "true" : "false")"
+        aria-controls="@Context.PanelId"
+        data-panel-open="@(Context.Open ? "" : null)"
+        data-disabled="@(Context.Disabled ? "" : null)"
+        disabled="@Context.Disabled"
+        data-navius-collapsible-trigger
+        @onclick="OnClickAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    private Task OnClickAsync()
+    {
+        if (Context.Disabled) return Task.CompletedTask;
+        return Context.RequestToggleAsync();
+    }
+}

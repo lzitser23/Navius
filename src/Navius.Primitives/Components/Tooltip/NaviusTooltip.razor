@@ -1,0 +1,186 @@
+@namespace Navius.Primitives.Components.Tooltip
+@implements IDisposable
+
+@* Root of the tooltip. Owns open state + show/hide timing. Renders no DOM. *@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <CascadingValue Value="this" IsFixed="true" Name="NaviusTooltipRoot">
+        @ChildContent
+    </CascadingValue>
+</CascadingValue>
+
+@code {
+    /// <summary>Inherited skip-delay/hoverable defaults. Optional — a tooltip works without a provider.</summary>
+    [CascadingParameter] private TooltipProviderContext? Provider { get; set; }
+
+    /// <summary>
+    /// Hover-intent delay before opening, in milliseconds. When unset, falls back
+    /// to the provider's DelayDuration (or 700ms). Keyboard focus opens with no delay.
+    /// </summary>
+    [Parameter] public int? DelayDuration { get; set; }
+
+    /// <summary>Legacy alias for <see cref="DelayDuration"/>. Kept for back-compat.</summary>
+    [Parameter] public int OpenDelay { get; set; } = 200;
+
+    /// <summary>When true the tooltip stays open while the pointer moves over the content (overrides provider).</summary>
+    [Parameter] public bool? DisableHoverableContent { get; set; }
+
+    /// <summary>Controlled open state. Bind with @bind-Open.</summary>
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>Uncontrolled initial open state.</summary>
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private const int HoverGraceMs = 60;
+
+    private TooltipContext _context = default!;
+    private CancellationTokenSource? _cts;
+    private bool _internalOpen;
+    private bool _openParamSet;
+
+    private bool IsControlled => _openParamSet;
+
+    /// <summary>Whether hoverable content (safe-area bridge) is enabled for this tooltip.</summary>
+    public bool HoverableContentEnabled =>
+        !(DisableHoverableContent ?? Provider?.DisableHoverableContent ?? false);
+
+    private int EffectiveDelay =>
+        DelayDuration ?? Provider?.DelayDuration ?? OpenDelay;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<bool>(nameof(Open), out _))
+        {
+            _openParamSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _context = new TooltipContext(RequestSetAsync, OpenDelayedAsync, OpenNowAsync, CloseAsync, ForceCloseAsync);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var authoritative = IsControlled ? Open : _internalOpen;
+
+        // Only act when the open boolean actually disagrees with the context, so a
+        // re-render after an internal open doesn't clobber the recorded reason
+        // (delayed-open vs instant-open). An externally-forced open is "instant".
+        if (authoritative != _context.Open)
+        {
+            await _context.SetOpenInternalAsync(authoritative, TooltipOpenReason.Instant);
+        }
+    }
+
+    private async Task OpenDelayedAsync()
+    {
+        if (_context.Open)
+        {
+            return;
+        }
+
+        // Skip-delay window: open instantly if another tooltip was shown recently.
+        if (Provider?.ShouldSkipDelay() == true)
+        {
+            _cts?.Cancel();
+            await RequestSetAsync(true, TooltipOpenReason.Instant);
+            return;
+        }
+
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        try
+        {
+            await Task.Delay(EffectiveDelay, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        if (!token.IsCancellationRequested)
+        {
+            await RequestSetAsync(true, TooltipOpenReason.Delayed);
+        }
+    }
+
+    private async Task OpenNowAsync()
+    {
+        _cts?.Cancel();
+        await RequestSetAsync(true, TooltipOpenReason.Instant);
+    }
+
+    private async Task CloseAsync()
+    {
+        _cts?.Cancel();
+
+        if (HoverableContentEnabled)
+        {
+            // Brief grace window so a trigger->content pointer move (which fires the
+            // trigger's pointerleave BEFORE the content's pointerenter) doesn't close
+            // the bubble. If the pointer landed in the content, abort the close.
+            _cts = new CancellationTokenSource();
+            var token = _cts.Token;
+            try
+            {
+                await Task.Delay(HoverGraceMs, token);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
+
+            if (token.IsCancellationRequested || _context.PointerInContent)
+            {
+                return;
+            }
+        }
+
+        await RequestSetAsync(false, TooltipOpenReason.Instant);
+    }
+
+    /// <summary>Force-close regardless of hoverable-content state (Escape, activation, content leave).</summary>
+    public Task ForceCloseAsync()
+    {
+        _cts?.Cancel();
+        return RequestSetAsync(false, TooltipOpenReason.Instant);
+    }
+
+    private async Task RequestSetAsync(bool open, TooltipOpenReason reason)
+    {
+        if (open)
+        {
+            Provider?.NotifyOpen();
+        }
+        else
+        {
+            Provider?.NotifyClose();
+        }
+
+        if (IsControlled)
+        {
+            // Reflect locally so data-state/reason update even before the bound value round-trips.
+            await _context.SetOpenInternalAsync(open, reason);
+            await OpenChanged.InvokeAsync(open);
+        }
+        else
+        {
+            _internalOpen = open;
+            await _context.SetOpenInternalAsync(open, reason);
+            await OpenChanged.InvokeAsync(open);
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

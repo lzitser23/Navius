@@ -1,0 +1,204 @@
+@namespace Navius.Primitives.Components.Field
+@inherits ComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    Base UI Input — a field-aware native <input>. Controlled via @bind-Value or
+    uncontrolled via DefaultValue. Emits the seven discrete field-state attributes
+    (data-disabled/valid/invalid/dirty/touched/filled/focused). Inside a
+    NaviusField it adopts the field's control id + aria wiring and mirrors its
+    interaction/validity state up so the label, description and error reflect it;
+    standalone it tracks its own state. The engine's createConstraintValidation
+    bridge reports focus/blur/input + the native ValidityState.
+*@
+
+<input @ref="_input"
+       id="@ControlId"
+       value="@CurrentValue"
+       aria-describedby="@Field?.DescribedBy"
+       aria-invalid="@(IsInvalid ? "true" : null)"
+       data-navius-input
+       @oninput="OnInputAsync"
+       @attributes="MergedAttributes" />
+
+@code {
+    [CascadingParameter] private FieldContext? Field { get; set; }
+
+    /// <summary>Controlled value. Use <c>@bind-Value</c>.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial value.</summary>
+    [Parameter] public string? DefaultValue { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private readonly string _id = $"navius-input-{Guid.NewGuid():N}";
+
+    private ElementReference _input;
+    private NaviusJsInterop? _interop;
+    private ConstraintValidation? _validation;
+    private DotNetObjectReference<NaviusInput>? _selfRef;
+    private bool _wired;
+    private bool _valueSet;
+    private bool _initialized;
+    private string _internalValue = string.Empty;
+    private Func<Task>? _onFieldChange;
+
+    // Local field-state, used only when there is no cascaded FieldContext.
+    private bool _focused;
+    private bool _touched;
+    private bool _dirty;
+    private bool _filled;
+    private bool _wasFocused;
+
+    private bool IsControlled => _valueSet;
+    private string CurrentValue => IsControlled ? (Value ?? string.Empty) : _internalValue;
+    private string ControlId => Field?.ControlId ?? _id;
+    private bool IsInvalid => Field?.IsInvalid ?? false;
+
+    private IReadOnlyDictionary<string, object> LocalStateAttributes
+    {
+        get
+        {
+            var map = new Dictionary<string, object>(StringComparer.Ordinal);
+            if (_dirty) map["data-dirty"] = "";
+            if (_touched) map["data-touched"] = "";
+            if (_filled) map["data-filled"] = "";
+            if (_focused) map["data-focused"] = "";
+            return map;
+        }
+    }
+
+    private IDictionary<string, object> MergedAttributes =>
+        Field is not null ? Field.MergeState(Attributes) : Merge(LocalStateAttributes, Attributes);
+
+    private static IDictionary<string, object> Merge(IReadOnlyDictionary<string, object> state, IDictionary<string, object>? user)
+    {
+        var map = new Dictionary<string, object>(state, StringComparer.Ordinal);
+        if (user is not null)
+        {
+            foreach (var kv in user)
+            {
+                map[kv.Key] = kv.Value;
+            }
+        }
+
+        return map;
+    }
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<string>(nameof(Value), out _))
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        if (!_initialized)
+        {
+            _internalValue = DefaultValue ?? Value ?? string.Empty;
+            _filled = !string.IsNullOrEmpty(_internalValue);
+            _initialized = true;
+        }
+
+        // Re-render this input's own discrete attributes / aria-invalid whenever the
+        // field state changes (e.g. a submit-time reveal, or a sibling-driven change).
+        if (Field is not null)
+        {
+            _onFieldChange = () => InvokeAsync(StateHasChanged);
+            Field.Changed += _onFieldChange;
+        }
+    }
+
+    private async Task OnInputAsync(ChangeEventArgs e)
+    {
+        var next = e.Value?.ToString() ?? string.Empty;
+
+        if (!IsControlled)
+        {
+            _internalValue = next;
+        }
+
+        await ValueChanged.InvokeAsync(next);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _wired)
+        {
+            return;
+        }
+
+        _wired = true;
+
+        if (Field is not null)
+        {
+            Field.FocusControl = FocusAsync;
+        }
+
+        try
+        {
+            _interop ??= new NaviusJsInterop(JS);
+            _selfRef ??= DotNetObjectReference.Create(this);
+            _validation = await _interop.CreateConstraintValidationAsync(_input, _selfRef);
+        }
+        catch (JSException)
+        {
+            // Engine export unavailable — binding + top-down validity still work.
+        }
+    }
+
+    /// <summary>Invoked by the engine on input/change/invalid/focus/blur with the combined field state.</summary>
+    [JSInvokable]
+    public async Task OnFieldStateChange(FieldStatePayload p)
+    {
+        if (Field is not null)
+        {
+            await Field.ApplyControlStateAsync(p);
+            return;
+        }
+
+        // Standalone: track locally and re-render so the input's own attributes update.
+        _dirty = p.Dirty;
+        _filled = p.Filled;
+        _touched = p.Touched;
+        _focused = p.Focused;
+        _wasFocused = p.Focused;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task FocusAsync()
+    {
+        try { await _input.FocusAsync(); }
+        catch (JSException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_onFieldChange is not null && Field is not null)
+        {
+            Field.Changed -= _onFieldChange;
+        }
+
+        if (_validation is not null)
+        {
+            await _validation.DisposeAsync();
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+
+        _selfRef?.Dispose();
+    }
+}

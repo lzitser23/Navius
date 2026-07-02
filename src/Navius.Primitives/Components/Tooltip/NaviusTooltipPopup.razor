@@ -1,0 +1,65 @@
+@namespace Navius.Primitives.Components.Tooltip
+@inherits OverlayAnchoredPopupBase
+
+@*
+    The tooltip bubble (the spec Tooltip.Popup), wrapped in the Positioner div the
+    engine anchors. role="tooltip"; not focusable and non-modal (no focus trap, scroll
+    lock, or backdrop). Hoverable by default: pointer-over keeps it open (the trigger's
+    pointerleave grace bridges trigger->popup). Carries discrete data-open / data-closed
+    + data-instant (focus / skip-delay opens) + data-starting-style / data-ending-style;
+    the engine writes data-side / data-align onto the Positioner and mirrors them here.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="PositionerElement"
+             data-navius-tooltip-positioner
+             style="position:fixed;top:0;left:0;margin:0"
+             @attributes="Context.PositionerAttributes">
+            <div @ref="Element"
+                 id="@Context.ContentId"
+                 role="tooltip"
+                 data-open="@(Context.Open ? "" : null)"
+                 data-closed="@(Context.Open ? null : "")"
+                 data-instant="@(Context.IsInstant ? "" : null)"
+                 data-starting-style="@(Entering ? "" : null)"
+                 data-ending-style="@(Exiting ? "" : null)"
+                 data-navius-tooltip-popup
+                 @onpointerenter="OnPopupPointerEnter"
+                 @onpointerleave="OnPopupPointerLeave"
+                 @attributes="Attributes">
+                @ChildContent
+            </div>
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private TooltipContext Context { get; set; } = default!;
+    [CascadingParameter(Name = "NaviusTooltipRoot")] private NaviusTooltip Root { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override IAnchoredOverlayContext AnchoredContext => Context;
+
+    // Tooltips are non-modal and never take focus.
+    protected override bool MoveFocusInside => false;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+
+    private void OnPopupPointerEnter()
+    {
+        // Hoverable content: keep the bubble open while the pointer is over it.
+        if (Root.HoverableContentEnabled)
+        {
+            Context.PointerInContent = true;
+        }
+    }
+
+    private async Task OnPopupPointerLeave()
+    {
+        Context.PointerInContent = false;
+        await Root.ForceCloseAsync();
+    }
+}

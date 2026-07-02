@@ -1,0 +1,23 @@
+@namespace Navius.Primitives.Components.Fieldset
+@inherits ComponentBase
+
+@*
+    Base UI Fieldset.Legend — rendered as a <div> (NOT a native <legend>) for
+    positioning freedom, automatically associated as the fieldset's label. Reflects
+    the fieldset's disabled state via data-disabled.
+*@
+
+<div data-navius-fieldset-legend
+     data-disabled="@(Context?.Disabled == true ? "" : null)"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private FieldsetContext? Context { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

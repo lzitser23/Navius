@@ -1,0 +1,59 @@
+@namespace Navius.Primitives.Components.Toolbar
+@inherits ToolbarPart
+
+@*
+    A focusable toolbar control rendered as a native <button>. Carries the
+    data-navius-toolbar-item marker the roving controller targets. Roving tabindex:
+    only the first enabled item rests in the Tab order (tabindex=0); the rest are -1
+    and the engine moves focus with the arrow keys. A disabled item is excluded from
+    the roving selector and never seats the Tab stop.
+*@
+
+<button @ref="_element"
+        type="button"
+        tabindex="@(IsTabStop ? 0 : -1)"
+        disabled="@Disabled"
+        data-orientation="@Context.Orientation"
+        data-disabled="@(Disabled ? "" : null)"
+        data-navius-toolbar-item
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private bool _lastDisabled;
+
+    private bool IsTabStop => !Disabled && Context.IsTabStop(this);
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _lastDisabled = Disabled;
+        Context.Register(this, () => Disabled);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // The seat (first enabled item) can move when this item's disabled state
+        // flips at runtime; only then do peers need to re-render.
+        if (_lastDisabled != Disabled)
+        {
+            _lastDisabled = Disabled;
+            await Context.NotifyChangedAsync();
+        }
+    }
+
+    public override void Dispose()
+    {
+        Context.Unregister(this);
+        base.Dispose();
+    }
+}

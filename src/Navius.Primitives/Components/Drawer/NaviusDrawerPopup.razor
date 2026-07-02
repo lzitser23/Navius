@@ -1,0 +1,85 @@
+@namespace Navius.Primitives.Components.Drawer
+@inherits OverlayPopupBase
+
+@*
+    The draggable drawer sheet (the spec Drawer.Popup). Modal: the shared base traps
+    focus + locks scroll and a dismissable layer closes it on Escape / outside pointer;
+    additionally this Popup IS the swipe target — the engine (createSheetSwipe) drives
+    drag-to-dismiss along Side, publishing data-swiping + --drawer-swipe-movement-x/y
+    while dragging and closing past the threshold. Carries discrete data-open / data-closed
+    + data-starting-style / data-ending-style + data-drawer-direction. role="dialog".
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="Element"
+             id="@Context.ContentId"
+             role="dialog"
+             aria-modal="@(Context.Modal ? "true" : null)"
+             aria-labelledby="@(Context.HasTitle ? Context.TitleId : null)"
+             aria-describedby="@(Context.HasDescription ? Context.DescriptionId : null)"
+             tabindex="-1"
+             data-open="@(Context.Open ? "" : null)"
+             data-closed="@(Context.Open ? null : "")"
+             data-starting-style="@(Entering ? "" : null)"
+             data-ending-style="@(Exiting ? "" : null)"
+             data-drawer-direction="@Context.Side"
+             data-navius-drawer-popup
+             @attributes="Attributes">
+            @ChildContent
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private DrawerContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private SheetSwipe? _swipe;
+    private DotNetObjectReference<SwipeCallbacks>? _swipeRef;
+
+    protected override IOverlayContext OverlayContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalForceMount == true;
+
+    protected override async Task EngageAsync()
+    {
+        await base.EngageAsync();
+        // Drag-to-dismiss over this sheet (the engine sets data-swiping + the movement vars).
+        _swipeRef ??= DotNetObjectReference.Create(new SwipeCallbacks(() => Context.RequestCloseAsync()));
+        _swipe = await Interop!.CreateSheetSwipeAsync(Element, _swipeRef, new SheetSwipeOptions(Side: Context.Side));
+    }
+
+    protected override async Task DisengageAsync()
+    {
+        if (_swipe is not null)
+        {
+            await _swipe.DisposeAsync();
+            _swipe = null;
+        }
+        await base.DisengageAsync();
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        await base.DisposeAsync();
+        _swipeRef?.Dispose();
+        _swipeRef = null;
+    }
+
+    /// <summary>
+    /// Receives the swipe engine's drag-past-threshold / snap-back callbacks. Lives on a
+    /// separate object so its <c>OnDismiss()</c> doesn't collide with the dismissable
+    /// layer's <c>OnDismiss(string)</c> on the Popup itself.
+    /// </summary>
+    private sealed class SwipeCallbacks
+    {
+        private readonly Func<Task> _onDismiss;
+        public SwipeCallbacks(Func<Task> onDismiss) => _onDismiss = onDismiss;
+
+        [JSInvokable] public Task OnDismiss() => _onDismiss();
+        [JSInvokable] public Task OnReset() => Task.CompletedTask;
+    }
+}

@@ -1,0 +1,36 @@
+@namespace Navius.Primitives.Portal
+@implements IDisposable
+@inject PortalService Portal
+
+@*
+    Place once, near the root of your app (e.g. after the Router). Renders all
+    portaled content here. Each entry is wrapped in a display:contents element so
+    the wrapper itself generates no box — the portaled markup lays out as if it
+    were a direct child of the outlet.
+*@
+
+@foreach (var entry in _snapshot)
+{
+    <div @key="entry.Key" style="display:contents">@entry.Value</div>
+}
+
+@code {
+    private List<KeyValuePair<string, RenderFragment>> _snapshot = new();
+
+    protected override void OnInitialized()
+    {
+        Portal.Changed += OnChanged;
+        Snapshot();
+    }
+
+    private void OnChanged()
+    {
+        Snapshot();
+        InvokeAsync(StateHasChanged);
+    }
+
+    // Snapshot so we never enumerate the live dictionary while it mutates mid-render.
+    private void Snapshot() => _snapshot = Portal.Entries.ToList();
+
+    public void Dispose() => Portal.Changed -= OnChanged;
+}

@@ -1,0 +1,32 @@
+@namespace Navius.Primitives.Components.Popover
+@inherits PopoverPart
+
+@*
+    Optional explicit anchor (the spec Popover.Anchor). When present, the content
+    positions against this element instead of the trigger. Renders a plain <div>
+    wrapper that captures its element reference into the context.
+*@
+
+<div @ref="_element"
+     data-navius-popover-anchor
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    private ElementReference _element;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Context.AnchorElement = _element;
+            Context.HasAnchor = true;
+        }
+    }
+}

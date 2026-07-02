@@ -1,0 +1,20 @@
+@namespace Navius.Primitives.Components.Progress
+
+@* Base UI Progress.Value — renders the formatted value; defaults to the rounded
+   percentage (and nothing while indeterminate). Provide ChildContent to override. *@
+<span data-complete="@Context.DataComplete"
+      data-indeterminate="@Context.DataIndeterminate"
+      data-progressing="@Context.DataProgressing"
+      data-navius-progress-value
+      @attributes="Attributes">@if (ChildContent is not null) { @ChildContent } else { @DefaultText }</span>
+
+@code {
+    [CascadingParameter] private ProgressContext Context { get; set; } = default!;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    private string? DefaultText =>
+        Context.IsIndeterminate
+            ? null
+            : Math.Round(Context.Percentage).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+}

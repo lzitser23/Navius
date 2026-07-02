@@ -1,0 +1,83 @@
+@namespace Navius.Primitives.Components.Menu
+@inherits Navius.Primitives.Components.Overlays.OverlayAnchoredPopupBase
+
+@*
+    The spec Menu.Popup — the menu surface, wrapped in the Positioner <div> the engine
+    anchors to the trigger. On open the shared base engages anchored positioning + a
+    dismissable layer (and, when the Root is modal, locks scroll); this Popup then adds
+    roving focus (which focuses the first item, mirrors data-highlighted, and does NOT
+    loop by default per the spec) — a menu uses roving rather than a focus trap. On close
+    the base tears everything down and returns focus to the trigger. The engine writes
+    data-side / data-align / data-anchor-hidden + the --anchor-*/--available-*/
+    --transform-origin vars onto the Positioner and mirrors data-side/data-align onto this
+    Popup; C# owns the discrete data-open / data-closed + data-starting-style /
+    data-ending-style. role="menu"; items are role="menuitem".
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="PositionerElement"
+             data-navius-menu-positioner
+             style="position:fixed;top:0;left:0;margin:0"
+             @attributes="Context.PositionerAttributes">
+            <div @ref="Element"
+                 id="@Context.ContentId"
+                 role="menu"
+                 tabindex="-1"
+                 dir="@(Context.IsRtl ? "rtl" : null)"
+                 data-open="@(Context.Open ? "" : null)"
+                 data-closed="@(Context.Open ? null : "")"
+                 data-starting-style="@(Entering ? "" : null)"
+                 data-ending-style="@(Exiting ? "" : null)"
+                 data-navius-menu-popup
+                 @attributes="Attributes">
+                @ChildContent
+            </div>
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private MenuContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>When true arrow navigation wraps at the ends (the spec default false).</summary>
+    [Parameter] public bool Loop { get; set; }
+
+    private RovingFocus? _roving;
+
+    protected override IAnchoredOverlayContext AnchoredContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+
+    // A menu manages focus with roving tabindex, not a focus trap; the base still
+    // focuses the popup on open (so focus lands inside) and restores it to the trigger
+    // on close — roving then moves focus onto the first item.
+    protected override bool TrapFocus => false;
+
+    protected override async Task EngageAsync()
+    {
+        await base.EngageAsync();
+        _roving = await Interop!.CreateRovingFocusAsync(
+            Element,
+            new RovingFocusOptions(
+                "vertical",
+                Selector: MenuConstants.RovingSelector,
+                Loop: Loop,
+                AutoFocus: !OpenAutoFocusPrevented,
+                DataHighlight: true,
+                Dir: Context.Dir));
+    }
+
+    protected override async Task DisengageAsync()
+    {
+        if (_roving is not null)
+        {
+            await _roving.DisposeAsync();
+            _roving = null;
+        }
+        await base.DisengageAsync();
+    }
+}

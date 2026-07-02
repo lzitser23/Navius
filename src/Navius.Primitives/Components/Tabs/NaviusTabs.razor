@@ -1,0 +1,72 @@
+@namespace Navius.Primitives.Components.Tabs
+@inherits ComponentBase
+
+@* Root of the tab group. Controlled via @bind-Value or uncontrolled via DefaultValue. *@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div data-navius-tabs
+         data-orientation="@Orientation"
+         data-activation-direction="@_context.ActivationDirection"
+         dir="@(EffectiveDir == "rtl" ? "rtl" : null)"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    [Parameter] public string? DefaultValue { get; set; }
+
+    [Parameter] public string Orientation { get; set; } = "horizontal";
+
+    /// <summary>
+    /// "automatic" (default): focusing a tab via the keyboard activates it.
+    /// "manual": arrow keys move focus only; activation requires Enter/Space/click.
+    /// </summary>
+    [Parameter] public string ActivationMode { get; set; } = "automatic";
+
+    /// <summary>Reading direction ("ltr" | "rtl"). Flips horizontal arrow-key semantics in RTL.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private TabsContext _context = default!;
+    private string? _internal;
+
+    private bool IsControlled => ValueChanged.HasDelegate;
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    protected override void OnInitialized()
+    {
+        _internal = DefaultValue;
+        _context = new TabsContext(SelectAsync, Orientation, ActivationMode, EffectiveDir);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await _context.SetSelectedInternalAsync(IsControlled ? Value : _internal);
+    }
+
+    private async Task SelectAsync(string value)
+    {
+        if (IsControlled)
+        {
+            await ValueChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internal = value;
+            await _context.SetSelectedInternalAsync(value);
+            StateHasChanged();
+        }
+    }
+}

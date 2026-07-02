@@ -1,0 +1,39 @@
+@namespace Navius.Primitives.Components.Toast
+
+@*
+    THIN STUB — anchored-toast parity only.
+
+    Base UI Toast.Arrow: an SVG triangle for a toast anchored via the Positioner. Only
+    meaningful with NaviusToastPositioner (also a stub). The primary viewport-stacked toast
+    does not use it. Copied thin from NaviusMenuArrow; it renders the SVG but does NOT
+    register into a positioner (there is no anchored toast context to wire it into). Promote
+    alongside the Positioner if an anchored-toast demo is added.
+*@
+
+<svg width="@Width"
+     height="@Height"
+     viewBox="0 0 30 10"
+     preserveAspectRatio="none"
+     data-navius-toast-arrow
+     style="pointer-events:none"
+     @attributes="Attributes">
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else
+    {
+        <polygon points="0,0 30,0 15,10" />
+    }
+</svg>
+
+@code {
+    [Parameter] public double Width { get; set; } = 10;
+
+    [Parameter] public double Height { get; set; } = 5;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

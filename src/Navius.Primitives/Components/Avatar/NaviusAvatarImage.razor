@@ -1,0 +1,59 @@
+@namespace Navius.Primitives.Components.Avatar
+@inherits AvatarPart
+
+@if (Context.Status != AvatarLoadStatus.Error)
+{
+    <img src="@Src"
+         data-navius-avatar-image
+         style="@VisibilityStyle"
+         @onload="OnLoadAsync"
+         @onerror="OnErrorAsync"
+         @attributes="Attributes" />
+}
+
+@code {
+    [Parameter] public string? Src { get; set; }
+
+    /// <summary>
+    /// Fires on every loading-status transition ('idle' | 'loading' | 'loaded' | 'error'),
+    /// mirroring the spec Avatar.Image onLoadingStatusChange.
+    /// </summary>
+    [Parameter] public EventCallback<string> OnLoadingStatusChange { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    private string? _trackedSrc;
+    private Func<AvatarLoadStatus, Task>? _onStatusChange;
+
+    // Keep the image in the DOM (so load/error fire) but hidden until it has actually loaded.
+    private string? VisibilityStyle => Context.Status == AvatarLoadStatus.Loaded ? null : "visibility:hidden;";
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _onStatusChange = status => OnLoadingStatusChange.InvokeAsync(AvatarContext.ToStatusString(status));
+        Context.StatusChanged += _onStatusChange;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // A (re)assigned, non-empty src puts the image into the 'loading' phase until
+        // the native load/error event resolves it — matching the spec's idle->loading transition.
+        if (Src != _trackedSrc)
+        {
+            _trackedSrc = Src;
+            if (!string.IsNullOrEmpty(Src))
+            {
+                await Context.RequestLoadingAsync();
+            }
+        }
+    }
+
+    private Task OnLoadAsync() => Context.RequestLoadedAsync();
+    private Task OnErrorAsync() => Context.RequestErrorAsync();
+
+    protected override void DisposeCore()
+    {
+        if (_onStatusChange is not null) Context.StatusChanged -= _onStatusChange;
+    }
+}

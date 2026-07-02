@@ -1,0 +1,69 @@
+@namespace Navius.Primitives.Components.Menu
+
+@*
+    A menu item. role="menuitem", tabindex="-1" so Tab skips it and roving focus
+    (arrows) moves between items. Activates on click or Enter/Space, then closes
+    the menu unless OnSelect calls PreventDefault(). Disabled items are skipped by
+    roving focus (data-disabled) and don't activate. data-highlighted is toggled by
+    the engine's roving focus (DataHighlight). data-navius-text-value overrides the
+    typeahead match text.
+*@
+
+<div role="menuitem"
+     tabindex="-1"
+     data-navius-menu-item
+     data-disabled="@(Disabled ? "" : null)"
+     aria-disabled="@(Disabled ? "true" : null)"
+     data-navius-text-value="@TextValue"
+     @onclick="ActivateAsync"
+     @onkeydown="OnKeyDownAsync"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private MenuContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Invoked when the item is chosen (click or Enter/Space). Call
+    /// <c>args.PreventDefault()</c> to keep the menu open; otherwise it closes.
+    /// </summary>
+    [Parameter] public EventCallback<NaviusSelectEventArgs> OnSelect { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Overrides the text the typeahead matches against (the spec textValue).</summary>
+    [Parameter] public string? TextValue { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private async Task ActivateAsync()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        var args = new NaviusSelectEventArgs();
+        if (OnSelect.HasDelegate)
+        {
+            await OnSelect.InvokeAsync(args);
+        }
+
+        if (!args.DefaultPrevented)
+        {
+            await Context.RequestCloseAsync();
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            await ActivateAsync();
+        }
+    }
+}

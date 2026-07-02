@@ -1,0 +1,33 @@
+@namespace Navius.Primitives.Components.Toast
+
+@*
+    THIN STUB — anchored-toast parity only.
+
+    Base UI supports a toast anchored to an element (Positioner + Arrow). The primary,
+    viewport-stacked toast does NOT use this; almost every toast lives in the Viewport
+    stack. This is a name-parity passthrough that holds the placement params for the rare
+    anchored case; it does NOT wire the engine positioner. Promote it to inherit
+    OverlayPositionerBase (like the Menu/Popover positioners) if an anchored-toast demo is
+    ever added.
+*@
+
+@ChildContent
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Preferred side: top | bottom | left | right (stub default "top").</summary>
+    [Parameter] public string Side { get; set; } = "top";
+
+    /// <summary>Alignment along the side: start | center | end (stub default "center").</summary>
+    [Parameter] public string Align { get; set; } = "center";
+
+    /// <summary>Distance in px from the anchor along the side.</summary>
+    [Parameter] public double SideOffset { get; set; }
+
+    /// <summary>Offset in px along the alignment axis.</summary>
+    [Parameter] public double AlignOffset { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

@@ -1,0 +1,60 @@
+@namespace Navius.Primitives.Components.Popover
+@inherits PopoverPart
+@implements IAsyncDisposable
+
+@*
+    A directional indicator (the spec Popover.Arrow). Renders an <svg> that the
+    positioner places against the anchor centre and rotates per data-side. The
+    default 10x5 triangle matches the spec; override Width/Height or pass custom
+    ChildContent. Registers itself so the content can wire it into the positioner.
+*@
+
+<span @ref="_element"
+      data-navius-popover-arrow
+      style="position:absolute"
+      aria-hidden="true"
+      @attributes="Attributes">
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else
+    {
+        <svg width="@Width" height="@Height" viewBox="0 0 30 10" preserveAspectRatio="none">
+            <polygon points="0,0 30,0 15,10" />
+        </svg>
+    }
+</span>
+
+@code {
+    private ElementReference _element;
+    private bool _registered;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    /// <summary>Arrow width in px (the spec default 10).</summary>
+    [Parameter] public double Width { get; set; } = 10;
+
+    /// <summary>Arrow height in px (the spec default 5).</summary>
+    [Parameter] public double Height { get; set; } = 5;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_registered)
+        {
+            _registered = true;
+            await Context.RegisterArrowAsync(_element);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_registered)
+        {
+            await Context.UnregisterArrowAsync();
+        }
+    }
+}

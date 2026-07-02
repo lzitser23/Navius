@@ -1,0 +1,54 @@
+@namespace Navius.Primitives.Components.Select
+@implements IDisposable
+
+@*
+    the spec Select.ScrollDownButton — mounts only when there is more content below
+    the fold (the Viewport can scroll down). aria-hidden (decorative). Continuous
+    auto-scroll while the pointer hovers requires an engine viewport-scroll helper
+    (see engineGaps); visibility tracking is fully wired here via the
+    SelectViewportContext.
+*@
+
+@if (Viewport is not null && Viewport.CanScrollDown)
+{
+    <div aria-hidden="true"
+         data-navius-select-scroll-down-button
+         @attributes="Attributes">
+        @if (ChildContent is not null)
+        {
+            @ChildContent
+        }
+        else
+        {
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3.13523 6.158C3.3241 5.95654 3.64052 5.94637 3.84197 6.13523L7.5 9.56464L11.158 6.13523C11.3595 5.94637 11.6759 5.95654 11.8648 6.158C12.0536 6.35946 12.0434 6.67588 11.842 6.86475L7.84197 10.6148C7.64964 10.7951 7.35036 10.7951 7.15803 10.6148L3.15803 6.86475C2.95657 6.67588 2.94637 6.35946 3.13523 6.158Z"
+                      fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" />
+            </svg>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private SelectViewportContext? Viewport { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private Action? _onChange;
+
+    protected override void OnInitialized()
+    {
+        if (Viewport is not null)
+        {
+            _onChange = () => InvokeAsync(StateHasChanged);
+            Viewport.Changed += _onChange;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (Viewport is not null && _onChange is not null) Viewport.Changed -= _onChange;
+    }
+}

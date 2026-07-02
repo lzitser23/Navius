@@ -1,0 +1,199 @@
+@page "/wave1"
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-10">
+    <h1 class="text-2xl font-semibold tracking-tight">Navius — Wave 1 (spec parity)</h1>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Separator</h2>
+        <div>
+            <p class="text-sm">Headless, accessible Blazor UI.</p>
+            <NaviusSeparator class="my-3 h-px w-48 bg-border" />
+            <div class="flex h-5 items-center gap-3 text-sm">
+                <span>Docs</span>
+                <NaviusSeparator Orientation="vertical" Decorative="true" class="h-full w-px bg-border" />
+                <span>Source</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Label</h2>
+        <div class="grid w-64 gap-1.5">
+            <NaviusLabel For="email" class="text-sm font-medium">Email</NaviusLabel>
+            <input id="email" type="email" placeholder="you@example.com"
+                   class="h-9 rounded-md border border-input bg-background px-3 text-sm" />
+        </div>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">AspectRatio (16:9)</h2>
+        <div class="w-64 overflow-hidden rounded-md border border-border">
+            <NaviusAspectRatio Ratio="16.0 / 9.0">
+                <div class="flex h-full w-full items-center justify-center bg-muted text-sm text-muted-foreground">16 : 9</div>
+            </NaviusAspectRatio>
+        </div>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">VisuallyHidden</h2>
+        <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background">
+            <svg aria-hidden="true" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            <NaviusVisuallyHidden>Close</NaviusVisuallyHidden>
+        </button>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Progress</h2>
+        <NaviusProgress Value="60" Max="100" class="relative h-3 w-64 overflow-hidden rounded-full bg-muted">
+            <NaviusProgressIndicator class="h-full w-full rounded-full bg-primary transition-transform" style="transform: translateX(-40%)" />
+        </NaviusProgress>
+    </section>
+
+    <section class="space-y-2" data-demo="button">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Button</h2>
+        <div class="flex items-center gap-3">
+            <NaviusButton class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">Click</NaviusButton>
+            <NaviusButton Disabled="true" FocusableWhenDisabled="true" class="inline-flex h-9 items-center rounded-md border border-input px-4 text-sm data-[disabled]:opacity-50">Disabled (focusable)</NaviusButton>
+        </div>
+    </section>
+
+    <section class="space-y-2" data-demo="meter">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Meter (role=meter, determinate)</h2>
+        <NaviusMeter Value="72" class="block w-64">
+            <NaviusMeterTrack class="relative h-3 w-full overflow-hidden rounded-full bg-muted">
+                <NaviusMeterIndicator class="h-full rounded-full bg-primary" style="width:72%" />
+            </NaviusMeterTrack>
+            <NaviusMeterValue class="mt-1 block text-xs text-muted-foreground" />
+        </NaviusMeter>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Avatar (broken src → fallback)</h2>
+        <NaviusAvatar class="relative inline-flex h-10 w-10 overflow-hidden rounded-full bg-muted">
+            <NaviusAvatarImage Src="https://invalid.example/none.png" alt="Missing" class="h-full w-full object-cover" />
+            <NaviusAvatarFallback DelayMs="0" class="flex h-full w-full items-center justify-center text-sm font-medium text-muted-foreground">LZ</NaviusAvatarFallback>
+        </NaviusAvatar>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Toggle</h2>
+        <NaviusToggle class="inline-flex h-9 items-center rounded-md px-3 text-sm font-medium hover:bg-muted data-[pressed]:bg-accent data-[pressed]:text-accent-foreground">
+            Bold
+        </NaviusToggle>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">ToggleGroup (single)</h2>
+        <NaviusToggleGroup DefaultValue="@(new[] { "center" })" class="inline-flex gap-1 rounded-md border border-input p-1">
+            <NaviusToggleGroupItem Value="left" class="h-8 w-8 rounded-sm text-sm data-[pressed]:bg-accent data-[pressed]:text-accent-foreground">L</NaviusToggleGroupItem>
+            <NaviusToggleGroupItem Value="center" class="h-8 w-8 rounded-sm text-sm data-[pressed]:bg-accent data-[pressed]:text-accent-foreground">C</NaviusToggleGroupItem>
+            <NaviusToggleGroupItem Value="right" class="h-8 w-8 rounded-sm text-sm data-[pressed]:bg-accent data-[pressed]:text-accent-foreground">R</NaviusToggleGroupItem>
+        </NaviusToggleGroup>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">RadioGroup</h2>
+        <NaviusRadioGroup @bind-Value="_plan" Name="plan" class="grid gap-2" aria-label="Plan">
+            @foreach (var o in _plans)
+            {
+                <label class="flex items-center gap-2 text-sm">
+                    <NaviusRadioGroupItem Value="@o" class="flex h-4 w-4 items-center justify-center rounded-full border border-input data-[checked]:border-primary data-[checked]:bg-primary">
+                        <NaviusRadioGroupIndicator class="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
+                    </NaviusRadioGroupItem>
+                    <span>@o</span>
+                </label>
+            }
+        </NaviusRadioGroup>
+        <p class="text-xs text-muted-foreground">selected: <span data-radio-value>@_plan</span></p>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Checkbox Group (parent roll-up)</h2>
+        <NaviusCheckboxGroup @bind-Value="_fruit" AllValues="_allFruit" data-navius-checkbox-group class="grid gap-2">
+            <label class="flex items-center gap-2 text-sm font-medium">
+                <NaviusCheckbox Parent="true" data-cbg-parent class="@CbBase">
+                    <NaviusCheckboxIndicator class="group flex items-center justify-center text-primary-foreground">
+                        <svg class="hidden h-3.5 w-3.5 group-data-[checked]:block" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span class="hidden h-0.5 w-2.5 rounded bg-current group-data-[indeterminate]:block"></span>
+                    </NaviusCheckboxIndicator>
+                </NaviusCheckbox>
+                All fruit
+            </label>
+            @foreach (var f in _allFruit)
+            {
+                <label class="ml-6 flex items-center gap-2 text-sm">
+                    <NaviusCheckbox Name="@f" data-cbg-item="@f" class="@CbBase">
+                        <NaviusCheckboxIndicator class="flex items-center justify-center text-primary-foreground">
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </NaviusCheckboxIndicator>
+                    </NaviusCheckbox>
+                    @f
+                </label>
+            }
+        </NaviusCheckboxGroup>
+        <p class="text-xs text-muted-foreground">checked: <span data-cbg-value>@string.Join(", ", _fruit)</span></p>
+    </section>
+
+    <section class="space-y-2" data-demo="collapsible">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Collapsible</h2>
+        @* Animated height transition on the Base UI panel contract: the panel starts/ends
+           at height 0 (data-starting-style / data-ending-style) and transitions to its
+           measured --collapsible-panel-height. The exit animation keeps the panel mounted
+           until it finishes, then it unmounts. *@
+        <style>
+            .collapsible-anim { overflow: hidden; transition: height 350ms ease; height: var(--collapsible-panel-height); }
+            .collapsible-anim[data-starting-style], .collapsible-anim[data-ending-style] { height: 0; }
+        </style>
+        <NaviusCollapsible DefaultOpen="false" class="w-64 space-y-2">
+            <NaviusCollapsibleTrigger class="inline-flex h-9 items-center rounded-md border border-input px-3 text-sm">Toggle details</NaviusCollapsibleTrigger>
+            <NaviusCollapsiblePanel class="collapsible-anim">
+                <div class="rounded-md border border-border bg-card p-3 text-sm">Hidden content, now revealed.</div>
+            </NaviusCollapsiblePanel>
+        </NaviusCollapsible>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">PreviewCard</h2>
+        <NaviusPreviewCard OpenDelay="120" CloseDelay="100">
+            <NaviusPreviewCardTrigger class="cursor-pointer font-medium underline-offset-4 hover:underline" href="#">&#64;lzitser23</NaviusPreviewCardTrigger>
+            <NaviusPreviewCardPositioner Side="bottom">
+                <NaviusPreviewCardPopup class="z-50 w-56 rounded-md border border-border bg-card p-4 text-sm text-card-foreground shadow-md">
+                    Lior Zitser — building Navius.
+                </NaviusPreviewCardPopup>
+            </NaviusPreviewCardPositioner>
+        </NaviusPreviewCard>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">AlertDialog (no outside-dismiss)</h2>
+        <NaviusAlertDialog>
+            <NaviusAlertDialogTrigger class="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">Delete account</NaviusAlertDialogTrigger>
+            <NaviusAlertDialogBackdrop class="fixed inset-0 z-50 bg-black/70" />
+            <NaviusAlertDialogPopup class="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-background p-6 text-foreground shadow-lg">
+                <NaviusAlertDialogTitle class="text-lg font-semibold">Are you sure?</NaviusAlertDialogTitle>
+                <NaviusAlertDialogDescription class="mt-1 text-sm text-muted-foreground">This cannot be undone.</NaviusAlertDialogDescription>
+                <div class="mt-4 flex justify-end gap-2">
+                    <NaviusAlertDialogCancel class="inline-flex h-9 items-center rounded-md border border-input bg-background px-4 text-sm">Cancel</NaviusAlertDialogCancel>
+                    <NaviusAlertDialogAction class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">Delete</NaviusAlertDialogAction>
+                </div>
+            </NaviusAlertDialogPopup>
+        </NaviusAlertDialog>
+    </section>
+</div>
+
+@code {
+    private string? _plan = "pro";
+    private readonly string[] _plans = { "free", "pro", "team" };
+
+    private IReadOnlyList<string> _fruit = new[] { "apple" };
+    private readonly string[] _allFruit = { "apple", "banana", "cherry" };
+
+    private const string CbBase =
+        "flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded border border-primary shadow transition-colors data-[checked]:bg-primary data-[checked]:text-primary-foreground data-[indeterminate]:bg-primary data-[indeterminate]:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+}

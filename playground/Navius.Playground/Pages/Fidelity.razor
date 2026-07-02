@@ -1,0 +1,225 @@
+@page "/fidelity"
+@using Zits.Ui
+@using Navius.Primitives.Components.DataGrid
+
+@*
+    Fidelity showcase — real, interactive instances of the seven new high-fidelity
+    helm components (Command, Calendar, Sidebar, Chart, DataTable, Carousel, Drawer)
+    on the Navius brain. Each section carries a stable data-demo hook so the e2e spec
+    can exercise behaviour through the styled wrappers.
+*@
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-12" data-fidelity-showcase>
+    <header class="space-y-1">
+        <h1 class="text-2xl font-semibold tracking-tight">Fidelity</h1>
+        <p class="text-sm text-muted-foreground">The seven high-fidelity components — cmdk, day-picker, sidebar, charts, data-table, embla carousel, and a Vaul drawer.</p>
+    </header>
+
+    @* ---------------------------------------------------------------- Command *@
+    <section class="space-y-3" data-demo="command">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Command</h2>
+        <ZitsCommand class="max-w-md border shadow-md">
+            <ZitsCommandInput Placeholder="Type a command or search..." />
+            <ZitsCommandList>
+                <ZitsCommandEmpty>No results found.</ZitsCommandEmpty>
+                <ZitsCommandGroup Heading="Suggestions">
+                    <ZitsCommandItem Value="Calendar" OnSelect="OnCommandSelect"><span>Calendar</span></ZitsCommandItem>
+                    <ZitsCommandItem Value="Search Emoji" OnSelect="OnCommandSelect"><span>Search Emoji</span></ZitsCommandItem>
+                    <ZitsCommandItem Value="Calculator" Disabled="true" OnSelect="OnCommandSelect"><span>Calculator</span></ZitsCommandItem>
+                </ZitsCommandGroup>
+                <ZitsCommandSeparator />
+                <ZitsCommandGroup Heading="Settings">
+                    <ZitsCommandItem Value="Profile" OnSelect="OnCommandSelect"><span>Profile</span></ZitsCommandItem>
+                    <ZitsCommandItem Value="Billing" OnSelect="OnCommandSelect"><span>Billing</span></ZitsCommandItem>
+                    <ZitsCommandItem Value="Settings" OnSelect="OnCommandSelect"><span>Settings</span></ZitsCommandItem>
+                </ZitsCommandGroup>
+            </ZitsCommandList>
+        </ZitsCommand>
+        <p class="text-sm text-muted-foreground">Last selected: <span class="font-medium text-foreground" data-command-last>@_commandLast</span></p>
+    </section>
+
+    @* --------------------------------------------------------------- Calendar *@
+    <section class="space-y-3" data-demo="calendar">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Calendar (range · 2 months)</h2>
+        <ZitsCalendar Mode="range" NumberOfMonths="2" DefaultMonth="_calendarMonth" />
+    </section>
+
+    @* ---------------------------------------------------------------- Sidebar *@
+    <section class="space-y-3" data-demo="sidebar">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Sidebar (collapsible icon)</h2>
+        @* transform on the wrapper makes it the containing block for the sidebar's
+           position:fixed rail, so the rail stays inside this demo box instead of
+           overlaying the rest of the page (which would block clicks on the table below). *@
+        <div class="relative h-80 overflow-hidden rounded-lg border" style="transform: translateZ(0)">
+        <ZitsSidebarProvider Collapsible="icon" class="h-full">
+            <ZitsSidebar Collapsible="icon">
+                <ZitsSidebarContent>
+                    <ZitsSidebarGroup>
+                        <ZitsSidebarGroupLabel>Platform</ZitsSidebarGroupLabel>
+                        <ZitsSidebarGroupContent>
+                            <ZitsSidebarMenu>
+                                <ZitsSidebarMenuItem>
+                                    <ZitsSidebarMenuButton Tooltip="Dashboard" IsActive="true">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1" /><rect width="7" height="5" x="14" y="3" rx="1" /><rect width="7" height="9" x="14" y="12" rx="1" /><rect width="7" height="5" x="3" y="16" rx="1" /></svg>
+                                        <span>Dashboard</span>
+                                    </ZitsSidebarMenuButton>
+                                </ZitsSidebarMenuItem>
+                                <ZitsSidebarMenuItem>
+                                    <ZitsSidebarMenuButton Tooltip="Projects">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" /></svg>
+                                        <span>Projects</span>
+                                    </ZitsSidebarMenuButton>
+                                </ZitsSidebarMenuItem>
+                                <ZitsSidebarMenuItem>
+                                    <ZitsSidebarMenuButton Tooltip="Settings">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z" /><circle cx="12" cy="12" r="3" /></svg>
+                                        <span>Settings</span>
+                                    </ZitsSidebarMenuButton>
+                                </ZitsSidebarMenuItem>
+                            </ZitsSidebarMenu>
+                        </ZitsSidebarGroupContent>
+                    </ZitsSidebarGroup>
+                </ZitsSidebarContent>
+            </ZitsSidebar>
+            <ZitsSidebarInset>
+                <header class="flex h-12 items-center gap-2 border-b px-4">
+                    <ZitsSidebarTrigger />
+                    <span class="text-sm font-medium">Dashboard</span>
+                </header>
+                <div class="p-4 text-sm text-muted-foreground">Toggle the rail with the trigger or Ctrl/Cmd+B.</div>
+            </ZitsSidebarInset>
+        </ZitsSidebarProvider>
+        </div>
+    </section>
+
+    @* ------------------------------------------------------------------ Chart *@
+    <section class="space-y-3" data-demo="chart">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Chart (bar · 2 series)</h2>
+        <div class="w-full max-w-2xl">
+            <ZitsChartContainer Config="_chartConfig">
+                <div class="flex h-full w-full flex-col gap-2">
+                    <ZitsBarChart Data="_chartData" />
+                    <ZitsChartLegend />
+                </div>
+            </ZitsChartContainer>
+        </div>
+    </section>
+
+    @* -------------------------------------------------------------- DataTable *@
+    <section class="space-y-3" data-demo="datatable">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">DataTable</h2>
+        <ZitsDataTable TItem="Person"
+                       Items="_people"
+                       Columns="_columns"
+                       FilterColumnKey="name"
+                       PageSize="5" />
+    </section>
+
+    @* --------------------------------------------------------------- Carousel *@
+    <section class="space-y-3" data-demo="carousel">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Carousel (loop)</h2>
+        <div class="px-12">
+            <ZitsCarousel Loop="true" class="mx-auto max-w-xs">
+                <ZitsCarouselContent data-carousel-viewport="true">
+                    @for (var i = 1; i <= 5; i++)
+                    {
+                        <ZitsCarouselItem>
+                            <div class="p-1">
+                                <ZitsCard>
+                                    <ZitsCardContent class="flex aspect-square items-center justify-center p-6">
+                                        <span class="text-4xl font-semibold">@i</span>
+                                    </ZitsCardContent>
+                                </ZitsCard>
+                            </div>
+                        </ZitsCarouselItem>
+                    }
+                </ZitsCarouselContent>
+                <ZitsCarouselPrevious />
+                <ZitsCarouselNext />
+            </ZitsCarousel>
+        </div>
+    </section>
+
+    @* ----------------------------------------------------------------- Drawer *@
+    <section class="space-y-3" data-demo="drawer">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Drawer</h2>
+        <ZitsDrawer Direction="bottom">
+            <ZitsDrawerTrigger class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                Open Drawer
+            </ZitsDrawerTrigger>
+            <ZitsDrawerContent>
+                <ZitsDrawerHeader>
+                    <ZitsDrawerTitle>Move Goal</ZitsDrawerTitle>
+                    <ZitsDrawerDescription>Set your daily activity goal. Drag the sheet down to dismiss.</ZitsDrawerDescription>
+                </ZitsDrawerHeader>
+                <ZitsDrawerFooter>
+                    <NaviusDrawerClose class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                        Cancel
+                    </NaviusDrawerClose>
+                </ZitsDrawerFooter>
+            </ZitsDrawerContent>
+        </ZitsDrawer>
+    </section>
+</div>
+
+@code {
+    // ---- Command -----------------------------------------------------------
+    private string _commandLast = string.Empty;
+
+    private void OnCommandSelect(string value) => _commandLast = value;
+
+    // ---- Calendar ----------------------------------------------------------
+    // Fixed anchor month so day data-day values are deterministic across run dates.
+    private readonly DateOnly _calendarMonth = new(2025, 1, 1);
+
+    // ---- Chart -------------------------------------------------------------
+    private static readonly ChartConfig _chartConfig = new()
+    {
+        ["desktop"] = new ChartSeries("Desktop", "var(--chart-1)"),
+        ["mobile"] = new ChartSeries("Mobile", "var(--chart-2)"),
+    };
+
+    private static readonly ChartDataPoint[] _chartData =
+    {
+        new("January", ("desktop", 186), ("mobile", 80)),
+        new("February", ("desktop", 305), ("mobile", 200)),
+        new("March", ("desktop", 237), ("mobile", 120)),
+        new("April", ("desktop", 73), ("mobile", 190)),
+        new("May", ("desktop", 209), ("mobile", 130)),
+        new("June", ("desktop", 214), ("mobile", 140)),
+    };
+
+    // ---- DataTable ---------------------------------------------------------
+    private sealed record Person(string Name, string Email, string Role, string Status);
+
+    // Insertion order is deliberately NOT alphabetical so an asc sort visibly reorders.
+    private static readonly List<Person> _people = new()
+    {
+        new("Eve", "eve@acme.io", "Owner", "Active"),
+        new("Carol", "carol@acme.io", "Admin", "Active"),
+        new("Alice", "alice@acme.io", "Member", "Inactive"),
+        new("Grace", "grace@acme.io", "Member", "Active"),
+        new("Bob", "bob@acme.io", "Admin", "Inactive"),
+        new("Frank", "frank@acme.io", "Member", "Active"),
+        new("Dave", "dave@acme.io", "Owner", "Inactive"),
+    };
+
+    private IReadOnlyList<DataGridColumn<Person>> _columns = default!;
+
+    // Inline templated render fragment (the documented @<...> field form) for the Status cell.
+    private readonly RenderFragment<Person> StatusCell = person =>
+        @<ZitsBadge Variant="@StatusVariant(person.Status)">@person.Status</ZitsBadge>;
+
+    private static string StatusVariant(string status) => status == "Active" ? "default" : "secondary";
+
+    protected override void OnInitialized()
+    {
+        _columns = new List<DataGridColumn<Person>>
+        {
+            new() { Key = "name", Header = "Name", Accessor = p => p.Name },
+            new() { Key = "email", Header = "Email", Accessor = p => p.Email },
+            new() { Key = "role", Header = "Role", Accessor = p => p.Role },
+            new() { Key = "status", Header = "Status", Accessor = p => p.Status, CellTemplate = StatusCell, Sortable = false },
+        };
+    }
+}

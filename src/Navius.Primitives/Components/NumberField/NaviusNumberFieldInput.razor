@@ -1,0 +1,52 @@
+@namespace Navius.Primitives.Components.NumberField
+@inherits NumberFieldPart
+@using System.Globalization
+
+@*
+    Base UI NumberField.Input — the native text <input role="spinbutton">. Shows the
+    formatted value; commits (parse + clamp + reformat) on change/blur. Keyboard:
+    Arrow ±Step (Shift = LargeStep, Alt = SmallStep), PageUp/Down ±LargeStep,
+    Home/End jump to Min/Max. Reflects the field's discrete state.
+*@
+
+<input id="@Context.ControlId"
+       role="spinbutton"
+       inputmode="decimal"
+       autocomplete="off"
+       aria-valuenow="@Context.Value?.ToString(CultureInfo.InvariantCulture)"
+       aria-valuemin="@Context.Min?.ToString(CultureInfo.InvariantCulture)"
+       aria-valuemax="@Context.Max?.ToString(CultureInfo.InvariantCulture)"
+       value="@Context.Display"
+       disabled="@Context.Disabled"
+       readonly="@Context.ReadOnly"
+       required="@Context.Required"
+       data-navius-number-field-input
+       data-disabled="@(Context.Disabled ? "" : null)"
+       data-readonly="@(Context.ReadOnly ? "" : null)"
+       data-required="@(Context.Required ? "" : null)"
+       @onchange="OnChangeAsync"
+       @onkeydown="OnKeyDownAsync"
+       @attributes="Attributes" />
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private Task OnChangeAsync(ChangeEventArgs e) =>
+        Context.SetTextAsync(e.Value?.ToString() ?? string.Empty, commit: true);
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        var step = e.ShiftKey ? Context.LargeStep : e.AltKey ? Context.SmallStep : Context.Step;
+
+        switch (e.Key)
+        {
+            case "ArrowUp": await Context.StepAsync(step); break;
+            case "ArrowDown": await Context.StepAsync(-step); break;
+            case "PageUp": await Context.StepAsync(Context.LargeStep); break;
+            case "PageDown": await Context.StepAsync(-Context.LargeStep); break;
+            case "Home": await Context.SetToBoundAsync(max: false); break;
+            case "End": await Context.SetToBoundAsync(max: true); break;
+        }
+    }
+}

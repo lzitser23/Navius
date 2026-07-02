@@ -1,0 +1,91 @@
+@namespace Navius.Primitives.Components.Toolbar
+@inherits ToolbarPart
+
+@*
+    A single toggle button inside a Toolbar.ToggleGroup. aria-pressed reflects the
+    on/off state; data-pressed is present while pressed. Space/Enter toggle (native <button>).
+    It carries the toolbar's data-navius-toolbar-item marker and registers with the
+    ToolbarContext, so it seats the toolbar's single Tab stop and is driven by the
+    toolbar's roving arrow navigation (no separate roving controller). data-disabled
+    excludes it from the toolbar's roving selector.
+*@
+
+<button @ref="_element"
+        type="button"
+        aria-pressed="@(IsPressed ? "true" : "false")"
+        tabindex="@(IsTabStop ? 0 : -1)"
+        disabled="@IsDisabled"
+        data-pressed="@(IsPressed ? "" : null)"
+        data-disabled="@(IsDisabled ? "" : null)"
+        data-orientation="@Context.Orientation"
+        data-navius-toolbar-item
+        @onclick="OnClickAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [CascadingParameter] private ToolbarToggleGroupContext GroupContext { get; set; } = default!;
+
+    [Parameter] public string Value { get; set; } = "";
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private Func<Task>? _onGroupChange;
+    private bool _lastDisabled;
+
+    private bool IsPressed => GroupContext.IsPressed(Value);
+
+    private bool IsDisabled => Disabled || GroupContext.Disabled;
+
+    private bool IsTabStop => !IsDisabled && Context.IsTabStop(this);
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _lastDisabled = IsDisabled;
+        // Seat the toolbar's single Tab stop / roving order with the toolbar marker.
+        Context.Register(this, () => IsDisabled);
+        // Re-render this item when the group's pressed set changes.
+        _onGroupChange = () => InvokeAsync(StateHasChanged);
+        GroupContext.Changed += _onGroupChange;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // If this item's effective disabled state flips at runtime, the toolbar seat
+        // (first enabled item) can move, so peers need to re-render.
+        if (_lastDisabled != IsDisabled)
+        {
+            _lastDisabled = IsDisabled;
+            await Context.NotifyChangedAsync();
+        }
+    }
+
+    private Task OnClickAsync()
+    {
+        if (IsDisabled)
+        {
+            return Task.CompletedTask;
+        }
+
+        return GroupContext.RequestToggleAsync(Value);
+    }
+
+    public override void Dispose()
+    {
+        Context.Unregister(this);
+        if (_onGroupChange is not null)
+        {
+            GroupContext.Changed -= _onGroupChange;
+        }
+
+        base.Dispose();
+    }
+}

@@ -1,0 +1,64 @@
+@namespace Navius.Primitives.Components.Tooltip
+@inherits TooltipPart
+
+@*
+    Opens on hover (after the delay) and on keyboard focus (immediately); closes
+    on leave, blur, Escape, or Space/Enter activation. aria-describedby points at
+    the content while open so screen readers announce it. Captures its element ref
+    for positioning.
+*@
+
+<button type="button"
+        @ref="_element"
+        aria-describedby="@(Context.Open ? Context.ContentId : null)"
+        data-popup-open="@(Context.Open ? "" : null)"
+        data-navius-tooltip-trigger
+        @onpointerenter="Context.OpenDelayed"
+        @onpointerleave="Context.Close"
+        @onfocus="Context.OpenNow"
+        @onblur="Context.Close"
+        @onkeydown="OnKeyDownAsync"
+        @onpointerdown="OnPointerDownAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [CascadingParameter(Name = "NaviusTooltipRoot")] private NaviusTooltip Root { get; set; } = default!;
+
+    private ElementReference _element;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Context.TriggerElement = _element;
+            Context.HasTrigger = true;
+        }
+    }
+
+    // Pressing the trigger (pointer click) closes an open tooltip — the spec dismisses
+    // on press so the tooltip doesn't linger over the activated control.
+    private Task OnPointerDownAsync() => Context.Open ? Root.ForceCloseAsync() : Task.CompletedTask;
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            await Root.ForceCloseAsync();
+        }
+        else if (e.Key == " " || e.Key == "Enter")
+        {
+            // Activating the trigger closes the tooltip without delay (the spec behaviour).
+            if (Context.Open)
+            {
+                await Root.ForceCloseAsync();
+            }
+        }
+    }
+}

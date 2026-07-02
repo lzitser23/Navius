@@ -1,0 +1,73 @@
+@namespace Navius.Primitives.Components.Accordion
+@inherits AccordionPart
+
+@*
+    The header button (the spec: Item > Header > Trigger). Toggles its item; aria-expanded
+    + aria-controls + data-state / data-disabled / data-orientation wired. Arrow keys move
+    focus between triggers (orientation/dir-aware, wrapping); Home/End jump to first/last;
+    Space/Enter toggle via the native button. Disabled items can't toggle or be focused.
+    Registers its element with the context (in DOM order) for roving focus.
+*@
+
+<button @ref="_element"
+        type="button"
+        id="@Context.TriggerId(Value)"
+        aria-expanded="@(IsOpen ? "true" : "false")"
+        aria-controls="@Context.ContentId(Value)"
+        aria-disabled="@(IsDisabled ? "true" : null)"
+        disabled="@IsDisabled"
+        data-panel-open="@(IsOpen ? "" : null)"
+        data-disabled="@(IsDisabled ? "" : null)"
+        data-navius-accordion-trigger
+        @onclick="OnClickAsync"
+        @onkeydown="OnKeyDownAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [CascadingParameter(Name = "NaviusAccordionItemValue")]
+    private string Value { get; set; } = "";
+
+    [CascadingParameter(Name = "NaviusAccordionItemDisabled")]
+    private bool ItemDisabled { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+
+    private bool IsOpen => Context.IsOpen(Value);
+    private bool IsDisabled => Context.IsItemDisabled(ItemDisabled);
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Context.Register(Value, () => _element, () => ItemDisabled);
+    }
+
+    private Task OnClickAsync() => Context.ToggleAsync(Value, ItemDisabled);
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowUp":
+            case "ArrowDown":
+            case "ArrowLeft":
+            case "ArrowRight":
+            case "Home":
+            case "End":
+                await Context.HandleKeyDownAsync(Value, e.Key);
+                break;
+        }
+    }
+
+    public override void Dispose()
+    {
+        base.Dispose();
+        Context.Unregister(Value);
+    }
+}

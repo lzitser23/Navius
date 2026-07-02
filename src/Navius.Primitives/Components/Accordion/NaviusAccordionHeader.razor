@@ -1,0 +1,55 @@
+@namespace Navius.Primitives.Components.Accordion
+@inherits AccordionPart
+
+@*
+    The heading wrapper around a Trigger (the spec: Item > Header > Trigger). Renders a
+    real heading element (default <h3>) so the document outline is correct; the heading
+    level is overridable via Level (1-6) for callers who need a different rank. Carries
+    data-state / data-disabled / data-orientation. ChildContent should be the Trigger.
+
+    The heading is built with the render-tree builder so the tag (h1..h6) is dynamic
+    while data-* / @attributes / ChildContent stay identical across levels.
+*@
+
+@RenderHeading
+
+@code {
+    /// <summary>Heading level 1-6 (the spec renders an &lt;h3&gt; by default).</summary>
+    [Parameter] public int Level { get; set; } = 3;
+
+    [CascadingParameter(Name = "NaviusAccordionItemValue")]
+    private string Value { get; set; } = "";
+
+    [CascadingParameter(Name = "NaviusAccordionItemDisabled")]
+    private bool ItemDisabled { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool IsDisabled => Context.IsItemDisabled(ItemDisabled);
+
+    private void RenderHeading(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder)
+    {
+        var tag = "h" + Math.Clamp(Level, 1, 6);
+
+        builder.OpenElement(0, tag);
+        builder.AddAttribute(1, "data-navius-accordion-header");
+        if (Context.IsOpen(Value))
+        {
+            builder.AddAttribute(2, "data-open", "");
+        }
+        if (IsDisabled)
+        {
+            builder.AddAttribute(3, "data-disabled", "");
+        }
+        builder.AddAttribute(4, "data-index", Context.IndexOf(Value));
+        if (Attributes is not null)
+        {
+            builder.AddMultipleAttributes(5, Attributes);
+        }
+        builder.AddContent(6, ChildContent);
+        builder.CloseElement();
+    }
+}

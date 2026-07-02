@@ -1,0 +1,36 @@
+@namespace Navius.Primitives.Components.PreviewCard
+@inherits OverlayPresence
+
+@*
+    The spec PreviewCard.Backdrop — a scrim sibling of the positioner. Preview cards are
+    non-modal so this is rarely used, but it exists in the contract. Carries discrete
+    data-open / data-closed + data-starting-style / data-ending-style. Outside dismissal
+    is owned by the Popup's dismissable layer, not this element.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="Element"
+             data-open="@(Context.Open ? "" : null)"
+             data-closed="@(Context.Open ? null : "")"
+             data-starting-style="@(Entering ? "" : null)"
+             data-ending-style="@(Exiting ? "" : null)"
+             data-navius-preview-card-backdrop
+             @attributes="Attributes">
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private PreviewCardContext Context { get; set; } = default!;
+
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override IOverlayContext OverlayContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+}

@@ -1,0 +1,21 @@
+@namespace Navius.Primitives.Components.Form
+@inherits ComponentBase
+
+@*
+    The form's submit button (mirrors the spec Form.Submit). Renders a native
+    <button type="submit"> so it participates in the form's submit + validation +
+    focus flow for free. Headless — consumers splat classes/state via @attributes.
+*@
+
+<button type="submit"
+        data-navius-form-submit
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

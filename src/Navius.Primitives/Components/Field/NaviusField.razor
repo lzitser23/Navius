@@ -1,0 +1,86 @@
+@namespace Navius.Primitives.Components.Field
+@using Navius.Primitives.Components.Form
+@using Navius.Primitives.Components.Fieldset
+@inherits ComponentBase
+@implements IDisposable
+
+@*
+    Base UI Field.Root — groups a label + control + description + error under one
+    name. Creates the FieldContext (control id, validity, interaction state) and
+    cascades it. Every part reflects the field's discrete state attributes
+    (data-disabled/valid/invalid/dirty/touched/filled/focused); validity surfaces
+    per ValidationMode. Inherits disabled from an enclosing Fieldset.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div data-navius-field
+         @attributes="_context.MergeState(Attributes)">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>The field name (mirrors the spec <c>Field.Root name</c>). Required.</summary>
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    /// <summary>Disables the field; takes precedence over the control's own <c>disabled</c>.</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Full validity snapshot driving messages + <c>aria-invalid</c> (controlled validity).</summary>
+    [Parameter] public FieldValidity? Validity { get; set; }
+
+    /// <summary>Convenience flag for the common "just mark the field invalid" case. Maps to <c>CustomError</c>.</summary>
+    [Parameter] public bool Invalid { get; set; }
+
+    /// <summary>Server-side invalidity (the spec <c>serverInvalid</c>); auto-clears on the next user edit.</summary>
+    [Parameter] public bool ServerInvalid { get; set; }
+
+    /// <summary>When the field surfaces validity. Default <see cref="FieldValidationMode.OnSubmit"/>.</summary>
+    [Parameter] public FieldValidationMode ValidationMode { get; set; } = FieldValidationMode.OnSubmit;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    [CascadingParameter] private FormContext? Form { get; set; }
+    [CascadingParameter] private FieldsetContext? Fieldset { get; set; }
+
+    private FieldContext _context = default!;
+    private bool _lastServerInvalid;
+
+    protected override void OnInitialized()
+    {
+        _context = new FieldContext(Name) { ValidationMode = ValidationMode };
+
+        if (Form is not null)
+        {
+            _context.FormChanged = Form.NotifyChangedAsync;
+            Form.Register(_context);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.ValidationMode = ValidationMode;
+
+        await _context.SetDisabledAsync(Disabled || (Fieldset?.Disabled ?? false));
+
+        var next = Validity
+            ?? (Invalid
+                ? new FieldValidity { Valid = false, CustomError = true }
+                : FieldValidity.Valid_);
+
+        await _context.SetValidityAsync(next);
+
+        // Only push ServerInvalid when the prop actually changes, so an internal
+        // auto-clear (on user edit) isn't immediately re-asserted by the next render.
+        if (ServerInvalid != _lastServerInvalid)
+        {
+            _lastServerInvalid = ServerInvalid;
+            await _context.SetServerInvalidAsync(ServerInvalid);
+        }
+    }
+
+    public void Dispose() => Form?.Unregister(Name);
+}

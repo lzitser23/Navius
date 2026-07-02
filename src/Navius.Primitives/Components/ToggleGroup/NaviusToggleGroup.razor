@@ -1,0 +1,163 @@
+@namespace Navius.Primitives.Components.ToggleGroup
+@inherits ComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    Root of a toggle group. role=group; data-orientation drives arrow-key axis.
+    type="single" => at most one pressed value (radio-like); type="multiple" => many.
+    Controlled via @bind-Value (IReadOnlyList<string>) or uncontrolled via DefaultValue.
+    Roving tabindex (arrows + Home/End, wrapping) is provided by the engine over the
+    items, so only one item is in the Tab order at a time.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div @ref="_element"
+         role="group"
+         data-navius-togglegroup
+         data-orientation="@Orientation"
+         data-multiple="@(Multiple ? "" : null)"
+         data-disabled="@(Disabled ? "" : null)"
+         dir="@(Dir ?? CascadedDir)"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>When <c>true</c>, multiple items can be pressed at once; default (false) is single (radio-like). Base UI's <c>multiple</c>.</summary>
+    [Parameter] public bool Multiple { get; set; }
+
+    /// <summary>Controlled pressed set. Provide together with <see cref="ValueChanged"/>.</summary>
+    [Parameter] public IReadOnlyList<string>? Value { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<string>> ValueChanged { get; set; }
+
+    /// <summary>Initial pressed set for uncontrolled use.</summary>
+    [Parameter] public IReadOnlyList<string>? DefaultValue { get; set; }
+
+    /// <summary>Disables every item in the group.</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public string Orientation { get; set; } = "horizontal";
+
+    /// <summary>
+    /// When <c>true</c> (default) the group is a single Tab stop and arrows move a
+    /// roving focus between items. When <c>false</c> every enabled item is a Tab stop
+    /// (tabindex=0) and arrow navigation is disabled.
+    /// </summary>
+    [Parameter] public bool RovingFocus { get; set; } = true;
+
+    /// <summary>When <c>true</c> (default) arrow navigation wraps past first/last; when <c>false</c> it stops at the ends.</summary>
+    [Parameter] public bool Loop { get; set; } = true;
+
+    /// <summary>Reading direction (<c>"ltr"</c> | <c>"rtl"</c>). In RTL horizontal arrow semantics swap.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")]
+    public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ToggleGroupContext _context = default!;
+    private List<string> _internal = new();
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private RovingFocus? _roving;
+    private bool _engaged;
+
+    private bool IsControlled => ValueChanged.HasDelegate;
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    protected override void OnInitialized()
+    {
+        _internal = DefaultValue is null ? new List<string>() : new List<string>(DefaultValue);
+        _context = new ToggleGroupContext(ToggleAsync, Multiple, Orientation, Disabled, RovingFocus);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var current = IsControlled ? (Value ?? Array.Empty<string>()) : _internal;
+        await _context.SetValueInternalAsync(current);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_engaged && RovingFocus)
+        {
+            _engaged = true;
+            _interop ??= new NaviusJsInterop(JS);
+            _roving = await _interop.CreateRovingFocusAsync(
+                _element,
+                new RovingFocusOptions(
+                    Orientation,
+                    "[data-navius-togglegroup-item]:not([data-disabled])",
+                    Loop: Loop,
+                    AutoFocus: false,
+                    Dir: EffectiveDir));
+        }
+    }
+
+    private async Task ToggleAsync(string value)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        var current = IsControlled ? (Value ?? Array.Empty<string>()) : _internal;
+        var next = ComputeNext(current, value);
+
+        if (IsControlled)
+        {
+            await ValueChanged.InvokeAsync(next);
+        }
+        else
+        {
+            _internal = next;
+            await _context.SetValueInternalAsync(next);
+            StateHasChanged();
+        }
+    }
+
+    private List<string> ComputeNext(IReadOnlyList<string> current, string value)
+    {
+        var pressed = current.Contains(value, StringComparer.Ordinal);
+
+        if (!Multiple)
+        {
+            // Radio-like: pressing the active one clears it; otherwise it becomes the sole value.
+            return pressed ? new List<string>() : new List<string> { value };
+        }
+
+        var next = new List<string>(current);
+        if (pressed)
+        {
+            next.RemoveAll(v => string.Equals(v, value, StringComparison.Ordinal));
+        }
+        else
+        {
+            next.Add(value);
+        }
+
+        return next;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_roving is not null)
+        {
+            await _roving.DisposeAsync();
+            _roving = null;
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+    }
+}

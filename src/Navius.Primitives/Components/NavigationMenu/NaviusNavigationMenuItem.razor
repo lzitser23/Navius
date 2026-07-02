@@ -1,0 +1,28 @@
+@namespace Navius.Primitives.Components.NavigationMenu
+@inherits NavigationMenuPart
+
+@*
+    A single menu item. Rendered as a <li> per the Base UI/WAI-ARIA anatomy. Carries the
+    item's Value and cascades it to the Trigger + Content beneath it so they can wire
+    aria-controls / id / open-state without the consumer repeating the value. An item
+    may hold either a Trigger+Content pair (a disclosure) or a plain Link. Base UI's Item
+    exposes no open attribute (the Trigger/Icon carry data-popup-open). ZERO styling.
+*@
+
+<CascadingValue Value="this" IsFixed="true">
+    <li data-navius-navigationmenu-item
+        data-orientation="@Context.Orientation"
+        @attributes="Attributes">
+        @ChildContent
+    </li>
+</CascadingValue>
+
+@code {
+    /// <summary>The item's value — matched against the root's open value.</summary>
+    [Parameter] public string Value { get; set; } = "";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

@@ -1,0 +1,120 @@
+@namespace Navius.Primitives.Components.Switch
+@inherits ComponentBase
+
+@*
+    A headless switch. Rendered as a <button role="switch"> so focus and
+    Space/Enter activation come for free — no JS. Controlled via @bind-Checked or
+    uncontrolled via DefaultChecked. Exposes Base UI's discrete data-checked /
+    data-unchecked (+ data-disabled / data-readonly / data-required) so the track
+    and thumb style off them (e.g. data-[checked]:translate-x-5). A visually-hidden
+    checkbox mirror lets the switch participate in native form submission
+    (Name/Value/Required). Place a NaviusSwitchThumb inside for the moving thumb.
+*@
+
+<button type="button"
+        role="switch"
+        aria-checked="@(CurrentChecked ? "true" : "false")"
+        aria-readonly="@(ReadOnly ? "true" : null)"
+        aria-required="@(Required ? "true" : null)"
+        data-checked="@(CurrentChecked ? "" : null)"
+        data-unchecked="@(CurrentChecked ? null : "")"
+        data-disabled="@(Disabled ? "" : null)"
+        data-readonly="@(ReadOnly ? "" : null)"
+        data-required="@(Required ? "" : null)"
+        data-navius-switch
+        disabled="@Disabled"
+        @onclick="ToggleAsync"
+        @attributes="Attributes">
+    <CascadingValue Value="_context" IsFixed="false">
+        @ChildContent
+    </CascadingValue>
+</button>
+
+@if (!string.IsNullOrEmpty(Name))
+{
+    <NaviusBubbleInput InputType="checkbox"
+                       Name="@Name"
+                       Value="@Value"
+                       Checked="CurrentChecked"
+                       Required="Required"
+                       Disabled="Disabled"
+                       Form="@Form" />
+}
+
+@code {
+    [Parameter] public bool Checked { get; set; }
+
+    [Parameter] public EventCallback<bool> CheckedChanged { get; set; }
+
+    [Parameter] public bool DefaultChecked { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Form field name applied to the hidden input for native form submission.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>Value submitted with the form when the switch is checked. the spec default "on".</summary>
+    [Parameter] public string Value { get; set; } = "on";
+
+    /// <summary>Marks the control as required for native form validation.</summary>
+    [Parameter] public bool Required { get; set; }
+
+    /// <summary>When true the switch is focusable but its value cannot be changed (the spec <c>readOnly</c>).</summary>
+    [Parameter] public bool ReadOnly { get; set; }
+
+    /// <summary>Optional id of an associated form element (HTML form attribute) for the hidden input.</summary>
+    [Parameter] public string? Form { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool _internalChecked;
+    private bool _isControlled;
+    private NaviusSwitchContext _context = new();
+
+    private bool CurrentChecked => _isControlled ? Checked : _internalChecked;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        // Controlled-ness is determined by whether Checked was explicitly set by the
+        // consumer (the @bind-Checked / Checked param), NOT by CheckedChanged.HasDelegate.
+        if (parameters.TryGetValue<bool>(nameof(Checked), out _))
+        {
+            _isControlled = true;
+        }
+
+        parameters.SetParameterProperties(this);
+
+        if (!_initialized)
+        {
+            _internalChecked = DefaultChecked;
+            _initialized = true;
+        }
+
+        _context = new NaviusSwitchContext { Checked = CurrentChecked, Disabled = Disabled, ReadOnly = ReadOnly, Required = Required };
+
+        return base.SetParametersAsync(ParameterView.Empty);
+    }
+
+    private bool _initialized;
+
+    private async Task ToggleAsync()
+    {
+        if (Disabled || ReadOnly)
+        {
+            return;
+        }
+
+        var next = !CurrentChecked;
+
+        if (!_isControlled)
+        {
+            _internalChecked = next;
+            _context = new NaviusSwitchContext { Checked = next, Disabled = Disabled, ReadOnly = ReadOnly, Required = Required };
+        }
+
+        await CheckedChanged.InvokeAsync(next);
+    }
+}

@@ -1,0 +1,19 @@
+@namespace Navius.Primitives.Components.Dialog
+
+@* Any button that should close the dialog. Lives inside the content. *@
+
+<button type="button"
+        data-navius-dialog-close
+        @onclick="Context.RequestCloseAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [CascadingParameter] private DialogContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

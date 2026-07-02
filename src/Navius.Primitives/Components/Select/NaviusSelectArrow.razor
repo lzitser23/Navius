@@ -1,0 +1,54 @@
+@namespace Navius.Primitives.Components.Select
+@implements IAsyncDisposable
+
+@*
+    the spec Select.Arrow — a small triangular pointer rendered inside the Popup,
+    positioned by the engine positioner (which receives this element and points it
+    at the trigger's centre, clamped within the popup box). Registers itself on the
+    context so the Popup can (re)wire it into the positioner. Width/Height size the
+    default SVG; pass ChildContent to override the shape entirely.
+*@
+
+<span @ref="_element"
+      aria-hidden="true"
+      data-navius-select-arrow
+      style="position:absolute"
+      @attributes="Attributes">
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else
+    {
+        <svg width="@Width" height="@Height" viewBox="0 0 30 10" preserveAspectRatio="none" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="0,0 30,0 15,10" />
+        </svg>
+    }
+</span>
+
+@code {
+    [CascadingParameter] private SelectContext Context { get; set; } = default!;
+
+    private ElementReference _element;
+
+    /// <summary>Arrow width in px (default 10, matching the spec).</summary>
+    [Parameter] public int Width { get; set; } = 10;
+
+    /// <summary>Arrow height in px (default 5, matching the spec).</summary>
+    [Parameter] public int Height { get; set; } = 5;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Context.RegisterArrowAsync(_element);
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await Context.UnregisterArrowAsync();
+}

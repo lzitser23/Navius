@@ -1,0 +1,140 @@
+@namespace Navius.Primitives.Components.Menubar
+@inherits ComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    Root of a menubar. role="menubar"; a horizontal row of menus. Owns which menu is open
+    (at most one) — controlled via @bind-Value (string?) or uncontrolled via DefaultValue.
+    Roving tabindex over the top-level triggers (ArrowLeft/Right + Home/End, wrapping) is
+    provided by the engine, so only one trigger is in the Tab order at a time. ZERO styling —
+    consumers bring classes via @attributes.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <CascadingValue Name="NaviusDirection" Value="EffectiveDir">
+        <div @ref="_element"
+             role="menubar"
+             data-navius-menubar
+             data-orientation="@Orientation"
+             dir="@(Dir is not null ? EffectiveDir : null)"
+             @attributes="Attributes">
+            @ChildContent
+        </div>
+    </CascadingValue>
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled open menu value (the open menu's <c>Value</c>, or <c>null</c>). Pair with <see cref="ValueChanged"/>.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>Initial open menu value for uncontrolled use.</summary>
+    [Parameter] public string? DefaultValue { get; set; }
+
+    /// <summary><c>"horizontal"</c> (default) or <c>"vertical"</c>.</summary>
+    [Parameter] public string Orientation { get; set; } = "horizontal";
+
+    /// <summary>
+    /// Reading direction (<c>"ltr"</c> | <c>"rtl"</c>). When set it overrides any cascaded
+    /// direction and flips ArrowLeft/Right trigger roving and submenu open/close. When null
+    /// the cascaded <c>NaviusDirection</c> (or <c>"ltr"</c>) is used.
+    /// </summary>
+    [Parameter] public string? Dir { get; set; }
+
+    /// <summary>
+    /// When <c>true</c>, keyboard focus loops from the last trigger back to the first (and
+    /// vice-versa). Defaults to <c>false</c>, matching the spec.
+    /// </summary>
+    [Parameter] public bool Loop { get; set; }
+
+    /// <summary>
+    /// Modality for the open menu (the spec default <c>true</c>). When modal the open menu
+    /// locks page scroll and blocks outside pointer interaction; <c>false</c> leaves the page
+    /// interactive. Applies to whichever menu is open.
+    /// </summary>
+    [Parameter] public bool Modal { get; set; } = true;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] private string? CascadedDir { get; set; }
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    private MenubarContext _context = default!;
+    private string? _internalValue;
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private RovingFocus? _roving;
+    private bool _engaged;
+
+    private bool IsControlled => ValueChanged.HasDelegate;
+
+    protected override void OnInitialized()
+    {
+        _internalValue = DefaultValue;
+        _context = new MenubarContext(RequestSetValueAsync) { Orientation = Orientation };
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.Orientation = Orientation;
+        _context.Dir = EffectiveDir;
+        _context.Loop = Loop;
+        _context.Modal = Modal;
+        await _context.SetOpenValueInternalAsync(IsControlled ? Value : _internalValue);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_engaged)
+        {
+            _engaged = true;
+            _interop ??= new NaviusJsInterop(JS);
+            // Rove between the top-level triggers along the menubar axis (horizontal => Left/Right).
+            // Loop=false by default (the spec); DataHighlight mirrors focus to [data-highlighted];
+            // Dir flips Left/Right in rtl. AutoFocus=false so the menubar doesn't steal focus on mount.
+            _roving = await _interop.CreateRovingFocusAsync(
+                _element,
+                new RovingFocusOptions(
+                    Orientation,
+                    "[data-navius-menubar-trigger]:not([data-disabled])",
+                    Loop: Loop,
+                    AutoFocus: false,
+                    DataHighlight: true,
+                    Dir: EffectiveDir));
+        }
+    }
+
+    private async Task RequestSetValueAsync(string? value)
+    {
+        if (IsControlled)
+        {
+            await ValueChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internalValue = value;
+            await _context.SetOpenValueInternalAsync(value);
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_roving is not null)
+        {
+            await _roving.DisposeAsync();
+            _roving = null;
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+    }
+}

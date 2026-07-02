@@ -1,0 +1,44 @@
+@namespace Navius.Primitives.Components.Tabs
+@inherits TabsPart
+
+@* role=tablist; arrow keys move selection + focus (automatic activation), Home/End jump. *@
+
+<div role="tablist"
+     aria-orientation="@Context.Orientation"
+     data-orientation="@Context.Orientation"
+     data-activation-direction="@Context.ActivationDirection"
+     data-navius-tabs-list
+     @onkeydown="OnKeyDownAsync"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    /// <summary>When true (default) arrow navigation wraps at the edges; false stops at first/last.</summary>
+    [Parameter] public bool Loop { get; set; } = true;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        Context.Loop = Loop;
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        var horizontal = Context.Orientation != "vertical";
+        var rtl = Context.Dir == "rtl";
+
+        // In RTL horizontal lists ArrowLeft advances and ArrowRight goes back.
+        var next = horizontal ? (rtl ? "ArrowLeft" : "ArrowRight") : "ArrowDown";
+        var prev = horizontal ? (rtl ? "ArrowRight" : "ArrowLeft") : "ArrowUp";
+
+        if (e.Key == next) await Context.MoveAsync(1);
+        else if (e.Key == prev) await Context.MoveAsync(-1);
+        else if (e.Key == "Home") await Context.MoveToEdgeAsync(last: false);
+        else if (e.Key == "End") await Context.MoveToEdgeAsync(last: true);
+    }
+}

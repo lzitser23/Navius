@@ -1,0 +1,44 @@
+@namespace Navius.Primitives.Components.Popover
+@implements IDisposable
+
+@*
+    The spec Popover.Title. Labels the popup: registers its presence so the Popup wires
+    aria-labelledby only when a Title is actually mounted (no dangling IDREF).
+*@
+
+<h2 id="@Context.TitleId" data-navius-popover-title @attributes="Attributes">@ChildContent</h2>
+
+@code {
+    [CascadingParameter] private PopoverContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool _registered;
+
+    protected override void OnInitialized()
+    {
+        Context.RegisterTitle();
+        _registered = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Re-render the popup so aria-labelledby picks up this title after it mounts.
+        if (firstRender)
+        {
+            await Context.NotifyChangedAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_registered)
+        {
+            Context.UnregisterTitle();
+            _registered = false;
+        }
+    }
+}

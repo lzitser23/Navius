@@ -1,0 +1,73 @@
+@namespace Navius.Primitives.Components.Menubar
+
+@*
+    A menu item inside a menubar menu. role="menuitem", tabindex="-1" so Tab skips it and
+    roving focus (ArrowUp/Down) moves between items. Activates on click or Enter/Space. By
+    default the menu then closes; an OnSelect handler may call PreventDefault to keep it open.
+    Disabled items are skipped by roving focus (data-disabled) and don't activate. The engine
+    sets [data-highlighted] on the focused item (DataHighlight). TextValue overrides the
+    typeahead match string. ZERO styling.
+*@
+
+<div role="menuitem"
+     tabindex="-1"
+     data-navius-menubar-item
+     data-navius-text-value="@TextValue"
+     data-disabled="@(Disabled ? "" : null)"
+     aria-disabled="@(Disabled ? "true" : null)"
+     @onclick="ActivateAsync"
+     @onkeydown="OnKeyDownAsync"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private MenubarMenuContext MenuContext { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Invoked when the item is chosen (click or Enter/Space). Call
+    /// <see cref="NaviusSelectEventArgs.PreventDefault"/> to keep the menu OPEN after selection.
+    /// </summary>
+    [Parameter] public EventCallback<NaviusSelectEventArgs> OnSelect { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>
+    /// Overrides the string used by type-ahead matching (defaults to the item's text content).
+    /// Emitted as <c>data-navius-text-value</c>, which the engine prefers over textContent.
+    /// </summary>
+    [Parameter] public string? TextValue { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private async Task ActivateAsync()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        var args = new NaviusSelectEventArgs();
+
+        if (OnSelect.HasDelegate)
+        {
+            await OnSelect.InvokeAsync(args);
+        }
+
+        if (!args.DefaultPrevented)
+        {
+            await MenuContext.RequestCloseAsync();
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            await ActivateAsync();
+        }
+    }
+}

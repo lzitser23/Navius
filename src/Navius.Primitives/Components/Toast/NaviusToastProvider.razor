@@ -1,0 +1,86 @@
+@namespace Navius.Primitives.Components.Toast
+@inherits ComponentBase
+@implements IDisposable
+
+@*
+    Root of the unified toast tree. Cascades ToastProviderContext (the Manager + config +
+    announcer broker + stacking-height aggregation) to every Viewport / Root / Content, and
+    re-renders the tree whenever the Manager mutates. Renders no DOM of its own. Mirrors the
+    Base UI Toast.Provider.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    private ToastProviderContext _context = default!;
+
+    /// <summary>Max simultaneously-visible toasts; the rest queue (data-limited). Base UI default 1.</summary>
+    [Parameter] public int Limit { get; set; } = 1;
+
+    /// <summary>Default auto-close duration in ms for descendant toasts (renamed from Duration).</summary>
+    [Parameter] public int Timeout { get; set; } = 5000;
+
+    /// <summary>Accessible label prefix announced for each toast.</summary>
+    [Parameter] public string Label { get; set; } = "Notification";
+
+    /// <summary>Swipe gesture direction: right | left | up | down.</summary>
+    [Parameter] public string SwipeDirection { get; set; } = "right";
+
+    /// <summary>Swipe distance in px required to dismiss.</summary>
+    [Parameter] public double SwipeThreshold { get; set; } = 50;
+
+    /// <summary>An externally-created manager (Base UI createToastManager). Falls back to the injected scoped one.</summary>
+    [Parameter] public ToastManager? Manager { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Inject] private ToastManager Injected { get; set; } = default!;
+
+    private ToastManager? _subscribed;
+
+    protected override void OnInitialized() => _context = new ToastProviderContext();
+
+    protected override void OnParametersSet()
+    {
+        var manager = Manager ?? Injected;
+
+        if (!ReferenceEquals(manager, _subscribed))
+        {
+            if (_subscribed is not null)
+            {
+                _subscribed.Changed -= OnManagerChanged;
+            }
+            manager.Changed += OnManagerChanged;
+            _subscribed = manager;
+        }
+
+        _context.Manager = manager;
+        _context.Manager.Limit = Limit;
+        _context.Timeout = Timeout;
+        _context.Label = Label;
+        _context.SwipeDirection = SwipeDirection;
+        _context.SwipeThreshold = SwipeThreshold;
+
+        // Height/expanded changes also need to re-render the tree.
+        _context.Changed -= OnContextChanged;
+        _context.Changed += OnContextChanged;
+    }
+
+    private void OnManagerChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnContextChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        if (_subscribed is not null)
+        {
+            _subscribed.Changed -= OnManagerChanged;
+        }
+        if (_context is not null)
+        {
+            _context.Changed -= OnContextChanged;
+        }
+    }
+}

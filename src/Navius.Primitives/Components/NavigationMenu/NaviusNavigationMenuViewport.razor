@@ -1,0 +1,107 @@
+@namespace Navius.Primitives.Components.NavigationMenu
+@inherits NavigationMenuPart
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    The shared resizing content container — the spec's NavigationMenu.Viewport. Placed
+    OUTSIDE the List (typically right after it). When present, every open Content panel
+    teleports its wrapper into this viewport's slot rather than self-positioning, so a
+    single animated box hosts whichever panel is active.
+
+    Exposes the canonical CSS custom properties on the viewport element:
+      --navius-navigation-menu-viewport-width
+      --navius-navigation-menu-viewport-height
+    (also mirrored under --navius-navigationmenu-viewport-* for in-house CSS), measured
+    from the active panel via a ResizeObserver so the container can animate to its size.
+
+    Base UI's Viewport carries NO open attribute — the owning Popup owns open/close state
+    (data-open / data-closed live on the Popup). This element only sizes to the active
+    panel and hosts the teleport slot; data-orientation mirrors the root. It lives inside
+    the Popup and stays mounted with it so the teleport slot always exists for incoming
+    Content panels. The ForceMount prop is accepted for prop parity (the container is
+    always present). Registration with the context flips the menu into viewport layout
+    mode. ZERO styling.
+*@
+
+<div @ref="_element"
+     data-orientation="@Context.Orientation"
+     data-navius-navigationmenu-viewport
+     @attributes="Attributes">
+    <div @ref="_slot"
+         data-navius-navigationmenu-viewport-slot="@Context.IdBase"
+         style="display:contents"></div>
+</div>
+
+@code {
+    /// <summary>Keep the viewport mounted while closed (data-closed) for exit animation.</summary>
+    [Parameter] public bool ForceMount { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool IsOpen => Context.Value is not null;
+
+    private ElementReference _element;
+    private ElementReference _slot;
+    private NaviusJsInterop? _interop;
+    private SizeObserver? _sizeObserver;
+    private ViewportMirror? _mirror;
+    private bool _measured;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        // Flip the menu into viewport layout mode and re-render when the open value changes.
+        Context.RegisterViewport(() => InvokeAsync(StateHasChanged));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsOpen && !_measured)
+        {
+            _measured = true;
+            _interop ??= new NaviusJsInterop(JS);
+
+            // --navigationmenu-viewport-panel-width/height on the slot.
+            _sizeObserver = await _interop.CreateSizeObserverAsync(_slot, "navigationmenu-viewport");
+
+            // Mirror the active panel's size onto the viewport element under the
+            // canonical CSS var names (CSP-safe; no eval).
+            _mirror = await _interop.CreateViewportMirrorAsync(_element, _slot);
+        }
+        else if (!IsOpen && _measured)
+        {
+            _measured = false;
+            await TeardownAsync();
+        }
+    }
+
+    private async Task TeardownAsync()
+    {
+        if (_sizeObserver is not null)
+        {
+            await _sizeObserver.DisposeAsync();
+            _sizeObserver = null;
+        }
+
+        if (_mirror is not null)
+        {
+            await _mirror.DisposeAsync();
+            _mirror = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        base.Dispose();
+        Context.UnregisterViewport();
+
+        await TeardownAsync();
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+    }
+}

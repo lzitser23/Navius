@@ -1,0 +1,35 @@
+@namespace Navius.Primitives.Components.RadioGroup
+@inherits RadioGroupPart
+
+@*
+    Renders only when its parent Item is checked (or always when KeepMounted is
+    set). Mirrors the item's discrete state (data-checked / data-unchecked +
+    data-disabled / data-readonly / data-required). This is the canonical place for
+    the radio dot. Inherits RadioGroupPart so it re-renders when the group's
+    selected value changes.
+*@
+
+@if (Item.IsChecked || KeepMounted)
+{
+    <span data-checked="@(Item.IsChecked ? "" : null)"
+          data-unchecked="@(Item.IsChecked ? null : "")"
+          data-disabled="@(Item.IsDisabled ? "" : null)"
+          data-readonly="@(Item.IsReadOnly ? "" : null)"
+          data-required="@(Item.IsRequired ? "" : null)"
+          data-navius-radio-group-indicator
+          @attributes="Attributes">
+        @ChildContent
+    </span>
+}
+
+@code {
+    [CascadingParameter] private RadioGroupItemContext Item { get; set; } = default!;
+
+    /// <summary>Keep the indicator mounted even when unchecked (mirrors the spec <c>keepMounted</c>).</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

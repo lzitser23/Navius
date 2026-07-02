@@ -1,0 +1,14 @@
+@namespace Navius.Primitives.Components.Combobox
+
+@*
+    The Base UI Combobox.Icon — a presentational chevron slot inside the Trigger.
+*@
+
+<span aria-hidden="true" data-navius-combobox-icon @attributes="Attributes">@ChildContent</span>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

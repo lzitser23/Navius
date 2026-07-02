@@ -1,0 +1,174 @@
+@namespace Navius.Primitives.Components.Accordion
+@inherits ComponentBase
+
+@*
+    Root. Type="single" (default, at most one open) or "multiple" (many open).
+
+    Controlled:   @bind-Value (single: string?; multiple: IEnumerable<string>) + ValueChanged.
+    Uncontrolled: DefaultValue / DefaultValues seed the initial open item(s).
+
+    Single mode honours Collapsible (default false = the spec default: the open item
+    cannot close itself). Disabled disables the whole accordion. Orientation drives
+    arrow-key direction + data-orientation; Dir reverses horizontal arrows under rtl.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div data-navius-accordion
+         data-orientation="@_context.DataOrientation"
+         data-disabled="@(Disabled ? "" : null)"
+         dir="@(string.IsNullOrEmpty(EffectiveDir) || EffectiveDir == "ltr" ? null : EffectiveDir)"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>"single" (default) or "multiple".</summary>
+    [Parameter] public string Type { get; set; } = "single";
+
+    /// <summary>Controlled open value for type="single" (a single item value or null).</summary>
+    [Parameter] public string? Value { get; set; }
+
+    /// <summary>Controlled open values for type="multiple".</summary>
+    [Parameter] public IEnumerable<string>? Values { get; set; }
+
+    /// <summary>Fires with the new open value (type="single") when it changes. Enables @bind-Value.</summary>
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>Fires with the new open values (type="multiple") when they change. Enables @bind-Values.</summary>
+    [Parameter] public EventCallback<IEnumerable<string>> ValuesChanged { get; set; }
+
+    /// <summary>Uncontrolled initial open value for type="single".</summary>
+    [Parameter] public string? DefaultValue { get; set; }
+
+    /// <summary>Uncontrolled initial open values for type="multiple".</summary>
+    [Parameter] public IEnumerable<string>? DefaultValues { get; set; }
+
+    /// <summary>type="single" only: when false (the spec default) the open item cannot close itself.</summary>
+    [Parameter] public bool Collapsible { get; set; }
+
+    /// <summary>Disables the whole accordion (cascades to every item / trigger).</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>"vertical" (default) or "horizontal" — drives arrow direction + data-orientation.</summary>
+    [Parameter] public string Orientation { get; set; } = "vertical";
+
+    /// <summary>"ltr" | "rtl". Reverses horizontal arrow mapping under rtl. Falls back to the cascaded direction.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private AccordionContext _context = default!;
+    private HashSet<string> _internal = new();
+    private bool _valueSet;
+    private bool _valuesSet;
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    // Controlled-ness is determined by whether the value param was explicitly passed,
+    // not by EventCallback.HasDelegate (so onValueChange can fire while uncontrolled).
+    private bool IsControlled => Type == "single" ? _valueSet : _valuesSet;
+
+    public override async Task SetParametersAsync(ParameterView parameters)
+    {
+        // Controlled only when a NON-NULL value is supplied. A present-but-null Value
+        // (e.g. a styled wrapper forwarding an unbound @bind, or an uncontrolled
+        // consumer) must not flip to controlled — that would freeze state and route
+        // toggles into an unhandled ValueChanged. Uncontrolled "nothing open" is null.
+        if (parameters.TryGetValue<string?>(nameof(Value), out var v) && v is not null)
+        {
+            _valueSet = true;
+        }
+
+        if (parameters.TryGetValue<IEnumerable<string>?>(nameof(Values), out var vs) && vs is not null)
+        {
+            _valuesSet = true;
+        }
+
+        await base.SetParametersAsync(parameters);
+    }
+
+    private IEnumerable<string> CurrentOpen
+    {
+        get
+        {
+            if (Type == "single")
+            {
+                if (IsControlled)
+                {
+                    return string.IsNullOrEmpty(Value) ? Array.Empty<string>() : new[] { Value };
+                }
+            }
+            else if (IsControlled)
+            {
+                return Values ?? Enumerable.Empty<string>();
+            }
+
+            return _internal;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        // Seed the uncontrolled source of truth from DefaultValue(s).
+        if (Type == "single")
+        {
+            if (!string.IsNullOrEmpty(DefaultValue))
+            {
+                _internal.Add(DefaultValue);
+            }
+        }
+        else if (DefaultValues is not null)
+        {
+            foreach (var v in DefaultValues)
+            {
+                _internal.Add(v);
+            }
+        }
+
+        _context = new AccordionContext(Type, Collapsible, Disabled, Orientation, EffectiveDir, RequestChangeAsync);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.UpdateRoot(Type, Collapsible, Disabled, Orientation, EffectiveDir);
+        await _context.SetOpenInternalAsync(CurrentOpen);
+    }
+
+    private async Task RequestChangeAsync(IReadOnlyCollection<string> next)
+    {
+        if (IsControlled)
+        {
+            if (Type == "single")
+            {
+                await ValueChanged.InvokeAsync(next.FirstOrDefault());
+            }
+            else
+            {
+                await ValuesChanged.InvokeAsync(next.ToArray());
+            }
+        }
+        else
+        {
+            _internal = new HashSet<string>(next);
+            await _context.SetOpenInternalAsync(_internal);
+
+            // Surface the change to consumers even when uncontrolled (the spec's onValueChange).
+            if (Type == "single" && ValueChanged.HasDelegate)
+            {
+                await ValueChanged.InvokeAsync(next.FirstOrDefault());
+            }
+            else if (Type != "single" && ValuesChanged.HasDelegate)
+            {
+                await ValuesChanged.InvokeAsync(next.ToArray());
+            }
+
+            StateHasChanged();
+        }
+    }
+}

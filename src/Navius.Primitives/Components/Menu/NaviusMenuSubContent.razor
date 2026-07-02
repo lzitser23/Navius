@@ -1,0 +1,160 @@
+@namespace Navius.Primitives.Components.Menu
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    the spec SubContent: the floating submenu surface. Positioned to the side of the
+    SubTrigger (right/start; left in rtl) and given its own roving focus + dismissable
+    layer. ArrowLeft (ArrowRight in rtl) and Escape close ONLY this submenu and return
+    focus to the SubTrigger; the root menu stays open. role="menu".
+*@
+
+@if (SubContext.Open || ForceMount)
+{
+    <div @ref="_element"
+         id="@SubContext.ContentId"
+         role="menu"
+         tabindex="-1"
+         data-open="@(SubContext.Open ? "" : null)"
+         data-closed="@(SubContext.Open ? null : "")"
+         dir="@(MenuContext.IsRtl ? "rtl" : null)"
+         data-navius-menu-sub-content
+         @onkeydown="OnKeyDownAsync"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [CascadingParameter] private MenuContext MenuContext { get; set; } = default!;
+    [CascadingParameter] private MenuSubContext SubContext { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    /// <summary>Distance in px from the trigger (the spec default 0).</summary>
+    [Parameter] public double SideOffset { get; set; }
+
+    /// <summary>Offset in px along the alignment axis (the spec default 0).</summary>
+    [Parameter] public double AlignOffset { get; set; }
+
+    /// <summary>When true arrow navigation wraps at the ends (the spec default false).</summary>
+    [Parameter] public bool Loop { get; set; }
+
+    /// <summary>Keep the submenu mounted while closed (for exit animations).</summary>
+    [Parameter] public bool ForceMount { get; set; }
+
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private Positioner? _positioner;
+    private DismissableLayer? _dismiss;
+    private RovingFocus? _roving;
+    private DotNetObjectReference<NaviusMenuSubContent>? _selfRef;
+    private bool _engaged;
+    private Func<Task>? _onChange;
+
+    // Submenu opens toward the inline-end: right in ltr, left in rtl.
+    private string Side => MenuContext.IsRtl ? "left" : "right";
+
+    // The key that closes the submenu is the inline-start arrow.
+    private string CloseKey => MenuContext.IsRtl ? "ArrowRight" : "ArrowLeft";
+
+    protected override void OnInitialized()
+    {
+        _onChange = () => InvokeAsync(StateHasChanged);
+        SubContext.Changed += _onChange;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (SubContext.Open && !_engaged)
+        {
+            _engaged = true;
+            _interop ??= new NaviusJsInterop(JS);
+            _selfRef ??= DotNetObjectReference.Create(this);
+
+            _positioner = await _interop.CreatePositionerAsync(
+                SubContext.TriggerElement, _element,
+                new PositionOptions(Side, "start", SideOffset, AlignOffset, Flip: true));
+
+            _dismiss = await _interop.CreateDismissableLayerAsync(
+                _element, SubContext.TriggerElement, _selfRef, new DismissOptions());
+
+            _roving = await _interop.CreateRovingFocusAsync(
+                _element,
+                new RovingFocusOptions(
+                    "vertical",
+                    Selector: MenuConstants.ItemRoles,
+                    Loop: Loop,
+                    DataHighlight: true,
+                    Dir: MenuContext.Dir));
+        }
+        else if (!SubContext.Open && _engaged)
+        {
+            _engaged = false;
+            await ReleaseAsync();
+            await RestoreFocusAsync();
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == CloseKey)
+        {
+            await SubContext.RequestCloseAsync();
+        }
+    }
+
+    /// <summary>Escape / outside dismiss closes only this submenu.</summary>
+    [JSInvokable]
+    public Task OnDismiss(string reason) => SubContext.RequestCloseAsync();
+
+    private async Task RestoreFocusAsync()
+    {
+        if (SubContext.HasTrigger)
+        {
+            try { await SubContext.TriggerElement.FocusAsync(); }
+            catch { /* trigger may be gone during teardown */ }
+        }
+    }
+
+    private async Task ReleaseAsync()
+    {
+        if (_roving is not null)
+        {
+            await _roving.DisposeAsync();
+            _roving = null;
+        }
+
+        if (_positioner is not null)
+        {
+            await _positioner.DisposeAsync();
+            _positioner = null;
+        }
+
+        if (_dismiss is not null)
+        {
+            await _dismiss.DisposeAsync();
+            _dismiss = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_onChange is not null)
+        {
+            SubContext.Changed -= _onChange;
+        }
+
+        await ReleaseAsync();
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+
+        _selfRef?.Dispose();
+    }
+}

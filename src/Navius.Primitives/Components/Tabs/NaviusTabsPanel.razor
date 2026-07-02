@@ -1,0 +1,40 @@
+@namespace Navius.Primitives.Components.Tabs
+@inherits TabsPart
+
+@*
+    role=tabpanel (Base UI Tabs.Panel); labelled by its tab. Rendered only while selected
+    unless KeepMounted (then inactive panels stay in the DOM carrying data-hidden + the
+    hidden attribute). data-hidden marks a kept-but-inactive panel; data-index +
+    data-activation-direction mirror; no data-state.
+*@
+
+@if (IsSelected || KeepMounted)
+{
+    <div role="tabpanel"
+         id="@Context.PanelId(Value)"
+         aria-labelledby="@Context.TriggerId(Value)"
+         tabindex="0"
+         data-hidden="@(IsSelected ? null : "")"
+         data-index="@Context.IndexOf(Value)"
+         data-orientation="@Context.Orientation"
+         data-activation-direction="@Context.ActivationDirection"
+         hidden="@(IsSelected ? false : true)"
+         data-navius-tabs-panel
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+
+    /// <summary>Keep the panel mounted while inactive (data-hidden + hidden) for external animation.</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool IsSelected => Context.Selected == Value;
+}

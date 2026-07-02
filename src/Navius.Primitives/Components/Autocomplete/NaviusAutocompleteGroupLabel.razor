@@ -1,0 +1,24 @@
+@namespace Navius.Primitives.Components.Autocomplete
+
+@*
+    The Base UI Autocomplete.GroupLabel — a group heading. Generates an id and, when
+    nested in a Group, registers it so the Group's aria-labelledby points here.
+*@
+
+<div id="@_id" data-navius-autocomplete-group-label @attributes="Attributes">@ChildContent</div>
+
+@code {
+    [CascadingParameter] private AutocompleteGroupContext? GroupContext { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private readonly string _id = $"navius-autocomplete-label-{Guid.NewGuid():N}";
+
+    protected override void OnInitialized()
+    {
+        GroupContext?.SetLabelId(_id);
+    }
+}

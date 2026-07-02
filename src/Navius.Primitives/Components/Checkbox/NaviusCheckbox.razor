@@ -1,0 +1,253 @@
+@namespace Navius.Primitives.Components.Checkbox
+@inherits ComponentBase
+@implements IDisposable
+
+@*
+    A headless checkbox. Rendered as a <button role="checkbox"> (focus + Space
+    activation for free). Tri-state per WAI-ARIA: checked | unchecked |
+    indeterminate (aria-checked="mixed"). Emits Base UI's discrete data attributes
+    (data-checked / data-unchecked / data-indeterminate + data-disabled /
+    data-readonly / data-required).
+
+    Standalone: controlled via @bind-Checked (bool) or @bind-CheckedState (bool?,
+    null = indeterminate); uncontrolled via DefaultChecked / DefaultCheckedState.
+    Inside a NaviusCheckboxGroup: the checkbox is identified by its Name; its checked
+    state is derived from the group's value, and toggles route through the group. A
+    Parent="true" checkbox rolls up to checked/unchecked/indeterminate over the
+    group's AllValues and toggles them all.
+
+    Inside a form, a visually-hidden bubble <input type="checkbox"> mirrors the state.
+    The check glyph lives in a NaviusCheckboxIndicator child, which mounts only when
+    checked / indeterminate.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <button type="button"
+            role="checkbox"
+            aria-checked="@AriaChecked"
+            aria-readonly="@(ReadOnly ? "true" : null)"
+            aria-required="@(Required ? "true" : null)"
+            data-checked="@(CurrentChecked == true ? "" : null)"
+            data-unchecked="@(CurrentChecked == false ? "" : null)"
+            data-indeterminate="@(CurrentChecked is null ? "" : null)"
+            data-disabled="@(IsDisabled ? "" : null)"
+            data-readonly="@(ReadOnly ? "" : null)"
+            data-required="@(Required ? "" : null)"
+            data-navius-checkbox
+            disabled="@IsDisabled"
+            @onclick="ToggleAsync"
+            @attributes="Attributes">
+        @ChildContent
+    </button>
+    @if (Name is not null && !IsParent)
+    {
+        <NaviusBubbleInput InputType="checkbox"
+                           Name="@Name"
+                           Value="@Value"
+                           Checked="@CurrentChecked"
+                           Required="Required"
+                           Disabled="IsDisabled" />
+    }
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled checked state (boolean). Use @bind-Checked.</summary>
+    [Parameter] public bool Checked { get; set; }
+
+    [Parameter] public EventCallback<bool> CheckedChanged { get; set; }
+
+    /// <summary>Uncontrolled initial checked state (boolean).</summary>
+    [Parameter] public bool DefaultChecked { get; set; }
+
+    /// <summary>
+    /// Controlled tri-state value: true = checked, false = unchecked, null =
+    /// indeterminate. Use @bind-CheckedState. Takes precedence over <see cref="Checked"/>.
+    /// </summary>
+    [Parameter] public bool? CheckedState { get; set; }
+
+    [Parameter] public EventCallback<bool?> CheckedStateChanged { get; set; }
+
+    /// <summary>Uncontrolled initial tri-state value (null = indeterminate).</summary>
+    [Parameter] public bool? DefaultCheckedState { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>When true the checkbox is focusable but its value cannot be changed (the spec <c>readOnly</c>).</summary>
+    [Parameter] public bool ReadOnly { get; set; }
+
+    /// <summary>When true, the bubble input is marked required for native form validation.</summary>
+    [Parameter] public bool Required { get; set; }
+
+    /// <summary>
+    /// In a <see cref="NaviusCheckboxGroup"/>, marks this as the select-all parent: it
+    /// rolls up to checked/unchecked/indeterminate over the group's AllValues and
+    /// toggles them all. Ignored outside a group.
+    /// </summary>
+    [Parameter] public bool Parent { get; set; }
+
+    /// <summary>Form field name. In a group this is the checkbox's identity; standalone it also renders a hidden bubble input.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>Submitted form value when checked. Defaults to "on" (the spec default).</summary>
+    [Parameter] public string Value { get; set; } = "on";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    [CascadingParameter] private CheckboxGroupContext? Group { get; set; }
+
+    private readonly CheckboxContext _context = new();
+    private Action? _onGroupChange;
+
+    // Internal (uncontrolled, standalone) state. Null = indeterminate.
+    private bool? _internalChecked;
+    private bool _initialized;
+
+    // Whether the parent explicitly supplied the value / default param this render.
+    private bool _checkedSet;
+    private bool _checkedStateSet;
+    private bool _defaultCheckedStateSet;
+
+    private bool InGroup => Group is not null && !Parent;
+    private bool IsParent => Group is not null && Parent;
+    private string GroupKey => Name ?? string.Empty;
+
+    private bool IsDisabled => Disabled || (Group?.Disabled ?? false);
+
+    private bool IsControlled => _checkedStateSet || _checkedSet;
+
+    private bool? CurrentChecked =>
+        IsParent ? Group!.ParentState
+        : InGroup ? Group!.IsChecked(GroupKey)
+        : IsControlled
+            ? (_checkedStateSet ? CheckedState : Checked)
+            : _internalChecked;
+
+    private string AriaChecked => CurrentChecked switch
+    {
+        true => "true",
+        false => "false",
+        null => "mixed",
+    };
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        // Detect controlled-ness by explicit presence of the value param, not by
+        // whether a change callback is attached (the spec semantics).
+        _checkedSet = false;
+        _checkedStateSet = false;
+
+        foreach (var p in parameters)
+        {
+            if (p.Name == nameof(Checked))
+            {
+                _checkedSet = true;
+            }
+            else if (p.Name == nameof(CheckedState))
+            {
+                _checkedStateSet = true;
+            }
+            else if (p.Name == nameof(DefaultCheckedState))
+            {
+                _defaultCheckedStateSet = true;
+            }
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        if (Group is not null)
+        {
+            _onGroupChange = OnGroupChanged;
+            Group.Changed += _onGroupChange;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!_initialized)
+        {
+            // Tri-state default wins when explicitly supplied (null = indeterminate);
+            // otherwise fall back to the boolean DefaultChecked.
+            _internalChecked = _defaultCheckedStateSet ? DefaultCheckedState : DefaultChecked;
+            _initialized = true;
+        }
+
+        SyncContext();
+    }
+
+    private void OnGroupChanged()
+    {
+        SyncContext();
+        StateHasChanged();
+    }
+
+    private void SyncContext()
+    {
+        _context.Checked = CurrentChecked;
+        _context.Disabled = IsDisabled;
+        _context.ReadOnly = ReadOnly;
+        _context.Required = Required;
+        _context.NotifyChanged();
+    }
+
+    private async Task ToggleAsync()
+    {
+        if (IsDisabled || ReadOnly)
+        {
+            return;
+        }
+
+        if (IsParent)
+        {
+            // Toggle all: if every value is checked, clear; otherwise check all.
+            await Group!.SetAllAsync(Group!.ParentState != true);
+            return;
+        }
+
+        if (InGroup)
+        {
+            await Group!.SetMemberAsync(GroupKey, !(CurrentChecked == true));
+            return;
+        }
+
+        // the spec: toggling from indeterminate goes to checked; otherwise flip.
+        var next = CurrentChecked switch
+        {
+            true => false,
+            false => true,
+            null => true,
+        };
+
+        if (IsControlled)
+        {
+            if (_checkedStateSet)
+            {
+                await CheckedStateChanged.InvokeAsync(next);
+            }
+            if (_checkedSet)
+            {
+                await CheckedChanged.InvokeAsync(next);
+            }
+        }
+        else
+        {
+            _internalChecked = next;
+            await CheckedStateChanged.InvokeAsync(next);
+            await CheckedChanged.InvokeAsync(next);
+            SyncContext();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_onGroupChange is not null && Group is not null)
+        {
+            Group.Changed -= _onGroupChange;
+        }
+    }
+}

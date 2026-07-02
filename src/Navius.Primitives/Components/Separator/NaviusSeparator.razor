@@ -1,0 +1,25 @@
+@namespace Navius.Primitives.Components.Separator
+@if (Decorative)
+{
+    <div data-orientation="@DataOrientation" data-navius-separator @attributes="Attributes">@ChildContent</div>
+}
+else
+{
+    <div role="separator" aria-orientation="@AriaOrientation" data-orientation="@DataOrientation" data-navius-separator @attributes="Attributes">@ChildContent</div>
+}
+@code {
+    [Parameter] public string Orientation { get; set; } = "horizontal";
+    [Parameter] public bool Decorative { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    // the spec guards orientation with isValidOrientation, falling back to "horizontal" for any
+    // value other than "vertical"/"horizontal". Normalize so data-orientation never leaks an
+    // invalid token (e.g. "diagonal").
+    private string DataOrientation => Orientation == "vertical" ? "vertical" : "horizontal";
+
+    // the spec: `const ariaOrientation = orientation === 'vertical' ? orientation : undefined;`
+    // The horizontal (default) separator OMITS aria-orientation entirely; null => Blazor drops
+    // the attribute, so only the vertical separator carries aria-orientation="vertical".
+    private string? AriaOrientation => Orientation == "vertical" ? "vertical" : null;
+}

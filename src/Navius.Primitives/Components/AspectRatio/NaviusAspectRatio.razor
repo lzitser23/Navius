@@ -1,0 +1,65 @@
+@namespace Navius.Primitives.Components.AspectRatio
+<div style="@WrapperStyle" data-navius-aspect-ratio>
+    <div style="@InnerStyle" data-navius-aspect-ratio-inner @attributes="ForwardedAttributes">
+        @ChildContent
+    </div>
+</div>
+@code {
+    [Parameter] public double Ratio { get; set; } = 1.0;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    private double EffectiveRatio => Ratio > 0 ? Ratio : 1.0;
+
+    private string WrapperStyle =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"position:relative;width:100%;padding-bottom:{100.0 / EffectiveRatio:0.######}%");
+
+    // the spec spreads the consumer style first, then overrides the positioning keys
+    // ({...style, position:'absolute', top/right/bottom/left:0}) so positioning always wins.
+    private string InnerStyle
+    {
+        get
+        {
+            const string positioning = "position:absolute;top:0;right:0;bottom:0;left:0";
+            if (Attributes is not null
+                && Attributes.TryGetValue("style", out var userStyle)
+                && userStyle is not null)
+            {
+                var s = userStyle.ToString();
+                if (!string.IsNullOrWhiteSpace(s))
+                {
+                    var trimmed = s!.TrimEnd().TrimEnd(';');
+                    return $"{trimmed};{positioning}";
+                }
+            }
+            return positioning;
+        }
+    }
+
+    // Forward all consumer props to the inner (consumer-facing) element, mirroring the spec,
+    // but strip "style" since it is merged into InnerStyle above (avoids a duplicate attribute).
+    private IReadOnlyDictionary<string, object>? ForwardedAttributes
+    {
+        get
+        {
+            if (Attributes is null || Attributes.Count == 0)
+            {
+                return null;
+            }
+            if (!Attributes.ContainsKey("style"))
+            {
+                return (IReadOnlyDictionary<string, object>)Attributes;
+            }
+            var copy = new Dictionary<string, object>(Attributes.Count, StringComparer.Ordinal);
+            foreach (var kvp in Attributes)
+            {
+                if (!string.Equals(kvp.Key, "style", StringComparison.Ordinal))
+                {
+                    copy[kvp.Key] = kvp.Value;
+                }
+            }
+            return copy;
+        }
+    }
+}

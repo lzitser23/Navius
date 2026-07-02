@@ -1,0 +1,13 @@
+@namespace Navius.Primitives.Components.Select
+
+@*
+    the spec Select.Separator — a decorative divider between item sections.
+    aria-hidden because it conveys no semantics to assistive tech; not focusable.
+*@
+
+<div aria-hidden="true" data-navius-select-separator @attributes="Attributes"></div>
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

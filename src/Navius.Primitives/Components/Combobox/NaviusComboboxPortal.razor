@@ -1,0 +1,28 @@
+@namespace Navius.Primitives.Components.Combobox
+
+@*
+    The Base UI Combobox.Portal. A flag-setter: records the custom mount container +
+    keepMounted into the context. The actual teleport is performed by the Popup via
+    <NaviusPortal>, so a single shared portal implementation is used across every overlay.
+    Renders no DOM of its own.
+*@
+
+@ChildContent
+
+@code {
+    [CascadingParameter] private ComboboxContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>CSS selector of a custom mount container; null teleports into <c>document.body</c>.</summary>
+    [Parameter] public string? Container { get; set; }
+
+    /// <summary>Keep the popup mounted while closed (for exit animations).</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        Context.PortalContainer = Container;
+        Context.PortalKeepMounted = KeepMounted;
+    }
+}

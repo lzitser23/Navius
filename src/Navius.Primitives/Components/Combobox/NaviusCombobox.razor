@@ -1,0 +1,465 @@
+@namespace Navius.Primitives.Components.Combobox
+@typeparam TItem
+@inherits ComponentBase
+
+@*
+    Root of the combobox (the Base UI Combobox — value-selection). Generic over the item
+    type (items ARE the values). Owns the open state, the throw-away filter text (_query,
+    optionally controlled via InputValue), the filtered list, the highlighted index and —
+    the delta over Autocomplete — the committed VALUE: single (Value/ValueChanged) or multi
+    (Multiple + Values/ValuesChanged) tracked SEPARATELY from the filter text. Cascades a
+    non-generic ComboboxContext so the List/Item/Chip parts stay non-generic (items boxed to
+    object; equality routed back through a TItem-typed comparer). Renders no DOM.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    private ComboboxContext _context = default!;
+    private bool _internalOpen;
+    private string _query = "";
+    private TItem? _internalValue;
+    private List<TItem> _internalValues = new();
+
+    /// <summary>The full item set to filter. Items ARE the values.</summary>
+    [Parameter] public IReadOnlyList<TItem> Items { get; set; } = Array.Empty<TItem>();
+
+    /// <summary>Single-select committed value. Two-way via <c>@bind-Value</c>.</summary>
+    [Parameter] public TItem? Value { get; set; }
+
+    [Parameter] public EventCallback<TItem?> ValueChanged { get; set; }
+
+    /// <summary>Enable multi-select (chips): toggling a value keeps the popup open.</summary>
+    [Parameter] public bool Multiple { get; set; }
+
+    /// <summary>Multi-select committed values. Two-way via <c>@bind-Values</c>.</summary>
+    [Parameter] public IReadOnlyList<TItem> Values { get; set; } = Array.Empty<TItem>();
+
+    [Parameter] public EventCallback<IReadOnlyList<TItem>> ValuesChanged { get; set; }
+
+    /// <summary>The filter text (NOT the value). Two-way via <c>@bind-InputValue</c> to control it.</summary>
+    [Parameter] public string? InputValue { get; set; }
+
+    [Parameter] public EventCallback<string?> InputValueChanged { get; set; }
+
+    /// <summary>Controlled open state. Two-way via <c>@bind-Open</c>.</summary>
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>Initial open state when uncontrolled.</summary>
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    /// <summary>Projects an item to its display/match text (default <c>x?.ToString()</c>).</summary>
+    [Parameter] public Func<TItem, string>? ItemToString { get; set; }
+
+    /// <summary>Predicate <c>(item, query) =&gt; keep</c> (default: case-insensitive Contains; empty query shows all).</summary>
+    [Parameter] public Func<TItem, string, bool>? Filter { get; set; }
+
+    /// <summary>Per-row template; when null the List renders the item's text in a default item.</summary>
+    [Parameter] public RenderFragment<TItem>? ItemTemplate { get; set; }
+
+    /// <summary>Per-chip template; when null the Chips render a default chip (label + remove) per value.</summary>
+    [Parameter] public RenderFragment<TItem>? ChipTemplate { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; }
+
+    [Parameter] public string? Placeholder { get; set; }
+
+    /// <summary>Reading direction: "ltr" (default) or "rtl". Cascaded to the popup.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsOpenControlled => OpenChanged.HasDelegate;
+    private bool IsValueControlled => ValueChanged.HasDelegate;
+    private bool IsValuesControlled => ValuesChanged.HasDelegate;
+    private bool IsInputControlled => InputValueChanged.HasDelegate;
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    private TItem? EffectiveValue => IsValueControlled ? Value : _internalValue;
+
+    private IReadOnlyList<TItem> EffectiveValues => IsValuesControlled ? Values : _internalValues;
+
+    private string ToText(TItem item) => ItemToString is not null ? ItemToString(item) : item?.ToString() ?? "";
+
+    private bool Matches(TItem item, string query) =>
+        Filter is not null ? Filter(item, query) : ToText(item).Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    private bool ValueEquals(TItem a, TItem b) => EqualityComparer<TItem>.Default.Equals(a, b);
+
+    /// <summary>What the input shows while idle/closed: the committed label (single) or empty (multi — chips show it).</summary>
+    private string CommittedQueryText =>
+        Multiple ? "" : (EffectiveValue is not null ? ToText(EffectiveValue) : "");
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _context = new ComboboxContext(
+            SetQueryAsync, SelectAsync, RemoveValueAsync, RemoveLastAsync, ClearAsync, RequestSetOpenAsync);
+        _context.SetRenderItem(BuildItemFragment);
+        _context.SetRenderChip(BuildChipFragment);
+        _context.SetEquals((a, b) => ValueEquals((TItem)a, (TItem)b));
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.Dir = EffectiveDir;
+        _context.Multiple = Multiple;
+        _context.Disabled = Disabled;
+        _context.ReadOnly = ReadOnly;
+        _context.Placeholder = Placeholder;
+
+        var open = IsOpenControlled ? Open : _internalOpen;
+        var openChanged = _context.Open != open;
+
+        // Re-derive the committed selection from params (covers controlled + external updates).
+        if (Multiple)
+        {
+            SetSelectionFromValues(EffectiveValues);
+        }
+        else
+        {
+            SetSelectionFromValue(EffectiveValue);
+        }
+
+        // While idle (closed), reflect the committed value (or a controlled InputValue) into
+        // the filter box; never clobber the user's typing while the popup is open.
+        if (!open)
+        {
+            var display = IsInputControlled && InputValue is not null ? InputValue : CommittedQueryText;
+            if (_context.Query != display)
+            {
+                _query = display;
+                _context.SetQueryValue(display);
+            }
+        }
+
+        Recompute();
+        _context.SetOpen(open);
+
+        if (openChanged)
+        {
+            await _context.RaiseChangedAsync();
+        }
+    }
+
+    /// <summary>Rebuild the filtered rows from the current query and clamp the highlight.</summary>
+    private void Recompute()
+    {
+        var query = _context.Query;
+        var showAll = string.IsNullOrWhiteSpace(query);
+
+        var rows = new List<ComboboxItemData>();
+        foreach (var item in Items)
+        {
+            if (showAll || Matches(item, query))
+            {
+                rows.Add(new ComboboxItemData(item!, ToText(item), rows.Count));
+            }
+        }
+
+        _context.SetItems(rows);
+
+        if (_context.HighlightedIndex >= rows.Count)
+        {
+            _context.SetHighlightedIndex(rows.Count - 1); // -1 when empty
+        }
+    }
+
+    private void SetSelectionFromValue(TItem? value)
+    {
+        if (value is null)
+        {
+            _context.SetSelectedValues(Array.Empty<object>());
+            _context.SetSelectedLabel("");
+        }
+        else
+        {
+            _context.SetSelectedValues(new object[] { value });
+            _context.SetSelectedLabel(ToText(value));
+        }
+    }
+
+    private void SetSelectionFromValues(IReadOnlyList<TItem> values)
+    {
+        _context.SetSelectedValues(values.Select(v => (object)v!).ToList());
+        _context.SetSelectedLabel(string.Join(", ", values.Select(ToText)));
+    }
+
+    private RenderFragment BuildItemFragment(ComboboxItemData data) => builder =>
+    {
+        if (ItemTemplate is not null)
+        {
+            builder.AddContent(0, ItemTemplate((TItem)data.Value));
+        }
+        else
+        {
+            builder.OpenComponent<NaviusComboboxItem>(1);
+            builder.AddComponentParameter(2, nameof(NaviusComboboxItem.ChildContent),
+                (RenderFragment)(b => b.AddContent(0, data.Text)));
+            builder.CloseComponent();
+        }
+    };
+
+    private RenderFragment BuildChipFragment(object value) => builder =>
+    {
+        if (ChipTemplate is not null)
+        {
+            builder.AddContent(0, ChipTemplate((TItem)value));
+        }
+        else
+        {
+            var label = ToText((TItem)value);
+            builder.SetKey(value); // one instance per value — never reuse a chip across values
+            builder.OpenComponent<NaviusComboboxChip>(1);
+            builder.AddComponentParameter(2, nameof(NaviusComboboxChip.Value), value);
+            builder.AddComponentParameter(3, nameof(NaviusComboboxChip.ChildContent),
+                (RenderFragment)(b =>
+                {
+                    b.AddContent(0, label);
+                    b.OpenComponent<NaviusComboboxChipRemove>(1);
+                    b.AddAttribute(2, "aria-label", $"Remove {label}");
+                    b.AddComponentParameter(3, nameof(NaviusComboboxChipRemove.ChildContent),
+                        (RenderFragment)(r => r.AddContent(0, "×")));
+                    b.CloseComponent();
+                }));
+            builder.CloseComponent();
+        }
+    };
+
+    // --- actions routed from the context ---
+
+    private async Task SetQueryAsync(string query)
+    {
+        _query = query;
+        _context.SetQueryValue(query);
+        _context.SetHighlightedIndex(0);
+        _context.SetOpen(true);
+        Recompute();
+
+        if (!IsOpenControlled)
+        {
+            _internalOpen = true;
+        }
+
+        if (IsInputControlled)
+        {
+            await InputValueChanged.InvokeAsync(query);
+        }
+
+        if (IsOpenControlled)
+        {
+            await OpenChanged.InvokeAsync(true);
+        }
+
+        await _context.RaiseChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task SelectAsync(object boxed)
+    {
+        var value = (TItem)boxed;
+
+        if (Multiple)
+        {
+            var list = new List<TItem>(EffectiveValues);
+            var idx = list.FindIndex(v => ValueEquals(v, value));
+            if (idx >= 0)
+            {
+                list.RemoveAt(idx);
+            }
+            else
+            {
+                list.Add(value);
+            }
+
+            await CommitValuesAsync(list);
+            SetSelectionFromValues(list);
+
+            // Clear the filter, keep the popup OPEN and focus in the input.
+            _query = "";
+            _context.SetQueryValue("");
+            _context.SetHighlightedIndex(0);
+            Recompute();
+
+            if (IsInputControlled)
+            {
+                await InputValueChanged.InvokeAsync("");
+            }
+        }
+        else
+        {
+            await CommitValueAsync(value);
+            SetSelectionFromValue(value);
+
+            // Single-select: the input shows the label and the popup CLOSES.
+            _query = ToText(value);
+            _context.SetQueryValue(_query);
+            _context.SetOpen(false);
+            Recompute();
+
+            // Keep a controlled @bind-InputValue in sync with the committed label, else
+            // OnParametersSetAsync would re-inject the stale filter text over the label.
+            if (IsInputControlled)
+            {
+                await InputValueChanged.InvokeAsync(_query);
+            }
+
+            if (!IsOpenControlled)
+            {
+                _internalOpen = false;
+            }
+            else
+            {
+                await OpenChanged.InvokeAsync(false);
+            }
+        }
+
+        await _context.RaiseChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task RemoveValueAsync(object boxed)
+    {
+        var value = (TItem)boxed;
+
+        if (Multiple)
+        {
+            var list = new List<TItem>(EffectiveValues);
+            list.RemoveAll(v => ValueEquals(v, value));
+            await CommitValuesAsync(list);
+            SetSelectionFromValues(list);
+        }
+        else
+        {
+            await CommitValueAsync(default);
+            SetSelectionFromValue(default);
+            _query = "";
+            _context.SetQueryValue("");
+            if (IsInputControlled)
+            {
+                await InputValueChanged.InvokeAsync("");
+            }
+        }
+
+        Recompute();
+        await _context.RaiseChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task RemoveLastAsync()
+    {
+        if (!Multiple)
+        {
+            return;
+        }
+
+        var list = new List<TItem>(EffectiveValues);
+        if (list.Count == 0)
+        {
+            return;
+        }
+
+        list.RemoveAt(list.Count - 1);
+        await CommitValuesAsync(list);
+        SetSelectionFromValues(list);
+        Recompute();
+        await _context.RaiseChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task ClearAsync()
+    {
+        if (Multiple)
+        {
+            await CommitValuesAsync(new List<TItem>());
+            SetSelectionFromValues(Array.Empty<TItem>());
+        }
+        else
+        {
+            await CommitValueAsync(default);
+            SetSelectionFromValue(default);
+        }
+
+        _query = "";
+        _context.SetQueryValue("");
+        _context.SetHighlightedIndex(0);
+        Recompute();
+
+        if (IsInputControlled)
+        {
+            await InputValueChanged.InvokeAsync("");
+        }
+
+        await _context.RaiseChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task RequestSetOpenAsync(bool open)
+    {
+        _context.SetOpen(open);
+
+        // Closing without a selection reverts the filter box to the committed value, so the
+        // stray filter text is discarded (the value is separate from the filter text).
+        if (!open)
+        {
+            var reverted = CommittedQueryText;
+            if (_query != reverted)
+            {
+                _query = reverted;
+                _context.SetQueryValue(_query);
+                Recompute();
+                // Propagate the revert to a controlled @bind-InputValue, else the stray filter
+                // text would be re-injected by OnParametersSetAsync on the next parent render.
+                if (IsInputControlled)
+                {
+                    await InputValueChanged.InvokeAsync(_query);
+                }
+            }
+        }
+
+        if (!IsOpenControlled)
+        {
+            _internalOpen = open;
+        }
+        else
+        {
+            await OpenChanged.InvokeAsync(open);
+        }
+
+        await _context.RaiseChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task CommitValueAsync(TItem? value)
+    {
+        if (IsValueControlled)
+        {
+            await ValueChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internalValue = value;
+        }
+    }
+
+    private async Task CommitValuesAsync(List<TItem> values)
+    {
+        if (IsValuesControlled)
+        {
+            await ValuesChanged.InvokeAsync(values);
+        }
+        else
+        {
+            _internalValues = values;
+        }
+    }
+}

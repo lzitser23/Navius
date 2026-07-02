@@ -1,0 +1,41 @@
+@namespace Navius.Primitives.Components.Toolbar
+@inherits ToolbarPart
+
+@*
+    A focusable toolbar control rendered as an anchor (<a>). Like the button, it carries
+    the data-navius-toolbar-item marker and participates in the roving Tab order: the
+    first enabled item rests at tabindex=0, the rest at -1 with the engine driving arrow
+    navigation. Provide href via @attributes.
+*@
+
+<a @ref="_element"
+   tabindex="@(IsTabStop ? 0 : -1)"
+   data-orientation="@Context.Orientation"
+   data-navius-toolbar-item
+   @attributes="Attributes">
+    @ChildContent
+</a>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+
+    // Links have no intrinsic disabled state in HTML; they always participate.
+    private bool IsTabStop => Context.IsTabStop(this);
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Context.Register(this, () => false);
+    }
+
+    public override void Dispose()
+    {
+        Context.Unregister(this);
+        base.Dispose();
+    }
+}

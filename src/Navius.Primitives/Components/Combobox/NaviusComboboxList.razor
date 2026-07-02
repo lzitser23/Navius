@@ -1,0 +1,39 @@
+@namespace Navius.Primitives.Components.Combobox
+@inherits ComboboxPart
+
+@*
+    The Base UI Combobox.List — the listbox. role=listbox + id=ContentId (the input's
+    aria-controls target). Iterates the context's filtered rows and, for each, cascades a
+    ComboboxItemContext (boxed value + highlight/selection state) and renders the Root's
+    per-row callback (the consumer's ItemTemplate, else a default text item). The cascade
+    also feeds each Item's ItemIndicator. Emits data-empty when there are no filtered rows.
+*@
+
+<ul id="@Context.ContentId"
+    role="listbox"
+    aria-multiselectable="@(Context.Multiple ? "true" : null)"
+    data-empty="@(Context.IsEmpty ? "" : null)"
+    data-navius-combobox-list
+    @attributes="Attributes">
+    @if (Context.RenderItem is not null)
+    {
+        @foreach (var row in Context.Items)
+        {
+            <CascadingValue Value="ItemContextFor(row)">
+                @Context.RenderItem(row)
+            </CascadingValue>
+        }
+    }
+</ul>
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ComboboxItemContext ItemContextFor(ComboboxItemData row) =>
+        new(row.Value,
+            row.Index,
+            row.Index == Context.HighlightedIndex,
+            Context.IsSelected(row.Value),
+            Context.OptionId(row.Index));
+}

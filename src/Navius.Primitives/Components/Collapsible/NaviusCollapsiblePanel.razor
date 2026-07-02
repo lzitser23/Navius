@@ -1,0 +1,173 @@
+@namespace Navius.Primitives.Components.Collapsible
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    Collapsible.Panel (Base UI). Carries the discrete state attributes
+    data-open / data-closed and the transition-phase attributes
+    data-starting-style (animating in) / data-ending-style (animating out).
+    Its natural size is published as --collapsible-panel-width/height for CSS
+    height/width transitions.
+
+    Closed panels are removed from the DOM unless KeepMounted (kept, hidden) or
+    HiddenUntilFound (kept as hidden="until-found" so in-page find can reveal it).
+    On close the node is kept until the exit animation finishes, then unmounted —
+    this is the reusable "presence" pattern for the Base UI re-target (ADR-0007).
+*@
+
+@if (_rendered)
+{
+    <div @ref="_element"
+         id="@Context.PanelId"
+         data-open="@(Context.Open ? "" : null)"
+         data-closed="@(Context.Open ? null : "")"
+         data-starting-style="@(_entering ? "" : null)"
+         data-ending-style="@(_exiting ? "" : null)"
+         hidden="@HiddenValue"
+         data-navius-collapsible-panel
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [CascadingParameter] private CollapsibleContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Keep the panel mounted (hidden) while closed instead of removing it from the DOM.</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    /// <summary>
+    /// Keep the panel mounted as <c>hidden="until-found"</c> so the browser's in-page
+    /// find can reveal it; a match opens the collapsible. Implies KeepMounted.
+    /// </summary>
+    [Parameter] public bool HiddenUntilFound { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private SizeObserver? _observer;
+    private BeforeMatchListener? _beforeMatch;
+    private DotNetObjectReference<NaviusCollapsiblePanel>? _selfRef;
+    private Func<Task>? _onChange;
+
+    private bool _rendered;
+    private bool _wasOpen;
+    private bool _entering;
+    private bool _exiting;
+    private bool _engaged;
+    private bool _enterScheduled;
+    private bool _exitScheduled;
+
+    private bool Mounted => KeepMounted || HiddenUntilFound;
+
+    // Only hidden once fully closed and settled — never while animating in/out,
+    // or the height transition (display:none) wouldn't run.
+    private string? HiddenValue =>
+        Context.Open || _entering || _exiting
+            ? null
+            : Mounted
+                ? (HiddenUntilFound ? "until-found" : "")
+                : null;
+
+    protected override void OnInitialized()
+    {
+        _wasOpen = Context.Open;
+        _rendered = Context.Open || Mounted;
+        _onChange = OnContextChangedAsync;
+        Context.Changed += _onChange;
+    }
+
+    private async Task OnContextChangedAsync()
+    {
+        var open = Context.Open;
+        if (open && !_wasOpen)
+        {
+            _wasOpen = true;
+            _rendered = true;
+            _exiting = false;
+            _entering = true;        // mount at data-starting-style (no open-state flash)
+            _enterScheduled = true;
+        }
+        else if (!open && _wasOpen)
+        {
+            _wasOpen = false;
+            _entering = false;
+            if (_rendered && _engaged)
+            {
+                _exiting = true;     // keep rendered through the exit animation
+                _exitScheduled = true;
+            }
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_rendered && !_engaged)
+        {
+            await EngageAsync();
+        }
+
+        if (_engaged && _observer is not null && Context.Open)
+        {
+            await _observer.UpdateAsync();
+        }
+
+        if (_enterScheduled)
+        {
+            _enterScheduled = false;
+            _interop ??= new NaviusJsInterop(JS);
+            await _interop.NextFrameAsync();   // commit the starting-style frame
+            _entering = false;
+            StateHasChanged();                 // drop data-starting-style -> transition in
+        }
+
+        if (_exitScheduled)
+        {
+            _exitScheduled = false;
+            _interop ??= new NaviusJsInterop(JS);
+            await _interop.WaitForAnimationsAsync(_element);   // await the exit transition
+            _exiting = false;
+            if (!Mounted && !Context.Open)
+            {
+                _rendered = false;             // unmount after the animation finishes
+                await DisengageAsync();
+            }
+            StateHasChanged();
+        }
+    }
+
+    private async Task EngageAsync()
+    {
+        _engaged = true;
+        _interop ??= new NaviusJsInterop(JS);
+        _observer = await _interop.CreateSizeObserverAsync(_element, "collapsible");
+        if (HiddenUntilFound)
+        {
+            _selfRef ??= DotNetObjectReference.Create(this);
+            _beforeMatch = await _interop.ObserveBeforeMatchAsync(_element, _selfRef);
+        }
+    }
+
+    private async Task DisengageAsync()
+    {
+        _engaged = false;
+        if (_observer is not null) { await _observer.DisposeAsync(); _observer = null; }
+        if (_beforeMatch is not null) { await _beforeMatch.DisposeAsync(); _beforeMatch = null; }
+    }
+
+    /// <summary>In-page find expanded a hidden-until-found panel — open the collapsible.</summary>
+    [JSInvokable]
+    public Task OnBeforeMatch() => Context.RequestSetAsync(true);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_onChange is not null) Context.Changed -= _onChange;
+        await DisengageAsync();
+        if (_interop is not null) { await _interop.DisposeAsync(); _interop = null; }
+        _selfRef?.Dispose();
+    }
+}

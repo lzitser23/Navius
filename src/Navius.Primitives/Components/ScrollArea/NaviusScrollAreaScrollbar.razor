@@ -1,0 +1,51 @@
+@namespace Navius.Primitives.Components.ScrollArea
+@inherits ScrollAreaPart
+
+@*
+    A custom scrollbar track for one axis. the spec renders a plain <div> here (not a
+    native scrollbar and not role="scrollbar" — the native overflow keeps the real
+    a11y semantics, and a redundant ARIA scrollbar would be noise to AT). It mirrors
+    the spec exactly: data-orientation + data-hovering/data-scrolling.
+
+    Render gating matches the spec `type`:
+      - auto/always: present while the axis overflows (always also implies overflow check)
+      - hover/scroll: same DOM presence, but data-hovering/data-scrolling clear when
+        not hovering/scrolling, so CSS transitions can fade it out.
+    When `ForceMount` is set it always renders (consumer drives visibility via CSS).
+
+    The orientation is cascaded to the Thumb so the thumb knows which axis to size.
+
+    ZERO styling. Consumers position this absolutely against an edge and size the
+    track, e.g. vertical: `absolute right-0 top-0 h-full w-2.5`.
+*@
+
+@if (RenderBar)
+{
+    <CascadingValue Value="Orientation" Name="ScrollAreaScrollbarOrientation" IsFixed="true">
+        <div data-navius-scrollarea-scrollbar
+             data-orientation="@Orientation"
+             data-hovering="@(Context.Hovering ? "" : null)"
+             data-scrolling="@(Context.Scrolling ? "" : null)"
+             @attributes="Attributes">
+            @ChildContent
+        </div>
+    </CascadingValue>
+}
+
+@code {
+    /// <summary><c>vertical</c> | <c>horizontal</c>.</summary>
+    [Parameter] public string Orientation { get; set; } = "vertical";
+
+    /// <summary>Keep the scrollbar in the DOM even when its axis has no overflow.</summary>
+    [Parameter] public bool ForceMount { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    // type="always" keeps the track mounted even with no overflow (the spec), so force-mount
+    // it regardless of overflow; every other type mounts only while its axis overflows
+    // (or when the consumer sets ForceMount to drive visibility purely via CSS).
+    private bool RenderBar => ForceMount || Context.Type == "always" || Context.HasOverflow(Orientation);
+}

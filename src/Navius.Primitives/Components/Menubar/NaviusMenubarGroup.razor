@@ -1,0 +1,35 @@
+@namespace Navius.Primitives.Components.Menubar
+
+@*
+    Groups related items, mirroring the spec's Menubar.Group (role="group"). A
+    NaviusMenubarLabel placed inside cascades its generated id here so the group
+    references it via aria-labelledby, giving the group an accessible name. ZERO styling.
+*@
+
+<CascadingValue Value="_groupContext" IsFixed="true">
+    <div role="group"
+         data-navius-menubar-group
+         aria-labelledby="@_labelId"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private MenubarGroupContext _groupContext = default!;
+    private string? _labelId;
+
+    protected override void OnInitialized()
+    {
+        _groupContext = new MenubarGroupContext(id =>
+        {
+            _labelId = id;
+            InvokeAsync(StateHasChanged);
+        });
+    }
+}

@@ -1,0 +1,18 @@
+@namespace Navius.Primitives.Components.Tooltip
+@inherits OverlayPositionerBase
+
+@*
+    The spec Tooltip.Positioner — owns placement (side / align / offsets / collision).
+    A flag-setter (see OverlayPositionerBase): publishes the placement options into the
+    context; the Popup renders the positioning <div>. Defaults to side=top.
+*@
+
+@ChildContent
+
+@code {
+    [CascadingParameter] private TooltipContext Context { get; set; } = default!;
+
+    protected override IAnchoredOverlayContext AnchoredContext => Context;
+
+    protected override string DefaultSide => "top";
+}

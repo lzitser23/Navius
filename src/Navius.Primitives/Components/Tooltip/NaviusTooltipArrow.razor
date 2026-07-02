@@ -1,0 +1,52 @@
+@namespace Navius.Primitives.Components.Tooltip
+@inherits TooltipPart
+@implements IAsyncDisposable
+
+@*
+    The spec Tooltip.Arrow. An SVG triangle rendered inside the popup that the
+    positioner aligns to point at the trigger; the engine writes data-side on it.
+    Registers its element on the context so the popup wires it into the engine's
+    arrow middleware. Place INSIDE NaviusTooltipPopup.
+*@
+
+<svg @ref="_element"
+     width="@Width"
+     height="@Height"
+     viewBox="0 0 30 10"
+     preserveAspectRatio="none"
+     data-navius-tooltip-arrow
+     aria-hidden="true"
+     @attributes="Attributes">
+    <polygon points="0,0 30,0 15,10" />
+</svg>
+
+@code {
+    private ElementReference _element;
+    private bool _registered;
+
+    /// <summary>Arrow width in px. Default 10, matching the spec.</summary>
+    [Parameter] public double Width { get; set; } = 10;
+
+    /// <summary>Arrow height in px. Default 5, matching the spec.</summary>
+    [Parameter] public double Height { get; set; } = 5;
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_registered)
+        {
+            _registered = true;
+            await Context.RegisterArrowAsync(_element);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_registered)
+        {
+            await Context.UnregisterArrowAsync();
+        }
+    }
+}

@@ -1,0 +1,154 @@
+@namespace Navius.Primitives.Components.Accordion
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    Accordion.Panel (Base UI). role=region, labelled by its trigger. Carries the discrete
+    state attrs data-open / data-closed + the transition-phase attrs data-starting-style /
+    data-ending-style, plus data-index / data-orientation / data-disabled. Its natural size
+    is published as --accordion-panel-width/height for height/width transitions.
+
+    Closed panels are removed from the DOM unless KeepMounted; on close the node is kept
+    until the exit animation finishes, then unmounted (the shared presence pattern, ADR-0007).
+*@
+
+@if (_rendered)
+{
+    <div @ref="_element"
+         role="region"
+         id="@Context.ContentId(Value)"
+         aria-labelledby="@Context.TriggerId(Value)"
+         data-open="@(IsOpen ? "" : null)"
+         data-closed="@(IsOpen ? null : "")"
+         data-starting-style="@(_entering ? "" : null)"
+         data-ending-style="@(_exiting ? "" : null)"
+         data-index="@Context.IndexOf(Value)"
+         data-orientation="@Context.DataOrientation"
+         data-disabled="@(IsDisabled ? "" : null)"
+         hidden="@HiddenValue"
+         data-navius-accordion-panel
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [CascadingParameter] private AccordionContext Context { get; set; } = default!;
+
+    [CascadingParameter(Name = "NaviusAccordionItemValue")]
+    private string Value { get; set; } = "";
+
+    [CascadingParameter(Name = "NaviusAccordionItemDisabled")]
+    private bool ItemDisabled { get; set; }
+
+    /// <summary>Keep the panel mounted (hidden) while closed instead of removing it from the DOM.</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private SizeObserver? _observer;
+    private Func<Task>? _onChange;
+
+    private bool _rendered;
+    private bool _wasOpen;
+    private bool _entering;
+    private bool _exiting;
+    private bool _engaged;
+    private bool _enterScheduled;
+    private bool _exitScheduled;
+
+    private bool IsOpen => Context.IsOpen(Value);
+    private bool IsDisabled => Context.IsItemDisabled(ItemDisabled);
+
+    // Hidden only once fully closed and settled — never while animating in/out.
+    private string? HiddenValue =>
+        IsOpen || _entering || _exiting ? null : (KeepMounted ? "" : null);
+
+    protected override void OnInitialized()
+    {
+        _wasOpen = IsOpen;
+        _rendered = IsOpen || KeepMounted;
+        _onChange = OnContextChangedAsync;
+        Context.Changed += _onChange;
+    }
+
+    private async Task OnContextChangedAsync()
+    {
+        var open = IsOpen;
+        if (open && !_wasOpen)
+        {
+            _wasOpen = true;
+            _rendered = true;
+            _exiting = false;
+            _entering = true;        // mount at data-starting-style
+            _enterScheduled = true;
+        }
+        else if (!open && _wasOpen)
+        {
+            _wasOpen = false;
+            _entering = false;
+            if (_rendered && _engaged)
+            {
+                _exiting = true;     // keep rendered through the exit animation
+                _exitScheduled = true;
+            }
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_rendered && !_engaged)
+        {
+            _engaged = true;
+            _interop ??= new NaviusJsInterop(JS);
+            _observer = await _interop.CreateSizeObserverAsync(_element, "accordion");
+        }
+
+        if (_engaged && _observer is not null && IsOpen)
+        {
+            await _observer.UpdateAsync();
+        }
+
+        if (_enterScheduled)
+        {
+            _enterScheduled = false;
+            _interop ??= new NaviusJsInterop(JS);
+            await _interop.NextFrameAsync();
+            _entering = false;
+            StateHasChanged();
+        }
+
+        if (_exitScheduled)
+        {
+            _exitScheduled = false;
+            _interop ??= new NaviusJsInterop(JS);
+            await _interop.WaitForAnimationsAsync(_element);
+            _exiting = false;
+            if (!KeepMounted && !IsOpen)
+            {
+                _rendered = false;
+                await ReleaseObserverAsync();
+            }
+            StateHasChanged();
+        }
+    }
+
+    private async Task ReleaseObserverAsync()
+    {
+        _engaged = false;
+        if (_observer is not null) { await _observer.DisposeAsync(); _observer = null; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_onChange is not null) Context.Changed -= _onChange;
+        await ReleaseObserverAsync();
+        if (_interop is not null) { await _interop.DisposeAsync(); _interop = null; }
+    }
+}

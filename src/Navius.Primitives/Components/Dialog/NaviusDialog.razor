@@ -1,0 +1,65 @@
+@namespace Navius.Primitives.Components.Dialog
+@inherits ComponentBase
+
+@*
+    Root of the dialog. Owns the open state (controlled via @bind-Open, or
+    uncontrolled via DefaultOpen) and cascades a DialogContext to its parts.
+    Renders no DOM of its own — headless to the core.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    private DialogContext _context = default!;
+    private bool _internalOpen;
+
+    /// <summary>Controlled open state. Use with <see cref="OpenChanged"/> (i.e. @bind-Open).</summary>
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>Initial open state when used uncontrolled (no @bind-Open).</summary>
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    /// <summary>
+    /// the spec <c>modal</c> (default true). When false the dialog does not trap
+    /// focus, does not lock scroll, and leaves outside content interactive.
+    /// </summary>
+    [Parameter] public bool Modal { get; set; } = true;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsControlled => OpenChanged.HasDelegate;
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _context = new DialogContext(RequestSetAsync) { Modal = Modal };
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.Modal = Modal;
+
+        // Flow the authoritative value into the context (no-op if unchanged).
+        var authoritative = IsControlled ? Open : _internalOpen;
+        await _context.SetOpenInternalAsync(authoritative);
+    }
+
+    private async Task RequestSetAsync(bool value)
+    {
+        if (IsControlled)
+        {
+            // Let the parent flip Open; it flows back through OnParametersSetAsync.
+            await OpenChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internalOpen = value;
+            await _context.SetOpenInternalAsync(value);
+            StateHasChanged();
+        }
+    }
+}

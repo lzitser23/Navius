@@ -1,0 +1,18 @@
+@namespace Navius.Primitives.Components.Menubar
+@inherits Navius.Primitives.Components.Overlays.OverlayPositionerBase
+
+@*
+    The spec Menubar.Positioner — owns placement (side / align / offsets / collision).
+    A flag-setter (see OverlayPositionerBase): it publishes the placement options + its
+    styling attributes into the context; the Popup renders the positioning <div>.
+*@
+
+@ChildContent
+
+@code {
+    [CascadingParameter] private MenubarMenuContext Context { get; set; } = default!;
+
+    protected override Navius.Primitives.Components.Overlays.IAnchoredOverlayContext AnchoredContext => Context;
+
+    protected override string DefaultAlign => "start";
+}

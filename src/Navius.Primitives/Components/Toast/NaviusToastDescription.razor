@@ -1,0 +1,32 @@
+@namespace Navius.Primitives.Components.Toast
+@inherits ComponentBase
+@implements IDisposable
+
+@*
+    The toast's description. Carries the id referenced by the Root's
+    aria-describedby. Mirrors the spec's Toast.Description.
+*@
+
+<div id="@Context.DescriptionId" data-navius-toast-description @attributes="Attributes">
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else
+    {
+        @Context.Toast?.Description
+    }
+</div>
+
+@code {
+    [CascadingParameter] private ToastContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnInitialized() => Context.HasDescription = true;
+
+    public void Dispose() => Context.HasDescription = false;
+}

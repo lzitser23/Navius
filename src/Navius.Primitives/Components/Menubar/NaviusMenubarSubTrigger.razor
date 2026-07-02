@@ -1,0 +1,116 @@
+@namespace Navius.Primitives.Components.Menubar
+@inherits ComponentBase
+@implements IDisposable
+
+@*
+    The item inside the parent menu that opens a submenu. role="menuitem" (so the parent's
+    roving focus includes it), aria-haspopup="menu", aria-expanded + data-state track the sub
+    open state. Opens on pointerenter (hover-intent) and on ArrowRight (ArrowLeft in rtl);
+    closing is handled by SubContent. Disabled sub-triggers are skipped by roving focus and
+    never open. The engine sets [data-highlighted] when focused. Mirrors the spec Menubar.SubTrigger.
+*@
+
+<div @ref="_element"
+     id="@Sub.TriggerId"
+     role="menuitem"
+     tabindex="-1"
+     aria-haspopup="menu"
+     aria-expanded="@(Sub.Open ? "true" : "false")"
+     aria-controls="@(Sub.Open ? Sub.ContentId : null)"
+     data-popup-open="@(Sub.Open ? "" : null)"
+     data-navius-menubar-sub-trigger
+     data-disabled="@(Disabled ? "" : null)"
+     aria-disabled="@(Disabled ? "true" : null)"
+     data-navius-text-value="@TextValue"
+     @onpointerenter="OnPointerEnterAsync"
+     @onclick="OnClickAsync"
+     @onkeydown="OnKeyDownAsync"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private MenubarSubContext Sub { get; set; } = default!;
+    [CascadingParameter] private MenubarMenuContext? Menu { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public string? TextValue { get; set; }
+
+    /// <summary>Layout direction; rtl swaps the open arrow key. Defaults to inherited/ltr.</summary>
+    [CascadingParameter(Name = "NaviusDirection")] private string? CascadedDir { get; set; }
+
+    [Parameter] public string? Dir { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private Func<Task>? _onChange;
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    private string OpenKey => EffectiveDir == "rtl" ? "ArrowLeft" : "ArrowRight";
+
+    protected override void OnInitialized()
+    {
+        _onChange = () => InvokeAsync(StateHasChanged);
+        Sub.Changed += _onChange;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Sub.TriggerElement = _element;
+            Sub.HasTrigger = true;
+        }
+    }
+
+    private async Task OnPointerEnterAsync()
+    {
+        if (!Disabled)
+        {
+            await Sub.RequestOpenAsync();
+        }
+    }
+
+    private async Task OnClickAsync()
+    {
+        if (!Disabled)
+        {
+            await Sub.RequestOpenAsync();
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        if (e.Key == OpenKey || e.Key == "Enter" || e.Key == " ")
+        {
+            // The open key (ArrowRight in ltr) opens the submenu; suppress the parent Content's
+            // bubbling adjacent-menu move so we don't also jump to the next top-level menu.
+            if (e.Key == OpenKey && Menu is not null)
+            {
+                Menu.SuppressAdjacentOnce = true;
+            }
+
+            // SubContent's roving focus moves into the first sub item on open.
+            await Sub.RequestOpenAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_onChange is not null)
+        {
+            Sub.Changed -= _onChange;
+        }
+    }
+}

@@ -1,0 +1,52 @@
+@namespace Navius.Primitives.Common
+
+@*
+    A visually-hidden native form mirror used by Checkbox/Switch/RadioGroup/
+    Slider/Select/OTP so the control participates in real form submission while
+    staying invisible and non-interactive. Kept dumb on purpose: the parent keeps
+    its name/value/checked in sync. When Checked is null (indeterminate) the
+    checked attribute is simply omitted.
+*@
+
+<input type="@InputType"
+       name="@Name"
+       value="@Value"
+       checked="@Checked"
+       required="@Required"
+       disabled="@Disabled"
+       form="@Form"
+       aria-hidden="true"
+       tabindex="-1"
+       style="@SrOnly"
+       @attributes="Attributes" />
+
+@code {
+    private const string SrOnly = "position:absolute;width:1px;height:1px;opacity:0;margin:-1px;pointer-events:none;transform:translateX(-100%)";
+
+    /// <summary>Native input type. One of "checkbox", "radio", "hidden", "text", "number".</summary>
+    [Parameter] public string InputType { get; set; } = "checkbox";
+
+    /// <summary>Form field name submitted with the owning form.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>Submitted value when checked (checkbox/radio) or the field value (hidden/text/number).</summary>
+    [Parameter] public string Value { get; set; } = "on";
+
+    /// <summary>
+    /// Checked state for checkbox/radio. A null value represents the indeterminate
+    /// state, in which case the checked attribute is omitted entirely.
+    /// </summary>
+    [Parameter] public bool? Checked { get; set; }
+
+    /// <summary>Mirrors HTML required for native form validation.</summary>
+    [Parameter] public bool Required { get; set; }
+
+    /// <summary>Mirrors HTML disabled so the field is excluded from submission.</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Optional id of an associated form element (HTML form attribute).</summary>
+    [Parameter] public string? Form { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

@@ -1,0 +1,148 @@
+@namespace Navius.Primitives.Components.NavigationMenu
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    The panel disclosed by a trigger. It is thin now — the Popup owns presence,
+    positioning, the dismissable layer and focus; the Content just carries the discrete
+    panel attributes and (in viewport mode) teleports itself into the shared Viewport.
+
+      * Standalone (no Viewport under the root): the Content renders as the single child of
+        this item's Popup and mirrors the Popup's presence via a cascaded panel state.
+      * Shared viewport (a NaviusNavigationMenuViewport exists): the Content TELEPORTS its
+        panel into the shared viewport slot, where one resizing container hosts whichever
+        panel is active. The root-level Popup owns open/close; the Content just slides.
+
+    data-open / data-closed reflect the item's active state; data-activation-direction
+    (left|right|up|down) drives the directional enter animation relative to the previously
+    active item (replacing the former data-motion); data-starting-style / data-ending-style
+    are mirrored from the owning Popup (standalone). ForceMount keeps the node mounted
+    (data-closed) for animation libraries. ZERO styling.
+*@
+
+@if (ShouldShow)
+{
+    <CascadingValue Value="this" IsFixed="true">
+        <div @ref="_element"
+             tabindex="-1"
+             data-open="@(PanelOpen ? "" : null)"
+             data-closed="@(PanelOpen ? null : "")"
+             data-starting-style="@(Entering ? "" : null)"
+             data-ending-style="@(Exiting ? "" : null)"
+             data-activation-direction="@Context.ActivationDirection"
+             data-orientation="@Context.Orientation"
+             data-navius-navigationmenu-content
+             @onpointerenter="OnReenter"
+             @onpointerleave="OnPointerLeaveAsync"
+             @attributes="Attributes">
+            @ChildContent
+        </div>
+    </CascadingValue>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Keep the panel mounted while closed (data-closed) so an animation library can play
+    /// an exit transition. Mirrors Base UI's <c>forceMount</c>. (Standalone: the Popup's
+    /// own KeepMounted usually supersedes this.)
+    /// </summary>
+    [Parameter] public bool ForceMount { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    [CascadingParameter] private NavigationMenuContext Context { get; set; } = default!;
+    [CascadingParameter] private NaviusNavigationMenuItem? Item { get; set; }
+
+    // Non-null only in standalone mode (the Content is the Popup's Blazor child); carries
+    // the Popup's discrete presence so the Content can mirror data-open/starting/ending.
+    [CascadingParameter] private NavigationMenuPanelState? Panel { get; set; }
+
+    private string ItemValue => Item?.Value ?? "";
+
+    private bool Active => !string.IsNullOrEmpty(ItemValue) && Context.IsOpen(ItemValue);
+
+    private bool SharedMode => Context.HasViewport && Context.IsRoot;
+
+    // In standalone the Popup mounts/unmounts the Content (and drives its presence); in
+    // shared mode the Content mounts itself while its item is active (then teleports).
+    // While still teleported (item just went inactive) keep the node rendered so the
+    // un-teleport re-parents it back into the <li> BEFORE Blazor loses track of it —
+    // otherwise the released, Blazor-untracked node is orphaned into the DOM (a leak).
+    private bool ShouldShow =>
+        SharedMode ? (Active || _teleported || ForceMount)
+                   : (Panel is not null || Active || ForceMount);
+
+    private bool PanelOpen => Panel?.Open ?? Active;
+
+    private bool Entering => Panel?.Entering ?? false;
+
+    private bool Exiting => Panel?.Exiting ?? false;
+
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private Teleport? _teleport;
+    private bool _teleported;
+    private Func<Task>? _onChange;
+
+    protected override void OnInitialized()
+    {
+        _onChange = () => InvokeAsync(StateHasChanged);
+        Context.Changed += _onChange;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!SharedMode)
+        {
+            return;
+        }
+
+        // Viewport mode: relocate the active panel into the shared viewport slot; move it
+        // back out (dispose the teleport) once the item is no longer active.
+        if (Active && !_teleported)
+        {
+            _teleported = true;
+            _interop ??= new NaviusJsInterop(JS);
+            _teleport = await _interop.TeleportToBodyAsync(_element, Context.ViewportSlotSelector);
+        }
+        else if (!Active && _teleported)
+        {
+            _teleported = false;
+            await ReleaseAsync();
+            // The node is now re-parented into its <li> while Blazor still tracks it; re-render
+            // so ShouldShow drops it through Blazor's own diff (no orphaned interactive copy).
+            StateHasChanged();
+        }
+    }
+
+    private void OnReenter() => Context.PointerReenter();
+
+    private async Task OnPointerLeaveAsync() => await Context.PointerLeaveAsync();
+
+    private async Task ReleaseAsync()
+    {
+        if (_teleport is not null)
+        {
+            await _teleport.DisposeAsync();
+            _teleport = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_onChange is not null)
+        {
+            Context.Changed -= _onChange;
+        }
+
+        await ReleaseAsync();
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+    }
+}

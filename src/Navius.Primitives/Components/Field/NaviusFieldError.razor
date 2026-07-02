@@ -1,0 +1,94 @@
+@namespace Navius.Primitives.Components.Field
+@inherits FieldPart
+
+@*
+    Base UI Field.Error — an error message tied to a validity match. Shows only
+    while the field's validity is surfaced (per ValidationMode) AND the match
+    fails; an omitted Match is a catch-all that shows whenever the field is invalid.
+    ForceMatch shows it unconditionally (external control). Renders a <div>; with no
+    child it renders the field's surfaced error strings (e.g. form errors by name).
+    Registers its id into aria-describedby while shown.
+*@
+
+@if (_shown)
+{
+    <div id="@_id"
+         role="alert"
+         data-navius-field-error
+         @attributes="Field.MergeState(Attributes)">
+        @if (ChildContent is not null)
+        {
+            @ChildContent
+        }
+        else
+        {
+            @string.Join(" ", Field.Errors)
+        }
+    </div>
+}
+
+@code {
+    /// <summary>The validity key this error fires on (e.g. <c>"valueMissing"</c>, <c>"typeMismatch"</c>). Omit for a catch-all.</summary>
+    [Parameter] public string? Match { get; set; }
+
+    /// <summary>Show the error unconditionally regardless of validity (mirrors the spec <c>match={true}</c>).</summary>
+    [Parameter] public bool ForceMatch { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private readonly string _id = $"navius-field-error-{Guid.NewGuid():N}";
+    private bool _shown;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Field.RegisterMessage(_id);
+    }
+
+    protected override void OnParametersSet() => _shown = ComputeShown();
+
+    // A sibling change re-renders us via Changed without re-running OnParametersSet,
+    // so recompute visibility fresh on every render.
+    protected override bool ShouldRender()
+    {
+        _shown = ComputeShown();
+        return true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Reconcile aria-describedby membership after the visibility decision.
+        await Field.SetMessageActiveAsync(_id, _shown);
+    }
+
+    private bool ComputeShown()
+    {
+        if (ForceMatch)
+        {
+            return true;
+        }
+
+        // Validity not surfaced yet (the spec's valid: null) — show nothing.
+        if (Field.Valid is null)
+        {
+            return false;
+        }
+
+        if (!Field.IsInvalid)
+        {
+            return false;
+        }
+
+        // No match key: catch-all that shows whenever the field is invalid.
+        return string.IsNullOrEmpty(Match) || Field.Matches(Match);
+    }
+
+    public override void Dispose()
+    {
+        Field.UnregisterMessage(_id);
+        base.Dispose();
+    }
+}

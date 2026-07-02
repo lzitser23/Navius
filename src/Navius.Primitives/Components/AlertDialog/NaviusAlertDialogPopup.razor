@@ -1,0 +1,54 @@
+@namespace Navius.Primitives.Components.AlertDialog
+@inherits OverlayPopupBase
+
+@*
+    The focus-trapped alert dialog panel (the spec AlertDialog.Popup — renamed from
+    Content). Always modal: role="alertdialog" + aria-modal="true", the shared base
+    traps focus + locks scroll on open. Initial focus lands on the Cancel control (APG —
+    so the destructive Action is never the default), unless OnOpenAutoFocus is prevented
+    (then the panel itself). Outside-click NEVER closes it (CloseOnOutside=false); only
+    Escape and the explicit Action/Cancel do. Carries Base UI's discrete
+    data-open / data-closed + data-starting-style / data-ending-style.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="Element"
+             id="@Context.ContentId"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="@Context.TitleId"
+             aria-describedby="@Context.DescriptionId"
+             tabindex="-1"
+             data-open="@(Context.Open ? "" : null)"
+             data-closed="@(Context.Open ? null : "")"
+             data-starting-style="@(Entering ? "" : null)"
+             data-ending-style="@(Exiting ? "" : null)"
+             data-navius-alert-dialog-popup
+             @attributes="Attributes">
+            @ChildContent
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private AlertDialogContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override IOverlayContext OverlayContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalForceMount == true;
+
+    // An alert dialog is never dismissed by an outside pointer-down — only Escape + the
+    // explicit Cancel/Action controls close it.
+    protected override bool CloseOnOutside => false;
+
+    // APG: focus the least-destructive Cancel control on open.
+    protected override string? InitialFocusSelector => "[data-navius-alert-dialog-cancel]";
+
+    // When OnOpenAutoFocus is prevented, focus the panel itself (least surprising).
+    protected override string? ResolveInitialFocus(bool openAutoFocusPrevented)
+        => openAutoFocusPrevented ? $"#{Context.ContentId}" : InitialFocusSelector;
+}

@@ -1,0 +1,122 @@
+@namespace Navius.Primitives.Components.Combobox
+@inherits ComboboxPart
+
+@*
+    The Base UI Combobox.Input — an editable combobox textbox that drives virtual focus:
+    focus STAYS here, the highlighted row is advertised via aria-activedescendant, and there
+    is no roving. It doubles as the trigger/anchor (registers itself on first render). Typing
+    filters + opens (but never commits a value — the value is separate). Arrow keys move the
+    virtual highlight; Enter commits the highlighted row; Escape/Tab close. In multi-select,
+    Backspace on an EMPTY input removes the last selected chip. Headless: bring your classes.
+*@
+
+<input @ref="_element"
+       type="text"
+       role="combobox"
+       aria-expanded="@(Context.Open ? "true" : "false")"
+       aria-controls="@Context.ContentId"
+       aria-autocomplete="list"
+       aria-activedescendant="@Context.ActiveDescendantId"
+       autocomplete="off"
+       placeholder="@Placeholder"
+       value="@Context.Query"
+       disabled="@Context.Disabled"
+       readonly="@Context.ReadOnly"
+       data-readonly="@(Context.ReadOnly ? "" : null)"
+       data-disabled="@(Context.Disabled ? "" : null)"
+       data-navius-combobox-input
+       @oninput="OnInputAsync"
+       @onfocus="OpenAsync"
+       @onclick="OpenAsync"
+       @onkeydown="OnKeyDownAsync"
+       @attributes="Attributes" />
+
+@code {
+    private ElementReference _element;
+
+    [Parameter] public string? Placeholder { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Context.TriggerElement = _element;
+            Context.HasTrigger = true;
+        }
+    }
+
+    private Task OnInputAsync(ChangeEventArgs e) => Context.SetQueryAsync(e.Value?.ToString() ?? "");
+
+    private Task OpenAsync() => Context.Open || Context.Disabled ? Task.CompletedTask : Context.RequestSetAsync(true);
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                if (!Context.Open)
+                {
+                    await Context.RequestSetAsync(true);
+                }
+                else
+                {
+                    await Context.MoveHighlightAsync(1, loop: false);
+                }
+                break;
+
+            case "ArrowUp":
+                if (!Context.Open)
+                {
+                    await Context.RequestSetAsync(true);
+                    await Context.HighlightEdgeAsync(last: true);
+                }
+                else
+                {
+                    await Context.MoveHighlightAsync(-1, loop: false);
+                }
+                break;
+
+            case "Enter":
+                if (Context.Open)
+                {
+                    await Context.CommitHighlightedAsync();
+                }
+                break;
+
+            case "Escape":
+            case "Tab":
+                if (Context.Open)
+                {
+                    await Context.RequestCloseAsync();
+                }
+                break;
+
+            case "Backspace":
+                // Multi-select: Backspace on an empty filter removes the last selected chip.
+                if (Context.Multiple && string.IsNullOrEmpty(Context.Query) && Context.HasSelection)
+                {
+                    await Context.RemoveLastValueAsync();
+                }
+                break;
+
+            case "Home":
+            case "PageUp":
+                if (Context.Open)
+                {
+                    await Context.HighlightEdgeAsync(last: false);
+                }
+                break;
+
+            case "End":
+            case "PageDown":
+                if (Context.Open)
+                {
+                    await Context.HighlightEdgeAsync(last: true);
+                }
+                break;
+        }
+    }
+}

@@ -1,0 +1,63 @@
+@namespace Navius.Primitives.Components.ToggleGroup
+@inherits ToggleGroupPart
+
+@*
+    A two-state toggle button. aria-pressed reflects the on/off state; data-state is
+    "on" | "off". Space/Enter toggle (native <button> behaviour). Roving tabindex:
+    only the seated item is in the Tab order (tabindex=0); the engine moves focus on
+    arrows / Home / End. data-disabled marks it out of the roving selector.
+*@
+
+<button @ref="_element"
+        type="button"
+        aria-pressed="@(IsPressed ? "true" : "false")"
+        tabindex="@(IsTabStop ? 0 : -1)"
+        disabled="@IsDisabled"
+        data-pressed="@(IsPressed ? "" : null)"
+        data-disabled="@(IsDisabled ? "" : null)"
+        data-navius-togglegroup-item
+        @onclick="OnClickAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+
+    private bool IsPressed => Context.IsPressed(Value);
+
+    private bool IsDisabled => Disabled || Context.Disabled;
+
+    private bool IsTabStop => !IsDisabled && Context.IsTabStop(Value);
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Context.Register(Value, () => IsDisabled);
+    }
+
+    private Task OnClickAsync()
+    {
+        if (IsDisabled)
+        {
+            return Task.CompletedTask;
+        }
+
+        return Context.RequestToggleAsync(Value);
+    }
+
+    public override void Dispose()
+    {
+        Context.Unregister(Value);
+        base.Dispose();
+    }
+}

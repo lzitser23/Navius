@@ -1,0 +1,120 @@
+@namespace Navius.Primitives.Components.PreviewCard
+@implements IDisposable
+
+@*
+    Root of the preview card (Base UI PreviewCard.Root). Owns open state plus
+    open/close timing. Renders no DOM. Opens on hover/focus after OpenDelay; closes on
+    leave/blur after CloseDelay. Controlled via Open/OpenChanged, or uncontrolled via
+    DefaultOpen. Base UI default open delay is 600ms.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    /// <summary>Hover-intent delay before opening, in milliseconds (the spec default 600).</summary>
+    [Parameter] public int OpenDelay { get; set; } = 600;
+
+    /// <summary>Grace delay before closing after leave/blur, in milliseconds (the spec default 300).</summary>
+    [Parameter] public int CloseDelay { get; set; } = 300;
+
+    /// <summary>Controlled open state. Provide together with <see cref="OpenChanged"/>.</summary>
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>Initial open state when uncontrolled.</summary>
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private PreviewCardContext _context = default!;
+    private CancellationTokenSource? _cts;
+    private bool _internalOpen;
+
+    private bool IsControlled => OpenChanged.HasDelegate;
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _context = new PreviewCardContext(OpenDelayedAsync, OpenNowAsync, CloseDelayedAsync, CloseNowAsync);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsControlled && _context.Open != Open)
+        {
+            await _context.SetOpenInternalAsync(Open);
+        }
+    }
+
+    private async Task OpenDelayedAsync()
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        try
+        {
+            await Task.Delay(OpenDelay, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        if (!token.IsCancellationRequested)
+        {
+            await SetAsync(true);
+        }
+    }
+
+    private async Task OpenNowAsync()
+    {
+        _cts?.Cancel();
+        await SetAsync(true);
+    }
+
+    private async Task CloseDelayedAsync()
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        try
+        {
+            await Task.Delay(CloseDelay, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        if (!token.IsCancellationRequested)
+        {
+            await SetAsync(false);
+        }
+    }
+
+    private async Task CloseNowAsync()
+    {
+        _cts?.Cancel();
+        await SetAsync(false);
+    }
+
+    private async Task SetAsync(bool open)
+    {
+        if (IsControlled)
+        {
+            await OpenChanged.InvokeAsync(open);
+            return;
+        }
+
+        _internalOpen = open;
+        await _context.SetOpenInternalAsync(open);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

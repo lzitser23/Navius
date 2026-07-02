@@ -1,0 +1,62 @@
+@namespace Navius.Primitives.Components.Meter
+@implements IDisposable
+
+@*
+    Meter (Base UI Meter): a static, determinate readout (disk usage, score, …) — NOT a
+    progress bar. Root carries role="meter" + aria-valuenow/min/max/valuetext. Min-aware
+    fraction. Base UI Meter exposes NO data-* attributes and NO CSS variables, so the
+    parts are pure headless containers; the consumer sizes the Indicator from the value.
+*@
+
+<div role="meter"
+     aria-valuemin="@Fmt(_context.Min)"
+     aria-valuemax="@Fmt(_context.Max)"
+     aria-valuenow="@Fmt(_context.Value)"
+     aria-valuetext="@ValueText"
+     aria-labelledby="@(_context.HasLabel ? _context.LabelId : null)"
+     data-navius-meter
+     @attributes="Attributes">
+    <CascadingValue Value="_context" IsFixed="false">
+        @ChildContent
+    </CascadingValue>
+</div>
+
+@code {
+    private readonly MeterContext _context = new();
+
+    /// <summary>Current value (required; clamped into [Min, Max]).</summary>
+    [Parameter] public double Value { get; set; }
+
+    /// <summary>Minimum value. Defaults to 0.</summary>
+    [Parameter] public double Min { get; set; }
+
+    /// <summary>Maximum value. Defaults to 100.</summary>
+    [Parameter] public double Max { get; set; } = 100;
+
+    /// <summary>Optional accessible value-text builder (e.g. <c>v =&gt; $"{v} GB"</c>). Defaults to the rounded percentage.</summary>
+    [Parameter] public Func<double, string?>? GetValueLabel { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnInitialized() => _context.Changed += OnLabelRegistered;
+
+    private void OnLabelRegistered() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => _context.Changed -= OnLabelRegistered;
+
+    protected override void OnParametersSet()
+    {
+        _context.Min = Min;
+        _context.Max = Max > Min ? Max : Min + 100;
+        _context.Value = Math.Clamp(Value, _context.Min, _context.Max);
+    }
+
+    private string? ValueText =>
+        GetValueLabel is not null
+            ? GetValueLabel(_context.Value)
+            : Math.Round(_context.Percentage).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    private static string Fmt(double v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}

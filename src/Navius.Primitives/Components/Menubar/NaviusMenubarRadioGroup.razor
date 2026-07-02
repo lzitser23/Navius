@@ -1,0 +1,55 @@
+@namespace Navius.Primitives.Components.Menubar
+
+@*
+    Groups NaviusMenubarRadioItem children so exactly one is selected. role="group". Cascades
+    the selected value + a select callback; controlled via @bind-Value or uncontrolled via
+    DefaultValue. Mirrors the spec's Menubar.RadioGroup. ZERO styling.
+*@
+
+<CascadingValue Value="_radioContext" IsFixed="true">
+    <div role="group" data-navius-menubar-radio-group @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    [CascadingParameter] private MenubarMenuContext MenuContext { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Controlled selected value. Pair with <see cref="ValueChanged"/>.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>Initial selected value for uncontrolled use.</summary>
+    [Parameter] public string? DefaultValue { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private MenubarRadioGroupContext _radioContext = default!;
+    private string? _internalValue;
+
+    private bool IsControlled => ValueChanged.HasDelegate;
+    private string? CurrentValue => IsControlled ? Value : _internalValue;
+
+    protected override void OnInitialized()
+    {
+        _internalValue = DefaultValue;
+        _radioContext = new MenubarRadioGroupContext(() => CurrentValue, SelectAsync);
+    }
+
+    private async Task SelectAsync(string value)
+    {
+        if (IsControlled)
+        {
+            await ValueChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internalValue = value;
+            StateHasChanged();
+        }
+    }
+}

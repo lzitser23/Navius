@@ -1,0 +1,45 @@
+@namespace Navius.Primitives.Components.Button
+
+@*
+    Headless Button (Base UI Button). Renders a native <button> whose only state
+    attribute is data-disabled. FocusableWhenDisabled keeps it focusable (aria-disabled
+    + suppressed activation) instead of natively disabled, so focus / tab order survive a
+    disable (e.g. a button that becomes disabled mid-interaction during a loading state).
+    NativeButton is accepted for Base UI parity; rendering as a non-button element is the
+    asChild/Slot path (ADR-0003 — Blazor can't clone an arbitrary child).
+*@
+
+<button type="@Type"
+        disabled="@(Disabled && !FocusableWhenDisabled)"
+        aria-disabled="@((Disabled && FocusableWhenDisabled) ? "true" : null)"
+        data-disabled="@(Disabled ? "" : null)"
+        data-navius-button
+        @onclick="OnClickAsync"
+        @onclick:preventDefault="@Disabled"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public string Type { get; set; } = "button";
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Keep the button focusable while disabled (aria-disabled + suppressed activation) rather than natively disabled.</summary>
+    [Parameter] public bool FocusableWhenDisabled { get; set; }
+
+    /// <summary>Base UI parity flag. Non-native (role=button) rendering is the asChild/Slot path in Blazor.</summary>
+    [Parameter] public bool NativeButton { get; set; } = true;
+
+    [Parameter] public EventCallback<Microsoft.AspNetCore.Components.Web.MouseEventArgs> OnClick { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    private async Task OnClickAsync(Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
+    {
+        if (Disabled) return;   // suppress activation even when focusable-while-disabled
+        await OnClick.InvokeAsync(e);
+    }
+}

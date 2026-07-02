@@ -1,0 +1,32 @@
+@namespace Navius.Primitives.Components.Drawer
+@implements IDisposable
+
+@* The spec Drawer.Description. Registers presence so the Popup wires aria-describedby only when mounted. *@
+
+<p id="@Context.DescriptionId" data-navius-drawer-description @attributes="Attributes">@ChildContent</p>
+
+@code {
+    [CascadingParameter] private DrawerContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool _registered;
+
+    protected override void OnInitialized()
+    {
+        Context.RegisterDescription();
+        _registered = true;
+    }
+
+    public void Dispose()
+    {
+        if (_registered)
+        {
+            Context.UnregisterDescription();
+            _registered = false;
+        }
+    }
+}

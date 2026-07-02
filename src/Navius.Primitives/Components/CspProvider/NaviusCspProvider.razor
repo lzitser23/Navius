@@ -1,0 +1,27 @@
+@namespace Navius.Primitives.Components.CspProvider
+
+@*
+    DOM-transparent, like Base UI's CSPProvider: renders no element, only cascades a
+    Content-Security-Policy nonce for any injected <style>/<script> elements.
+
+    Navius itself injects none — the engine sets inline element styles (not covered by
+    style-src) and uses no eval/new Function — so under a strict CSP Navius is clean
+    with no nonce required. This provider exists for API parity and for consumers /
+    future features that do inject styled elements, mirroring NaviusDirectionProvider.
+*@
+
+<CascadingValue Name="NaviusCspNonce" Value="@Nonce" IsFixed="false">
+    <CascadingValue Name="NaviusCspDisableStyleElements" Value="@DisableStyleElements" IsFixed="false">
+        @ChildContent
+    </CascadingValue>
+</CascadingValue>
+
+@code {
+    /// <summary>Nonce to apply to any injected style/script elements (cascaded to descendants).</summary>
+    [Parameter] public string? Nonce { get; set; }
+
+    /// <summary>When true, descendants should avoid injecting &lt;style&gt; elements (CSP without 'unsafe-inline').</summary>
+    [Parameter] public bool DisableStyleElements { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

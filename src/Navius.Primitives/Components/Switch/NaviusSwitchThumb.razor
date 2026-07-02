@@ -1,0 +1,28 @@
+@namespace Navius.Primitives.Components.Switch
+@inherits ComponentBase
+
+@*
+    The moving thumb of a switch. Reads the root's state via the cascaded
+    NaviusSwitchContext and emits its own discrete data-checked / data-unchecked
+    (+ data-disabled / data-readonly / data-required) so it can be styled
+    independently of the track (Base UI Switch.Thumb).
+*@
+
+<span data-checked="@(Context.Checked ? "" : null)"
+      data-unchecked="@(Context.Checked ? null : "")"
+      data-disabled="@(Context.Disabled ? "" : null)"
+      data-readonly="@(Context.ReadOnly ? "" : null)"
+      data-required="@(Context.Required ? "" : null)"
+      data-navius-switch-thumb
+      @attributes="Attributes">
+    @ChildContent
+</span>
+
+@code {
+    [CascadingParameter] private NaviusSwitchContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

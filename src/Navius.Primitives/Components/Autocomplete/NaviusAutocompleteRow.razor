@@ -1,0 +1,14 @@
+@namespace Navius.Primitives.Components.Autocomplete
+
+@*
+    The Base UI Autocomplete.Row — a role="row" passthrough for grid-layout lists.
+*@
+
+<div role="row" data-navius-autocomplete-row @attributes="Attributes">@ChildContent</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

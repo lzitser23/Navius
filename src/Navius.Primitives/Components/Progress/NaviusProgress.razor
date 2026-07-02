@@ -1,0 +1,92 @@
+@namespace Navius.Primitives.Components.Progress
+@implements IDisposable
+
+<div role="progressbar"
+     aria-valuemin="0"
+     aria-valuemax="@FormatNumber(_context.Max)"
+     aria-valuenow="@(_context.IsIndeterminate ? null : FormatNumber(_context.Value!.Value))"
+     aria-valuetext="@ValueText"
+     aria-labelledby="@(_context.HasLabel ? _context.LabelId : null)"
+     data-complete="@_context.DataComplete"
+     data-indeterminate="@_context.DataIndeterminate"
+     data-progressing="@_context.DataProgressing"
+     data-navius-progress
+     @attributes="Attributes">
+    <CascadingValue Value="_context" IsFixed="false">
+        @ChildContent
+    </CascadingValue>
+</div>
+
+@code {
+    private readonly ProgressContext _context = new();
+
+    protected override void OnInitialized() => _context.Changed += OnLabelRegistered;
+
+    private void OnLabelRegistered() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => _context.Changed -= OnLabelRegistered;
+
+    /// <summary>Current value. <c>null</c> renders an indeterminate progress bar.</summary>
+    [Parameter] public double? Value { get; set; }
+
+    /// <summary>Maximum value. Defaults to 100, matching the spec.</summary>
+    [Parameter] public double Max { get; set; } = 100;
+
+    /// <summary>
+    /// Optional accessible value text builder (e.g. <c>v =&gt; $"{v}%"</c>). When omitted,
+    /// a determinate progressbar renders the spec's default label of
+    /// <c>{Math.Round((value / max) * 100)}%</c>; the indeterminate state renders no
+    /// aria-valuetext.
+    /// </summary>
+    [Parameter] public Func<double?, double, string?>? GetValueLabel { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    // the spec renders aria-valuetext only for a determinate (valid) value. When no
+    // GetValueLabel override is supplied it falls back to the built-in
+    // `${Math.round((value / max) * 100)}%` default.
+    private string? ValueText
+    {
+        get
+        {
+            if (_context.IsIndeterminate)
+                return null;
+            if (GetValueLabel is not null)
+                return GetValueLabel(_context.Value, _context.Max);
+            return Math.Round(_context.Percentage)
+                .ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        _context.Max = Max > 0 ? Max : 100;
+        // the spec validates rather than coerces: a value that is not a finite number,
+        // is negative, or exceeds max is invalid and treated as having no value
+        // (indeterminate). It does NOT clamp into range.
+        if (Value is null)
+        {
+            _context.Value = null;
+        }
+        else if (IsValidValue(Value.Value, _context.Max))
+        {
+            _context.Value = Value.Value;
+        }
+        else
+        {
+            _context.Value = null;
+            System.Diagnostics.Debug.WriteLine(
+                $"Navius Progress: Invalid value `{FormatNumber(Value.Value)}`. " +
+                $"The value must be a number between 0 and the max `{FormatNumber(_context.Max)}`.");
+        }
+    }
+
+    private static bool IsValidValue(double value, double max) =>
+        !double.IsNaN(value) && !double.IsInfinity(value) && value <= max && value >= 0;
+
+    private static string FormatNumber(double v) =>
+        v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}

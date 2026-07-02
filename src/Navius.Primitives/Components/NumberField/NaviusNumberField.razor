@@ -1,0 +1,189 @@
+@namespace Navius.Primitives.Components.NumberField
+@inherits ComponentBase
+@using System.Globalization
+
+@*
+    Base UI Number Field (Root) — a numeric input with stepper buttons and keyboard
+    stepping. Owns the authoritative value + min/max/step/clamp logic and cascades a
+    NumberFieldContext to its Group / Input / Increment / Decrement parts. Controlled
+    via @bind-Value (double?), uncontrolled via DefaultValue. Emits discrete
+    data-disabled / data-readonly / data-required.
+
+    (Scrub-area pointer-lock dragging, press-and-hold auto-repeat and Intl locale
+    formatting are tracked follow-ups; this is the keyboard + button core.)
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div data-navius-number-field
+         data-disabled="@(Disabled ? "" : null)"
+         data-readonly="@(ReadOnly ? "" : null)"
+         data-required="@(Required ? "" : null)"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled value (null = empty). Use <c>@bind-Value</c>.</summary>
+    [Parameter] public double? Value { get; set; }
+
+    [Parameter] public EventCallback<double?> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial value.</summary>
+    [Parameter] public double? DefaultValue { get; set; }
+
+    [Parameter] public double? Min { get; set; }
+
+    [Parameter] public double? Max { get; set; }
+
+    [Parameter] public double Step { get; set; } = 1;
+
+    /// <summary>Step for PageUp/PageDown and Shift+Arrow.</summary>
+    [Parameter] public double LargeStep { get; set; } = 10;
+
+    /// <summary>Step for Alt+Arrow fine adjustments.</summary>
+    [Parameter] public double SmallStep { get; set; } = 0.1;
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; }
+
+    [Parameter] public bool Required { get; set; }
+
+    /// <summary>.NET numeric format string for the display (e.g. <c>"0.##"</c>). Uses InvariantCulture.</summary>
+    [Parameter] public string? Format { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private readonly NumberFieldContext _context = new();
+    private double? _internal;
+    private bool _valueSet;
+    private bool _initialized;
+
+    private bool IsControlled => _valueSet;
+    private double? CurrentValue => IsControlled ? Value : _internal;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<double?>(nameof(Value), out _))
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _internal = DefaultValue;
+        _initialized = true;
+        _context.StepImpl = StepByAsync;
+        _context.SetBoundImpl = SetBoundAsync;
+        _context.SetTextImpl = SetTextAsync;
+    }
+
+    protected override void OnParametersSet() => SyncContext();
+
+    private void SyncContext()
+    {
+        _context.Value = CurrentValue;
+        _context.Step = Step <= 0 ? 1 : Step;
+        _context.LargeStep = LargeStep;
+        _context.SmallStep = SmallStep;
+        _context.Min = Min;
+        _context.Max = Max;
+        _context.Disabled = Disabled;
+        _context.ReadOnly = ReadOnly;
+        _context.Required = Required;
+        _context.Display = FormatValue(CurrentValue);
+    }
+
+    private string FormatValue(double? value)
+    {
+        if (value is null)
+        {
+            return string.Empty;
+        }
+
+        return Format is not null
+            ? value.Value.ToString(Format, CultureInfo.InvariantCulture)
+            : value.Value.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private double Clamp(double v)
+    {
+        if (Min is not null && v < Min.Value)
+        {
+            v = Min.Value;
+        }
+
+        if (Max is not null && v > Max.Value)
+        {
+            v = Max.Value;
+        }
+
+        return v;
+    }
+
+    private async Task ApplyAsync(double? value)
+    {
+        if (IsControlled)
+        {
+            await ValueChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internal = value;
+        }
+
+        SyncContext();
+        await _context.NotifyAsync();
+        StateHasChanged();
+    }
+
+    private Task StepByAsync(double delta)
+    {
+        if (Disabled || ReadOnly)
+        {
+            return Task.CompletedTask;
+        }
+
+        var start = CurrentValue ?? Min ?? 0;
+        return ApplyAsync(Clamp(start + delta));
+    }
+
+    private Task SetBoundAsync(bool max)
+    {
+        if (Disabled || ReadOnly)
+        {
+            return Task.CompletedTask;
+        }
+
+        var bound = max ? Max : Min;
+        return bound is null ? Task.CompletedTask : ApplyAsync(bound.Value);
+    }
+
+    private Task SetTextAsync(string text, bool commit)
+    {
+        if (Disabled || ReadOnly)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return ApplyAsync(null);
+        }
+
+        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
+        {
+            return ApplyAsync(commit ? Clamp(parsed) : parsed);
+        }
+
+        // Unparseable: keep the current value and re-render so the input reverts to Display.
+        return ApplyAsync(CurrentValue);
+    }
+}

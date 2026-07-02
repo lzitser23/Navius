@@ -1,0 +1,68 @@
+@namespace Navius.Primitives.Components.Popover
+@inherits ComponentBase
+
+@* Root of the popover. Owns open state, cascades the context. Renders no DOM. *@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    private PopoverContext _context = default!;
+    private bool _internalOpen;
+    private bool _openWasSet;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    /// <summary>
+    /// Modal mode (the spec Root <c>modal</c>, default false). When true the open
+    /// content traps focus and locks page scroll; outside is treated as inert.
+    /// </summary>
+    [Parameter] public bool Modal { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsControlled => _openWasSet;
+
+    public override async Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<bool>(nameof(Open), out _))
+        {
+            _openWasSet = true;
+        }
+
+        await base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _context = new PopoverContext(RequestSetAsync);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.Modal = Modal;
+        var authoritative = IsControlled ? Open : _internalOpen;
+        await _context.SetOpenInternalAsync(authoritative);
+    }
+
+    private async Task RequestSetAsync(bool value)
+    {
+        if (IsControlled)
+        {
+            await OpenChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internalOpen = value;
+            await _context.SetOpenInternalAsync(value);
+            await OpenChanged.InvokeAsync(value);
+            StateHasChanged();
+        }
+    }
+}

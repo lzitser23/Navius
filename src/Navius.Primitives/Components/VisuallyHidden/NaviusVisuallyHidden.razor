@@ -1,0 +1,27 @@
+@namespace Navius.Primitives.Components.VisuallyHidden
+<span style="@MergedStyle" data-navius-visually-hidden @attributes="ForwardedAttributes">@ChildContent</span>
+@code {
+    // Mirrors the spec's exact visually-hidden style block: position:absolute, border:0, width:1px, height:1px, padding:0, margin:-1px, overflow:hidden, clip:rect(0 0 0 0), white-space:nowrap, word-wrap:normal.
+    private const string SrOnly = "position:absolute;border:0;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;word-wrap:normal";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    // Merge any consumer-supplied style after the sr-only base so consumers can extend (but not override away) the visually-hidden behaviour.
+    private string MergedStyle =>
+        Attributes is not null && Attributes.TryGetValue("style", out var s) && s is string extra && extra.Length > 0
+            ? $"{SrOnly};{extra}"
+            : SrOnly;
+
+    // Forward every unmatched attribute EXCEPT style (style is rendered explicitly above to avoid a duplicate-attribute exception).
+    private IDictionary<string, object>? ForwardedAttributes
+    {
+        get
+        {
+            if (Attributes is null || !Attributes.ContainsKey("style"))
+                return Attributes;
+            var copy = new Dictionary<string, object>(Attributes);
+            copy.Remove("style");
+            return copy;
+        }
+    }
+}

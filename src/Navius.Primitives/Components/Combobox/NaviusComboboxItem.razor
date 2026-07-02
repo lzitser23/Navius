@@ -1,0 +1,37 @@
+@namespace Navius.Primitives.Components.Combobox
+
+@*
+    The Base UI Combobox.Item — role=option. Virtual focus (no tabindex; the input keeps DOM
+    focus). data-highlighted mirrors the active descendant; data-selected + aria-selected
+    reflect the committed value. Click selects (single commits + closes; multi toggles +
+    keeps open); pointer hover highlights. Reads its boxed value + state from the cascaded
+    ComboboxItemContext (also read by a nested ItemIndicator).
+*@
+
+<li id="@ItemContext.OptionId"
+    role="option"
+    aria-selected="@(ItemContext.IsSelected ? "true" : "false")"
+    data-highlighted="@(ItemContext.IsHighlighted ? "" : null)"
+    data-selected="@(ItemContext.IsSelected ? "" : null)"
+    data-navius-combobox-item
+    @onclick="OnClickAsync"
+    @onmouseenter="OnHighlightAsync"
+    @onmousemove="OnHighlightAsync"
+    @attributes="Attributes">
+    @ChildContent
+</li>
+
+@code {
+    [CascadingParameter] private ComboboxContext Context { get; set; } = default!;
+
+    [CascadingParameter] private ComboboxItemContext ItemContext { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private Task OnClickAsync() => Context.SelectAsync(ItemContext.Value);
+
+    private Task OnHighlightAsync() => Context.SetHighlightAsync(ItemContext.Index);
+}

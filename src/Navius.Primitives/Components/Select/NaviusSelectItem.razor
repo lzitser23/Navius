@@ -1,0 +1,117 @@
+@namespace Navius.Primitives.Components.Select
+@inherits SelectPart
+
+@*
+    role=option. Selecting (click / Enter / Space) sets the value and closes
+    (unless OnSelect prevents it). aria-selected reflects the current value;
+    disabled options get aria-disabled + data-disabled and are skipped by roving
+    focus and selection. data-highlighted is toggled by the engine roving focus.
+
+    Cascades a SelectItemContext so NaviusSelectItemText / NaviusSelectItemIndicator
+    can read this item's value + selected state. TextValue drives both type-ahead
+    (data-navius-text-value, which the engine prefers over textContent) and the
+    label shown in the trigger's NaviusSelectValue.
+*@
+
+<CascadingValue Value="_itemContext">
+    <div role="option"
+         tabindex="-1"
+         aria-selected="@(Context.IsSelected(Value) ? "true" : "false")"
+         aria-disabled="@(Disabled ? "true" : null)"
+         data-selected="@(Context.IsSelected(Value) ? "" : null)"
+         data-disabled="@(Disabled ? "" : null)"
+         data-navius-text-value="@TextValue"
+         data-navius-select-item
+         @onclick="SelectAsync"
+         @onkeydown="OnKeyDownAsync"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>
+    /// Explicit text for type-ahead and the trigger label, overriding the item's
+    /// rendered content. Maps the spec's <c>Item.textValue</c>. When set it is also
+    /// registered as this value's display label so the trigger shows it.
+    /// </summary>
+    [Parameter] public string? TextValue { get; set; }
+
+    /// <summary>
+    /// Cancelable callback fired before selection completes. Call PreventDefault to
+    /// keep the listbox open / skip applying the value. Maps the spec's
+    /// <c>Item.onSelect</c> intent.
+    /// </summary>
+    [Parameter] public EventCallback<NaviusSelectEventArgs> OnSelect { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private SelectItemContext _itemContext = default!;
+    private string? _registeredValue;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _itemContext = new SelectItemContext(Context, Value, Disabled);
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Rebuild the item context if value/disabled changed so children stay in sync.
+        if (_itemContext is null || _itemContext.Value != Value || _itemContext.Disabled != Disabled)
+        {
+            _itemContext = new SelectItemContext(Context, Value, Disabled);
+        }
+
+        // If an explicit TextValue is supplied, register it as the value's label so
+        // the trigger shows the label. (A NaviusSelectItemText child overrides this
+        // by registering its own text.) Re-register on value change.
+        if (TextValue is not null)
+        {
+            if (_registeredValue is not null && _registeredValue != Value)
+            {
+                Context.UnregisterText(_registeredValue);
+            }
+            Context.RegisterText(Value, TextValue);
+            _registeredValue = Value;
+        }
+    }
+
+    private async Task SelectAsync()
+    {
+        if (Disabled) return;
+
+        var args = new NaviusSelectEventArgs();
+        if (OnSelect.HasDelegate)
+        {
+            await OnSelect.InvokeAsync(args);
+            if (args.DefaultPrevented) return;
+        }
+
+        await Context.SelectValueAsync(Value);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            await SelectAsync();
+        }
+    }
+
+    public override void Dispose()
+    {
+        if (_registeredValue is not null)
+        {
+            Context.UnregisterText(_registeredValue);
+        }
+        base.Dispose();
+    }
+}

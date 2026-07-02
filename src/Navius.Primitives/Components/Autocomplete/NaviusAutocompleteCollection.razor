@@ -1,0 +1,12 @@
+@namespace Navius.Primitives.Components.Autocomplete
+
+@*
+    The Base UI Autocomplete.Collection — a virtualization boundary in Base UI; here a
+    thin structural passthrough that renders its ChildContent with no DOM of its own.
+*@
+
+@ChildContent
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

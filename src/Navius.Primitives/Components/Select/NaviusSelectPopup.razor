@@ -1,0 +1,90 @@
+@namespace Navius.Primitives.Components.Select
+@inherits Navius.Primitives.Components.Overlays.OverlayAnchoredPopupBase
+
+@*
+    The spec Select.Popup — the listbox surface, wrapped in the Positioner <div> the
+    engine anchors to the trigger. On open the shared base engages anchored positioning +
+    a dismissable layer (the select is non-modal, so it does NOT lock page scroll); this
+    Popup then adds roving focus over [role=option] (data-highlighted mirroring, no wrap,
+    typeahead via data-navius-text-value, landing on the selected option, else first) —
+    a listbox roves rather than focus-traps. On close the base tears everything down and
+    returns focus to the trigger unless OnCloseAutoFocus is prevented. The engine writes
+    data-side / data-align / data-anchor-hidden + the --anchor-*/--available-* vars onto
+    the Positioner and mirrors data-side/data-align onto this Popup; C# owns the discrete
+    data-open / data-closed + data-starting-style / data-ending-style. role="listbox".
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="PositionerElement"
+             data-navius-select-positioner
+             style="position:fixed;top:0;left:0;margin:0"
+             @attributes="Context.PositionerAttributes">
+            <div @ref="Element"
+                 id="@Context.ContentId"
+                 role="listbox"
+                 tabindex="-1"
+                 dir="@Context.Dir"
+                 aria-multiselectable="@(Context.Multiple ? "true" : null)"
+                 data-multiple="@(Context.Multiple ? "" : null)"
+                 data-open="@(Context.Open ? "" : null)"
+                 data-closed="@(Context.Open ? null : "")"
+                 data-starting-style="@(Entering ? "" : null)"
+                 data-ending-style="@(Exiting ? "" : null)"
+                 data-navius-select-popup
+                 @attributes="Attributes">
+                @ChildContent
+            </div>
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private SelectContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>When true arrow navigation wraps at the ends (the spec Select default false).</summary>
+    [Parameter] public bool Loop { get; set; }
+
+    private RovingFocus? _roving;
+
+    protected override IAnchoredOverlayContext AnchoredContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+
+    // A listbox manages focus with roving tabindex, not a focus trap; the base still
+    // focuses the popup on open (so focus lands inside) and restores it to the trigger
+    // on close — roving then lands on the selected option (else first).
+    protected override bool TrapFocus => false;
+
+    protected override async Task EngageAsync()
+    {
+        await base.EngageAsync();
+        // Roving over options: highlight mirroring on, no wrap (the spec Select),
+        // typeahead via data-navius-text-value, land on selected (else first).
+        _roving = await Interop!.CreateRovingFocusAsync(
+            Element,
+            new RovingFocusOptions(
+                Orientation: "vertical",
+                Selector: "[role=\"option\"]:not([data-disabled])",
+                Loop: Loop,
+                AutoFocus: !OpenAutoFocusPrevented,
+                DataHighlight: true,
+                Dir: Context.Dir ?? "ltr",
+                // ArrowDown/Enter/Space on the closed trigger land on the first option;
+                // ArrowUp lands on the last; a click/programmatic open lands on the selected.
+                InitialFocus: Context.OpenFocusMode));
+    }
+
+    protected override async Task DisengageAsync()
+    {
+        if (_roving is not null)
+        {
+            await _roving.DisposeAsync();
+            _roving = null;
+        }
+        await base.DisengageAsync();
+    }
+}

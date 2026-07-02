@@ -1,0 +1,37 @@
+@namespace Navius.Primitives.Components.Autocomplete
+
+@*
+    The Base UI Autocomplete.Item — role=option. Virtual focus (no tabindex; the input
+    keeps DOM focus). data-highlighted mirrors the active descendant (Base UI's name,
+    replacing the monolith's data-active); data-selected + aria-selected reflect the
+    committed value. Click selects; pointer hover highlights. Reads its boxed value +
+    state from the cascaded AutocompleteItemContext.
+*@
+
+<li id="@ItemContext.OptionId"
+    role="option"
+    aria-selected="@(ItemContext.IsSelected ? "true" : "false")"
+    data-highlighted="@(ItemContext.IsHighlighted ? "" : null)"
+    data-selected="@(ItemContext.IsSelected ? "" : null)"
+    data-navius-autocomplete-item
+    @onclick="OnClickAsync"
+    @onmouseenter="OnHighlightAsync"
+    @onmousemove="OnHighlightAsync"
+    @attributes="Attributes">
+    @ChildContent
+</li>
+
+@code {
+    [CascadingParameter] private AutocompleteContext Context { get; set; } = default!;
+
+    [CascadingParameter] private AutocompleteItemContext ItemContext { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private Task OnClickAsync() => Context.SelectAsync(ItemContext.Value);
+
+    private Task OnHighlightAsync() => Context.SetHighlightAsync(ItemContext.Index);
+}

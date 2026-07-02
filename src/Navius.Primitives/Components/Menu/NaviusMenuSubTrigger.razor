@@ -1,0 +1,112 @@
+@namespace Navius.Primitives.Components.Menu
+@implements IDisposable
+
+@*
+    the spec SubTrigger: a role="menuitem" inside the parent menu that opens a submenu.
+    aria-haspopup="menu", aria-expanded + data-state reflect the sub open state. Opens
+    on pointer-enter (hover) and ArrowRight (ArrowLeft in rtl) and Enter/Space; the
+    open submenu then focuses its first item. It is the submenu's positioning anchor.
+*@
+
+<div @ref="_element"
+     role="menuitem"
+     tabindex="-1"
+     data-navius-menu-item
+     data-navius-menu-sub-trigger
+     aria-haspopup="menu"
+     aria-expanded="@(SubContext.Open ? "true" : "false")"
+     aria-controls="@SubContext.ContentId"
+     data-popup-open="@(SubContext.Open ? "" : null)"
+     data-disabled="@(Disabled ? "" : null)"
+     aria-disabled="@(Disabled ? "true" : null)"
+     data-navius-text-value="@TextValue"
+     @onpointerenter="OnPointerEnterAsync"
+     @onclick="OnClickAsync"
+     @onkeydown="OnKeyDownAsync"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private MenuContext MenuContext { get; set; } = default!;
+    [CascadingParameter] private MenuSubContext SubContext { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public string? TextValue { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private Func<Task>? _onChange;
+
+    private string OpenKey => MenuContext.IsRtl ? "ArrowLeft" : "ArrowRight";
+
+    protected override void OnInitialized()
+    {
+        _onChange = () => InvokeAsync(StateHasChanged);
+        SubContext.Changed += _onChange;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            SubContext.TriggerElement = _element;
+            SubContext.HasTrigger = true;
+        }
+    }
+
+    private async Task OnPointerEnterAsync()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        if (!SubContext.Open)
+        {
+            await SubContext.RequestSetAsync(true);
+        }
+    }
+
+    private async Task OnClickAsync()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        if (!SubContext.Open)
+        {
+            await SubContext.RequestSetAsync(true);
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        if (e.Key == OpenKey || e.Key == "Enter" || e.Key == " ")
+        {
+            if (!SubContext.Open)
+            {
+                await SubContext.RequestSetAsync(true);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_onChange is not null)
+        {
+            SubContext.Changed -= _onChange;
+        }
+    }
+}

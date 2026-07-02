@@ -1,0 +1,21 @@
+@namespace Navius.Primitives.Components.Autocomplete
+@inherits Navius.Primitives.Components.Overlays.OverlayPositionerBase
+
+@*
+    The Base UI Autocomplete.Positioner — owns placement (side / align / offsets /
+    collision). A flag-setter (see OverlayPositionerBase): it publishes the placement
+    options + its styling attributes into the context; the Popup renders the positioning
+    <div>. The listbox opens below the input, start-aligned.
+*@
+
+@ChildContent
+
+@code {
+    [CascadingParameter] private AutocompleteContext Context { get; set; } = default!;
+
+    protected override Navius.Primitives.Components.Overlays.IAnchoredOverlayContext AnchoredContext => Context;
+
+    protected override string DefaultSide => "bottom";
+
+    protected override string DefaultAlign => "start";
+}

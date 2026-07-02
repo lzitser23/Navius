@@ -1,0 +1,20 @@
+@namespace Navius.Primitives.Components.PreviewCard
+@inherits OverlayPositionerBase
+
+@*
+    The spec PreviewCard.Positioner — owns placement (side / align / offsets / collision).
+    A flag-setter (see OverlayPositionerBase): publishes the placement options into the
+    context; the Popup renders the positioning <div>.
+*@
+
+@ChildContent
+
+@code {
+    [CascadingParameter] private PreviewCardContext Context { get; set; } = default!;
+
+    protected override IAnchoredOverlayContext AnchoredContext => Context;
+
+    // Preserve the pre-rename default of keeping the card anchored on cross-axis
+    // overflow (Base UI Preview Card's sticky is a boolean, default false).
+    protected override string? DefaultSticky => "partial";
+}

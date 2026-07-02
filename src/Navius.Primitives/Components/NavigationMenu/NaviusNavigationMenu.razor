@@ -1,0 +1,161 @@
+@namespace Navius.Primitives.Components.NavigationMenu
+@inherits ComponentBase
+@implements IDisposable
+
+@*
+    Root of a navigation menu. Rendered as a <nav role="navigation"> per the Base UI
+    anatomy + WAI-ARIA (this is a site-navigation widget, NOT a menu/menubar, so it does
+    NOT use role=menu). Owns the single "which item is open" value: controlled via
+    @bind-Value (string?) or uncontrolled via DefaultValue. null = nothing open.
+
+    Hover opens after a small Delay and hovering away closes after a small CloseDelay
+    (via a CancellationTokenSource), so sweeping across triggers once the menu is already
+    open switches instantly. Focus/keyboard open immediately. Base UI governs solely by
+    delay/closeDelay (both default 50ms) — there is no separate skip/instant-open window.
+
+    data-orientation drives the arrow-key axis in the engine roving controller and is
+    mirrored on every part. ZERO styling here — consumers bring classes via @attributes.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <CascadingValue Value="this" IsFixed="true">
+        <nav role="navigation"
+             data-navius-navigationmenu
+             data-orientation="@Orientation"
+             @attributes="Attributes">
+            @ChildContent
+        </nav>
+    </CascadingValue>
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled open value (value of the open item, or null). Provide with <see cref="ValueChanged"/>.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>Initial open value for uncontrolled use.</summary>
+    [Parameter] public string? DefaultValue { get; set; }
+
+    /// <summary><c>"horizontal"</c> (default) or <c>"vertical"</c>.</summary>
+    [Parameter] public string Orientation { get; set; } = "horizontal";
+
+    /// <summary>Delay (ms) before a hover opens an item's content. Base UI's <c>delay</c> (default 50).</summary>
+    [Parameter] public int Delay { get; set; } = 50;
+
+    /// <summary>Delay (ms) before leaving the menu closes the open content. Base UI's <c>closeDelay</c> (default 50).</summary>
+    [Parameter] public int CloseDelay { get; set; } = 50;
+
+    /// <summary>Fires after the popup's enter/exit presence settles, with the resulting open state. Base UI's <c>onOpenChangeComplete</c>.</summary>
+    [Parameter] public EventCallback<bool> OnOpenChangeComplete { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private NavigationMenuContext _context = default!;
+    private string? _internal;
+    private CancellationTokenSource? _hoverCts;
+
+    private bool IsControlled => ValueChanged.HasDelegate;
+
+    protected override void OnInitialized()
+    {
+        _internal = DefaultValue;
+        _context = new NavigationMenuContext(SetValueAsync, Orientation);
+        _context.RegisterHover(OnTriggerPointerEnterAsync, OnPointerLeaveAsync, OnPointerReenter);
+        _context.OpenChangeCompleted += OnPresenceSettledAsync;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var current = IsControlled ? Value : _internal;
+        await _context.SetValueInternalAsync(current);
+    }
+
+    /// <summary>Authoritative setter: writes through to the binding (controlled) or local state (uncontrolled).</summary>
+    private async Task SetValueAsync(string? value)
+    {
+        CancelPendingHover();
+
+        if (IsControlled)
+        {
+            await ValueChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internal = value;
+            await _context.SetValueInternalAsync(value);
+            StateHasChanged();
+        }
+    }
+
+    private Task OnPresenceSettledAsync(bool open) =>
+        OnOpenChangeComplete.HasDelegate ? OnOpenChangeComplete.InvokeAsync(open) : Task.CompletedTask;
+
+    /// <summary>
+    /// Hover intent. If the menu is already open on another item, switch instantly
+    /// (no delay); otherwise wait <see cref="Delay"/> before opening so a stray sweep
+    /// past a trigger doesn't pop it. Cancelled by leaving or by another intent.
+    /// </summary>
+    internal async Task OnTriggerPointerEnterAsync(string value)
+    {
+        CancelPendingHover();
+
+        // Already open elsewhere -> switch instantly.
+        if (_context.Value is not null)
+        {
+            await SetValueAsync(value);
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _hoverCts = cts;
+        try
+        {
+            await Task.Delay(Delay, cts.Token);
+            await SetValueAsync(value);
+        }
+        catch (TaskCanceledException)
+        {
+            // Pointer left before the delay elapsed — do nothing.
+        }
+    }
+
+    /// <summary>Pointer left a trigger/content; close after <see cref="CloseDelay"/> unless re-entered.</summary>
+    internal async Task OnPointerLeaveAsync()
+    {
+        CancelPendingHover();
+
+        var cts = new CancellationTokenSource();
+        _hoverCts = cts;
+        try
+        {
+            await Task.Delay(CloseDelay, cts.Token);
+            await SetValueAsync(null);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    /// <summary>Pointer re-entered the menu; abort any pending close.</summary>
+    internal void OnPointerReenter() => CancelPendingHover();
+
+    private void CancelPendingHover()
+    {
+        _hoverCts?.Cancel();
+        _hoverCts?.Dispose();
+        _hoverCts = null;
+    }
+
+    public void Dispose()
+    {
+        CancelPendingHover();
+        if (_context is not null)
+        {
+            _context.OpenChangeCompleted -= OnPresenceSettledAsync;
+        }
+    }
+}

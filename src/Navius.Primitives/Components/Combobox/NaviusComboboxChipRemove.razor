@@ -1,0 +1,43 @@
+@namespace Navius.Primitives.Components.Combobox
+
+@*
+    The Base UI Combobox.ChipRemove — a button inside a Chip that removes that value from the
+    selection (Context.RemoveValueAsync(value)). tabindex=-1 so it stays out of the Tab order;
+    give it an aria-label via the splat. Reads the cascaded ComboboxChipContext for its value.
+*@
+
+<button type="button"
+        tabindex="-1"
+        data-navius-combobox-chip-remove
+        @onclick="OnClickAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [CascadingParameter] private ComboboxContext Context { get; set; } = default!;
+
+    [CascadingParameter] private ComboboxChipContext? ChipContext { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private async Task OnClickAsync()
+    {
+        if (ChipContext is null)
+        {
+            return;
+        }
+
+        await Context.RemoveValueAsync(ChipContext.Value);
+
+        // The remove button (tabindex=-1) took DOM focus on click, then unmounts with the
+        // chip — return focus to the input so the virtual-focus keyboard handlers keep working.
+        if (Context.HasTrigger)
+        {
+            try { await Context.TriggerElement.FocusAsync(); } catch { /* input may be gone */ }
+        }
+    }
+}

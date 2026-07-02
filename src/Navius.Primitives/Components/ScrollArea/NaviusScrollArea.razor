@@ -1,0 +1,77 @@
+@namespace Navius.Primitives.Components.ScrollArea
+@inherits ComponentBase
+@implements IDisposable
+
+@*
+    Root of a scroll area. Owns the shared context and renders a position:relative
+    container so the scrollbars (which the consumer positions absolutely against the
+    edges) and the corner have a containing block. No scrolling happens here — the
+    Viewport is the overflow:auto element. `type` controls scrollbar visibility:
+    auto (always while overflowing), always, hover (show on root hover), scroll
+    (show briefly after scrolling). Hover state is tracked here in C# via
+    pointerenter/leave so type="hover" needs no JS.
+
+    ZERO styling: bring your own classes. Consumers typically apply
+    `position: relative; overflow: hidden` here (overflow:hidden clips the native
+    scrollbars the viewport would otherwise paint).
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div data-navius-scrollarea
+         data-orientation="@Orientation"
+         data-scrolling="@(_context.Scrolling ? "" : null)"
+         data-has-overflow-x="@(_context.HasHorizontalOverflow ? "" : null)"
+         data-has-overflow-y="@(_context.HasVerticalOverflow ? "" : null)"
+         dir="@DirAttr"
+         @onpointerenter="OnPointerEnterAsync"
+         @onpointerleave="OnPointerLeaveAsync"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>Scrollbar visibility behaviour: <c>auto</c> | <c>always</c> | <c>hover</c> | <c>scroll</c>.</summary>
+    [Parameter] public string Type { get; set; } = "hover";
+
+    /// <summary>
+    /// Reflected as <c>data-orientation</c> for styling convenience. Does not gate which
+    /// scrollbars render — that is decided per-<c>NaviusScrollAreaScrollbar</c>.
+    /// </summary>
+    [Parameter] public string Orientation { get; set; } = "vertical";
+
+    /// <summary>
+    /// Milliseconds to wait before hiding the scrollbar after the user stops scrolling
+    /// (and after pointer-leave) for <c>type="hover"</c> / <c>type="scroll"</c>.
+    /// the spec <c>scrollHideDelay</c>, default 600.
+    /// </summary>
+    [Parameter] public int ScrollHideDelay { get; set; } = 600;
+
+    /// <summary>Reading direction (<c>ltr</c> | <c>rtl</c>); falls back to the cascaded DirectionProvider.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")]
+    public string? CascadedDir { get; set; }
+
+    private ScrollAreaContext _context = default!;
+
+    /// <summary>Resolved direction: explicit prop, else cascaded provider, else ltr.</summary>
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    /// <summary>Only emit the dir attribute when a direction was actually supplied.</summary>
+    private string? DirAttr => Dir ?? CascadedDir;
+
+    protected override void OnInitialized() =>
+        _context = new ScrollAreaContext(Type, ScrollHideDelay, EffectiveDir);
+
+    private Task OnPointerEnterAsync() => _context.SetHoveringAsync(true);
+
+    private Task OnPointerLeaveAsync() => _context.SetHoveringAsync(false);
+
+    public void Dispose() => _context?.Dispose();
+}

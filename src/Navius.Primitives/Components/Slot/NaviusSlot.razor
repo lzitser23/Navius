@@ -1,0 +1,62 @@
+@namespace Navius.Primitives.Components.Slot
+@inherits ComponentBase
+
+@*
+    NaviusSlot — the Blazor approximation of the spec's <Slot /> (the engine behind
+    `asChild`).
+
+    the spec Slot renders NO element of its own; it merges its props onto its single
+    child DOM element. Blazor's RenderFragment does not expose a child element's
+    props, so a true 1:1 Slot is impossible (see notes). The idiomatic
+    approximation: NaviusSlot takes the props to forward via `Attributes` and a
+    typed `ChildContent` that receives the merged attribute dictionary. The
+    consumer SPLATS that dictionary onto their own single root element with
+    @@attributes. NaviusSlot itself renders only @@ChildContent(merged) — no
+    wrapper, no extra DOM node, no data-navius-slot marker (there is no own
+    element to mark).
+
+    Usage:
+        <NaviusSlot Attributes="@forwardedProps">
+            @(attrs =>
+                @<a href="/home" @attributes="attrs">Home</a>)
+        </NaviusSlot>
+
+    `Merge` reproduces the spec Slot's prop-merge semantics: colliding `on*` event
+    handlers are COMPOSED (the child handler runs first, then the parent/slot
+    handler — matching the spec `composeEventHandlers`, never dropping a delegate);
+    `class`/`className` are normalized to one `class` attribute and concatenated;
+    and `style` is merged per CSS property (object-spread, no duplicate
+    declarations). All other keys are last-wins (UnmatchedAttributes win).
+*@
+
+@if (ChildContent is not null)
+{
+    @ChildContent(Merged)
+}
+
+@code {
+    /// <summary>
+    /// The props to forward onto the single child element. These are the
+    /// attributes the spec's Slot would merge onto its child. May be null/empty.
+    /// </summary>
+    [Parameter] public IReadOnlyDictionary<string, object>? Attributes { get; set; }
+
+    /// <summary>
+    /// Additional attributes captured directly on &lt;NaviusSlot&gt; (e.g. when a
+    /// parent primitive splats onto the slot). Merged together with
+    /// <see cref="Attributes"/>; entries here win on key collision.
+    /// </summary>
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? UnmatchedAttributes { get; set; }
+
+    /// <summary>
+    /// The single child. Receives the merged attribute dictionary; the consumer
+    /// MUST splat it onto exactly one root element via @@attributes="...".
+    /// </summary>
+    [Parameter] public RenderFragment<IReadOnlyDictionary<string, object>>? ChildContent { get; set; }
+
+    /// <summary>
+    /// The merged, read-only dictionary handed to <see cref="ChildContent"/>.
+    /// </summary>
+    private IReadOnlyDictionary<string, object> Merged => SlotMerge.Combine(Attributes, UnmatchedAttributes);
+}

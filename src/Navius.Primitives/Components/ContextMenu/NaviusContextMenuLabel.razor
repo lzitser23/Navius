@@ -1,0 +1,26 @@
+@namespace Navius.Primitives.Components.ContextMenu
+
+@* A non-interactive group label. Not focusable by arrow keys (it is not a menuitem).
+   When nested inside a Group it registers its generated id so the Group's
+   aria-labelledby points at it (SR grouping, spec parity). *@
+
+<div id="@_id"
+     data-navius-context-menu-label
+     @attributes="Attributes">@ChildContent</div>
+
+@code {
+    /// <summary>Optional Group ancestor — receives this label's id for aria-labelledby.</summary>
+    [CascadingParameter] private ContextMenuGroupContext? GroupContext { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private readonly string _id = $"navius-context-menu-label-{Guid.NewGuid():N}";
+
+    protected override void OnInitialized()
+    {
+        GroupContext?.SetLabelId(_id);
+    }
+}

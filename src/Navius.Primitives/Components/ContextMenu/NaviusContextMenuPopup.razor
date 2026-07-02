@@ -1,0 +1,100 @@
+@namespace Navius.Primitives.Components.ContextMenu
+@using System.Globalization
+@inherits Navius.Primitives.Components.Overlays.OverlayAnchoredPopupBase
+
+@*
+    The spec ContextMenu.Popup — the menu surface. Unlike a menu, a context menu is
+    anchored to a POINT (the cursor), not a trigger element: the Popup renders a 0x0 fixed
+    anchor div at (AnchorX, AnchorY), sets it as the context's PositionReference, and the
+    engine anchors the Positioner to it (Side="right"/Align="start" grows down-and-right).
+    On open the shared base engages anchored positioning + a dismissable layer (and, when
+    modal, locks scroll); this Popup then adds roving focus (which focuses the first item,
+    mirrors data-highlighted, and does NOT loop by default) — a menu roves rather than
+    focus-traps. On close the base tears everything down and returns focus to the trigger
+    area. The DismissReference is the popup itself (not the trigger) so a click anywhere in
+    the possibly-large trigger area still dismisses. role="menu"; items are role="menuitem".
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        @* 0x0 fixed anchor at the cursor point. position:fixed so client coords map
+           directly to the viewport; the positioner reads this element's rect. *@
+        <div @ref="_anchor"
+             data-navius-context-menu-anchor
+             aria-hidden="true"
+             style="position:fixed;left:@(Px(Context.AnchorX));top:@(Px(Context.AnchorY));width:0;height:0;pointer-events:none;"></div>
+
+        <div @ref="PositionerElement"
+             data-navius-context-menu-positioner
+             style="position:fixed;top:0;left:0;margin:0"
+             @attributes="Context.PositionerAttributes">
+            <div @ref="Element"
+                 id="@Context.ContentId"
+                 role="menu"
+                 tabindex="-1"
+                 dir="@(Context.IsRtl ? "rtl" : null)"
+                 data-open="@(Context.Open ? "" : null)"
+                 data-closed="@(Context.Open ? null : "")"
+                 data-starting-style="@(Entering ? "" : null)"
+                 data-ending-style="@(Exiting ? "" : null)"
+                 data-navius-context-menu-popup
+                 @attributes="Attributes">
+                @ChildContent
+            </div>
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private ContextMenuContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>When true arrow navigation wraps at the ends (the spec default false).</summary>
+    [Parameter] public bool Loop { get; set; }
+
+    private RovingFocus? _roving;
+    private ElementReference _anchor;
+
+    private static string Px(double v) => v.ToString("0.###", CultureInfo.InvariantCulture) + "px";
+
+    protected override IAnchoredOverlayContext AnchoredContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+
+    // A menu manages focus with roving tabindex, not a focus trap.
+    protected override bool TrapFocus => false;
+
+    // Dismiss on a click anywhere outside the popup — including the whole (possibly large)
+    // trigger area, which must not swallow the dismiss. So the "inside" reference is the
+    // popup itself, not the trigger.
+    protected override ElementReference DismissReference => Element;
+
+    protected override async Task EngageAsync()
+    {
+        // The base positioner reads PositionReference (= AnchorElement) — so publish the
+        // 0x0 cursor-anchor div BEFORE engaging the base.
+        Context.SetAnchorElement(_anchor);
+        await base.EngageAsync();
+        _roving = await Interop!.CreateRovingFocusAsync(
+            Element,
+            new RovingFocusOptions(
+                "vertical",
+                Selector: "[role=\"menuitem\"]:not([data-disabled]),[role=\"menuitemcheckbox\"]:not([data-disabled]),[role=\"menuitemradio\"]:not([data-disabled])",
+                Loop: Loop,
+                AutoFocus: !OpenAutoFocusPrevented,
+                DataHighlight: true,
+                Dir: Context.Dir));
+    }
+
+    protected override async Task DisengageAsync()
+    {
+        if (_roving is not null)
+        {
+            await _roving.DisposeAsync();
+            _roving = null;
+        }
+        await base.DisengageAsync();
+    }
+}

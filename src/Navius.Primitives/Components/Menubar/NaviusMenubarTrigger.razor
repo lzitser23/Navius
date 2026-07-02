@@ -1,0 +1,101 @@
+@namespace Navius.Primitives.Components.Menubar
+@inherits MenubarPart
+
+@*
+    A top-level menu button. role="menuitem" (it lives in a menubar), aria-haspopup="menu".
+    Click toggles its menu; ArrowDown / Space / Enter open it (the content then focuses the
+    first item). ArrowLeft/Right + Home/End move focus between triggers — that roving is
+    driven by the engine over the trigger row. When a menu is already open and focus lands on
+    a different trigger (via roving), that trigger opens its menu, matching the spec's menubar
+    "follow focus" behaviour. data-navius-menubar-trigger marks it for the root's roving.
+*@
+
+<button type="button"
+        @ref="_element"
+        id="@MenuContext.TriggerId"
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded="@(MenuContext.Open ? "true" : "false")"
+        aria-controls="@(MenuContext.Open ? MenuContext.ContentId : null)"
+        tabindex="-1"
+        data-popup-open="@(MenuContext.Open ? "" : null)"
+        data-navius-menubar-trigger
+        data-disabled="@(Disabled ? "" : null)"
+        aria-disabled="@(Disabled ? "true" : null)"
+        disabled="@Disabled"
+        @onclick="OnClickAsync"
+        @onkeydown="OnKeyDownAsync"
+        @onkeydown:preventDefault="_preventNextKey"
+        @onfocusin="OnFocusInAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    private ElementReference _element;
+
+    // Bound to @onkeydown:preventDefault. Set just before opening on a nav/activation key so
+    // ArrowDown/Enter/Space don't scroll the page before the menu opens.
+    private bool _preventNextKey;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    [CascadingParameter] private MenubarContext Root { get; set; } = default!;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            MenuContext.TriggerElement = _element;
+            MenuContext.HasTrigger = true;
+        }
+    }
+
+    private async Task OnClickAsync()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        await MenuContext.RequestToggleAsync();
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        // Open this menu (content focuses the first item) on Down/Up/Enter/Space, preventing the
+        // page from scrolling first. ArrowUp opens too, focusing the LAST item (spec parity).
+        var isOpenKey = e.Key is "ArrowDown" or "ArrowUp" or "Enter" or " ";
+        _preventNextKey = isOpenKey;
+
+        if (!MenuContext.Open && isOpenKey)
+        {
+            await MenuContext.RequestOpenAsync();
+        }
+    }
+
+    private async Task OnFocusInAsync()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        // "Follow focus": if some other menu is already open and this trigger is now focused
+        // (e.g. ArrowLeft/Right roving), switch the open menu to this one.
+        if (Root.OpenValue is not null && !MenuContext.Open)
+        {
+            await MenuContext.RequestOpenAsync();
+        }
+    }
+}

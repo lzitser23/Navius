@@ -1,0 +1,49 @@
+@namespace Navius.Primitives.Components.Avatar
+@inherits AvatarPart
+
+@if (Context.Status != AvatarLoadStatus.Loaded && _canRender)
+{
+    <span data-navius-avatar-fallback
+          @attributes="Attributes">
+        @ChildContent
+    </span>
+}
+
+@code {
+    [Parameter] public int DelayMs { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool _canRender;
+    private CancellationTokenSource? _cts;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        if (DelayMs <= 0)
+        {
+            _canRender = true;
+            return;
+        }
+
+        _cts = new CancellationTokenSource();
+        _ = DelayAsync(_cts.Token);
+    }
+
+    private async Task DelayAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(DelayMs, token);
+            _canRender = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    protected override void DisposeCore()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

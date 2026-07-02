@@ -1,0 +1,42 @@
+@namespace Navius.Primitives.Components.Select
+@inherits SelectPart
+
+@*
+    Shows the SELECTED ITEM'S LABEL (its rendered text / ItemText / TextValue),
+    not the raw value key. the spec's value is an opaque key; the visible label is
+    independent and comes from the item that registered it. Falls back to the
+    placeholder when nothing is selected. data-placeholder is present while empty
+    so you can style it (e.g. data-[placeholder]:text-muted-foreground).
+
+    An explicit ChildContent overrides the auto label (the spec allows custom Value
+    children); without it the registered label or placeholder is shown.
+*@
+
+<span data-navius-select-value
+      data-placeholder="@(Context.HasSelection ? null : "")"
+      @attributes="Attributes">
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else if (Context.Multiple)
+    {
+        @(Context.HasSelection
+            ? string.Join(", ", Context.SelectedTexts)
+            : Placeholder ?? Context.Placeholder)
+    }
+    else
+    {
+        @(Context.SelectedText ?? (Context.Value is null ? Placeholder ?? Context.Placeholder : Context.Value))
+    }
+</span>
+
+@code {
+    /// <summary>Optional override of the placeholder text shown when no value is selected.</summary>
+    [Parameter] public string? Placeholder { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

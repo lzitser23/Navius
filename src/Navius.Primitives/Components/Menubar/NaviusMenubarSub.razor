@@ -1,0 +1,68 @@
+@namespace Navius.Primitives.Components.Menubar
+@inherits ComponentBase
+
+@*
+    A nested submenu. Owns its OWN open state and cascades a Sub context to its
+    SubTrigger/SubContent. Controlled via @bind-Open; uncontrolled via DefaultOpen.
+    Renders no DOM. Mirrors the spec Menubar.Sub.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    private MenubarSubContext _context = default!;
+    private bool _internalOpen;
+    private bool _openSet;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsControlled => _openSet;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        _openSet = false;
+        foreach (var p in parameters)
+        {
+            if (p.Name == nameof(Open))
+            {
+                _openSet = true;
+            }
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _context = new MenubarSubContext(RequestSetAsync);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await _context.SetOpenInternalAsync(IsControlled ? Open : _internalOpen);
+    }
+
+    private async Task RequestSetAsync(bool value)
+    {
+        if (IsControlled)
+        {
+            await OpenChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internalOpen = value;
+            await _context.SetOpenInternalAsync(value);
+            await OpenChanged.InvokeAsync(value);
+            StateHasChanged();
+        }
+    }
+}

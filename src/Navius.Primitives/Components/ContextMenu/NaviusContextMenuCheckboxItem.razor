@@ -1,0 +1,149 @@
+@namespace Navius.Primitives.Components.ContextMenu
+@inherits ComponentBase
+
+@*
+    role="menuitemcheckbox". Tri-state per WAI-ARIA: checked | unchecked |
+    indeterminate (aria-checked="mixed", data-indeterminate). Controlled via
+    @bind-Checked (bool?, null = indeterminate); uncontrolled via DefaultChecked.
+    Control mode is detected by whether Checked was explicitly supplied, NOT by
+    whether the change callback is attached (the spec semantics).
+
+    Selecting toggles the checked state and fires OnSelect; the menu closes unless
+    the consumer calls PreventDefault() on the select args (so a checkbox can be
+    toggled repeatedly without the menu closing). Hosts a NaviusContextMenuItemIndicator
+    that mounts only while checked/indeterminate.
+*@
+
+<CascadingValue Value="_checkable" IsFixed="true">
+    <div role="menuitemcheckbox"
+         tabindex="-1"
+         data-navius-context-menu-checkbox-item
+         aria-checked="@AriaChecked"
+         data-checked="@(CurrentChecked == true ? "" : null)"
+         data-unchecked="@(CurrentChecked == false ? "" : null)"
+         data-indeterminate="@(CurrentChecked is null ? "" : null)"
+         data-disabled="@(Disabled ? "" : null)"
+         aria-disabled="@(Disabled ? "true" : null)"
+         data-navius-text-value="@TextValue"
+         @onclick="ActivateAsync"
+         @onkeydown="OnKeyDownAsync"
+         @onkeydown:preventDefault="_preventKeyDefault"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    [CascadingParameter] private ContextMenuContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Controlled tri-state checked value (null = indeterminate). Use @@bind-Checked.</summary>
+    [Parameter] public bool? Checked { get; set; }
+
+    [Parameter] public EventCallback<bool?> CheckedChanged { get; set; }
+
+    /// <summary>Uncontrolled initial checked value (null = indeterminate).</summary>
+    [Parameter] public bool? DefaultChecked { get; set; }
+
+    /// <summary>Cancelable select. PreventDefault() keeps the menu open after toggling.</summary>
+    [Parameter] public EventCallback<NaviusSelectEventArgs> OnSelect { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public string? TextValue { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private readonly ContextMenuCheckableContext _checkable = new();
+
+    private bool? _internalChecked;
+    private bool _initialized;
+    private bool _checkedSet;
+    private bool _preventKeyDefault;
+
+    private bool IsControlled => _checkedSet;
+
+    private bool? CurrentChecked => IsControlled ? Checked : _internalChecked;
+
+    private string AriaChecked => CurrentChecked switch
+    {
+        true => "true",
+        false => "false",
+        null => "mixed",
+    };
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        _checkedSet = false;
+        foreach (var p in parameters)
+        {
+            if (p.Name == nameof(Checked))
+            {
+                _checkedSet = true;
+            }
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!_initialized)
+        {
+            _internalChecked = DefaultChecked;
+            _initialized = true;
+        }
+
+        _checkable.SetChecked(CurrentChecked);
+    }
+
+    private async Task ActivateAsync()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        // the spec: from indeterminate -> checked, otherwise flip.
+        var next = CurrentChecked switch
+        {
+            true => false,
+            false => true,
+            null => true,
+        };
+
+        if (IsControlled)
+        {
+            await CheckedChanged.InvokeAsync(next);
+        }
+        else
+        {
+            _internalChecked = next;
+            await CheckedChanged.InvokeAsync(next);
+            _checkable.SetChecked(next);
+        }
+
+        var args = new NaviusSelectEventArgs();
+        if (OnSelect.HasDelegate)
+        {
+            await OnSelect.InvokeAsync(args);
+        }
+
+        if (!args.DefaultPrevented)
+        {
+            await Context.RequestCloseAsync();
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        _preventKeyDefault = e.Key == " ";
+
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            await ActivateAsync();
+        }
+    }
+}

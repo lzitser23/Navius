@@ -1,0 +1,41 @@
+@namespace Navius.Primitives.Components.Menu
+@implements IDisposable
+
+@*
+    the spec Group: a role="group" wrapper. When it contains a Label, the label
+    publishes its id and the group references it via aria-labelledby so screen
+    readers announce the group with its heading.
+*@
+
+<div role="group"
+     aria-labelledby="@_groupContext.LabelId"
+     data-navius-menu-group
+     @attributes="Attributes">
+    <CascadingValue Value="_groupContext" IsFixed="true">
+        @ChildContent
+    </CascadingValue>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private readonly MenuGroupContext _groupContext = new();
+    private Action? _onChange;
+
+    protected override void OnInitialized()
+    {
+        _onChange = () => InvokeAsync(StateHasChanged);
+        _groupContext.Changed += _onChange;
+    }
+
+    public void Dispose()
+    {
+        if (_onChange is not null)
+        {
+            _groupContext.Changed -= _onChange;
+        }
+    }
+}

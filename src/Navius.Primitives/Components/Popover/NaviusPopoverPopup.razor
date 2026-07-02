@@ -1,0 +1,48 @@
+@namespace Navius.Primitives.Components.Popover
+@inherits OverlayAnchoredPopupBase
+
+@*
+    The floating panel (the spec Popover.Popup), wrapped in the Positioner <div> the
+    engine anchors. On open the base engages anchored positioning + a dismissable layer
+    and, when the Root is modal, traps focus + locks scroll; on close it tears them down
+    and returns focus to the trigger. The engine writes data-side / data-align /
+    data-anchor-hidden + the --anchor-*/--available-*/--transform-origin vars onto the
+    Positioner and mirrors data-side/data-align onto this Popup. C# owns the discrete
+    data-open / data-closed + data-starting-style / data-ending-style. KeepMounted (or a
+    Portal keepMounted) keeps the node mounted (data-closed) while closed for exit anims.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="PositionerElement"
+             data-navius-popover-positioner
+             style="position:fixed;top:0;left:0;margin:0"
+             @attributes="Context.PositionerAttributes">
+            <div @ref="Element"
+                 id="@Context.ContentId"
+                 role="dialog"
+                 tabindex="-1"
+                 aria-labelledby="@(Context.HasTitle ? Context.TitleId : null)"
+                 aria-describedby="@(Context.HasDescription ? Context.DescriptionId : null)"
+                 data-open="@(Context.Open ? "" : null)"
+                 data-closed="@(Context.Open ? null : "")"
+                 data-starting-style="@(Entering ? "" : null)"
+                 data-ending-style="@(Exiting ? "" : null)"
+                 data-navius-popover-popup
+                 @attributes="Attributes">
+                @ChildContent
+            </div>
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private PopoverContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override IAnchoredOverlayContext AnchoredContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+}

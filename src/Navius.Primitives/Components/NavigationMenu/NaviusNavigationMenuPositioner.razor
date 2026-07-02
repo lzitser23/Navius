@@ -1,0 +1,22 @@
+@namespace Navius.Primitives.Components.NavigationMenu
+@inherits Navius.Primitives.Components.Overlays.OverlayPositionerBase
+
+@*
+    Base UI's NavigationMenu.Positioner — owns placement (side / align / offsets /
+    collision). A flag-setter (see OverlayPositionerBase): it publishes the placement
+    options + its styling attributes into the context; the Popup renders the positioning
+    <div>. Base UI centres the panel under the active trigger, so the defaults are
+    bottom / center.
+*@
+
+@ChildContent
+
+@code {
+    [CascadingParameter] private NavigationMenuContext Context { get; set; } = default!;
+
+    protected override string DefaultSide => "bottom";
+
+    protected override string DefaultAlign => "center";
+
+    protected override Navius.Primitives.Components.Overlays.IAnchoredOverlayContext AnchoredContext => Context;
+}

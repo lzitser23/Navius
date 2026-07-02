@@ -1,0 +1,30 @@
+@namespace Navius.Primitives.Components.Combobox
+
+@*
+    The Base UI Combobox.Chip — one chip for a selected value (multi-select). Cascades its
+    boxed Value so a nested NaviusComboboxChipRemove knows which value to remove. ChildContent
+    is the chip's label (+ the remove button).
+*@
+
+<span data-navius-combobox-chip @attributes="Attributes">
+    <CascadingValue Value="_chipContext">
+        @ChildContent
+    </CascadingValue>
+</span>
+
+@code {
+    /// <summary>The boxed selected value this chip represents (set by the Root's chip callback).</summary>
+    [Parameter] public object? Value { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ComboboxChipContext _chipContext = default!;
+
+    // Rebuild every render (NOT once in OnInitialized + IsFixed): the Chips loop can reuse a
+    // chip instance positionally for a different value, so a frozen context would leave
+    // ChipRemove targeting the previous chip's value. Mirrors the List's per-render item context.
+    protected override void OnParametersSet() => _chipContext = new ComboboxChipContext(Value!);
+}

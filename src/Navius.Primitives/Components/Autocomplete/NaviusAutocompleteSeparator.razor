@@ -1,0 +1,12 @@
+@namespace Navius.Primitives.Components.Autocomplete
+
+@*
+    The Base UI Autocomplete.Separator — a role="separator" divider between groups.
+*@
+
+<div role="separator" aria-orientation="horizontal" data-navius-autocomplete-separator @attributes="Attributes"></div>
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

@@ -1,0 +1,33 @@
+@namespace Navius.Primitives.Components.Combobox
+@inherits ComboboxPart
+
+@*
+    The Base UI Combobox.Value — reflects the committed SELECTION (not the filter text,
+    unlike Autocomplete's Value which echoed the query). Renders ChildContent if given (a
+    render fragment over the selected value(s)); else the selected item's text; else the
+    Placeholder. Emits data-placeholder when nothing is selected.
+*@
+
+<span data-placeholder="@(Context.HasSelection ? null : "")"
+      data-navius-combobox-value
+      @attributes="Attributes">
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else if (Context.HasSelection)
+    {
+        @Context.SelectedLabel
+    }
+    else
+    {
+        @Context.Placeholder
+    }
+</span>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

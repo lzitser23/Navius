@@ -1,0 +1,44 @@
+@namespace Navius.Primitives.Components.AccessibleIcon
+
+@*
+    AccessibleIcon (the spec utility primitive).
+
+    Renders the icon content (typically an inline <svg>) followed by a
+    visually-hidden <span> carrying the required Label so screen readers
+    announce a meaningful name for an otherwise wordless graphic.
+
+    Per the spec's anatomy this primitive does NOT introduce a wrapper element:
+    it renders the supplied icon ChildContent unchanged and appends the
+    hidden label. The data-navius-accessible-icon marker therefore lives on
+    the visually-hidden span.
+
+    Consumers are responsible for ensuring the icon itself is marked
+    aria-hidden / focusable="false" if desired; this utility only guarantees
+    an accessible name is present in the DOM.
+*@
+
+@ChildContent
+<span data-navius-accessible-icon style="@SrOnlyStyle" @attributes="Attributes">@Label</span>
+
+@code {
+    /// <summary>
+    /// The accessible name announced by screen readers. Required and must be non-empty.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = default!;
+
+    /// <summary>
+    /// The icon to render (usually an inline SVG). Rendered verbatim before the hidden label.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Unmatched attributes are forwarded to the visually-hidden label span.
+    /// </summary>
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private const string SrOnlyStyle =
+        "position:absolute;width:1px;height:1px;clip:rect(0 0 0 0);clip-path:inset(50%);overflow:hidden;white-space:nowrap;border:0;padding:0;margin:-1px";
+}

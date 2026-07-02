@@ -1,0 +1,6 @@
+# Normalize line endings to LF in the repo (silences CRLF warnings on Windows).
+* text=auto eol=lf
+
+# Binary / generated assets — never normalize.
+*.png binary
+*.woff2 binary

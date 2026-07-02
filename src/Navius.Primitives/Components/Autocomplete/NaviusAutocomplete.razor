@@ -1,0 +1,219 @@
+@namespace Navius.Primitives.Components.Autocomplete
+@typeparam TItem
+@inherits ComponentBase
+
+@*
+    Root of the autocomplete (the Base UI Autocomplete). Generic over the item type;
+    owns the open state (controlled Open/OpenChanged + DefaultOpen, else uncontrolled),
+    the query text (Value/ValueChanged), the filtered list, the highlighted index and the
+    selection. Cascades a non-generic AutocompleteContext so the List/Item parts stay
+    non-generic (items are boxed to object). Renders no DOM.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    private AutocompleteContext _context = default!;
+    private bool _internalOpen;
+    private string _internalQuery = "";
+
+    /// <summary>The full item set to filter.</summary>
+    [Parameter] public IReadOnlyList<TItem> Items { get; set; } = Array.Empty<TItem>();
+
+    /// <summary>The input text (also the committed value). Two-way via <c>@bind-Value</c>.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>Controlled open state. Two-way via <c>@bind-Open</c>.</summary>
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>Initial open state when uncontrolled.</summary>
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    /// <summary>Projects an item to its display/match text (default <c>x?.ToString()</c>).</summary>
+    [Parameter] public Func<TItem, string>? ItemToString { get; set; }
+
+    /// <summary>Predicate <c>(item, query) =&gt; keep</c> (default: case-insensitive Contains; empty query shows all).</summary>
+    [Parameter] public Func<TItem, string, bool>? Filter { get; set; }
+
+    /// <summary>Per-row template; when null the List renders the item's text in a default item.</summary>
+    [Parameter] public RenderFragment<TItem>? ItemTemplate { get; set; }
+
+    /// <summary>Reading direction: "ltr" (default) or "rtl". Cascaded to the popup.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsOpenControlled => OpenChanged.HasDelegate;
+
+    private bool IsValueControlled => ValueChanged.HasDelegate;
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    private string ToText(TItem item) => ItemToString is not null ? ItemToString(item) : item?.ToString() ?? "";
+
+    private bool Matches(TItem item, string query) =>
+        Filter is not null ? Filter(item, query) : ToText(item).Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _context = new AutocompleteContext(SetQueryAsync, SelectAsync, RequestSetOpenAsync);
+        _context.SetRenderItem(BuildItemFragment);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.Dir = EffectiveDir;
+
+        var open = IsOpenControlled ? Open : _internalOpen;
+        var openChanged = _context.Open != open;
+
+        // Reflect an externally-changed controlled Value into the textbox while idle.
+        if (!open)
+        {
+            var external = IsValueControlled ? Value : _internalQuery;
+            if (external is not null && _context.Query != external)
+            {
+                _context.SetQueryValue(external);
+                _internalQuery = external;
+            }
+        }
+
+        Recompute();
+        _context.SetOpen(open);
+
+        // Only the portaled Popup needs a Changed ping for an open transition; the
+        // in-tree parts re-render via this component's own render after OnParametersSet.
+        if (openChanged)
+        {
+            await _context.RaiseChangedAsync();
+        }
+    }
+
+    /// <summary>Rebuild the filtered rows from the current query and clamp the highlight.</summary>
+    private void Recompute()
+    {
+        var query = _context.Query;
+        var showAll = string.IsNullOrWhiteSpace(query);
+
+        var rows = new List<AutocompleteItemData>();
+        foreach (var item in Items)
+        {
+            if (showAll || Matches(item, query))
+            {
+                rows.Add(new AutocompleteItemData(item!, ToText(item), rows.Count));
+            }
+        }
+
+        _context.SetItems(rows);
+
+        if (_context.HighlightedIndex >= rows.Count)
+        {
+            _context.SetHighlightedIndex(rows.Count - 1); // -1 when empty
+        }
+    }
+
+    private RenderFragment BuildItemFragment(AutocompleteItemData data) => builder =>
+    {
+        if (ItemTemplate is not null)
+        {
+            builder.AddContent(0, ItemTemplate((TItem)data.Value));
+        }
+        else
+        {
+            builder.OpenComponent<NaviusAutocompleteItem>(1);
+            builder.AddComponentParameter(2, nameof(NaviusAutocompleteItem.ChildContent),
+                (RenderFragment)(b => b.AddContent(0, data.Text)));
+            builder.CloseComponent();
+        }
+    };
+
+    // --- actions routed from the context ---
+
+    private async Task SetQueryAsync(string query)
+    {
+        _context.SetQueryValue(query);
+        _context.SetHighlightedIndex(0);
+        _context.SetOpen(true);
+        Recompute();
+
+        if (!IsOpenControlled)
+        {
+            _internalOpen = true;
+        }
+
+        if (IsValueControlled)
+        {
+            await ValueChanged.InvokeAsync(query);
+        }
+        else
+        {
+            _internalQuery = query;
+        }
+
+        if (IsOpenControlled)
+        {
+            await OpenChanged.InvokeAsync(true);
+        }
+
+        await _context.RaiseChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task SelectAsync(object value)
+    {
+        var text = ToText((TItem)value);
+
+        _context.SetQueryValue(text);
+        _context.SetSelectedValues(new[] { value });
+        _context.SetOpen(false);
+        Recompute();
+
+        if (!IsOpenControlled)
+        {
+            _internalOpen = false;
+        }
+
+        if (IsValueControlled)
+        {
+            await ValueChanged.InvokeAsync(text);
+        }
+        else
+        {
+            _internalQuery = text;
+        }
+
+        if (IsOpenControlled)
+        {
+            await OpenChanged.InvokeAsync(false);
+        }
+
+        await _context.RaiseChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task RequestSetOpenAsync(bool open)
+    {
+        _context.SetOpen(open);
+
+        if (!IsOpenControlled)
+        {
+            _internalOpen = open;
+        }
+        else
+        {
+            await OpenChanged.InvokeAsync(open);
+        }
+
+        await _context.RaiseChangedAsync();
+        StateHasChanged();
+    }
+}

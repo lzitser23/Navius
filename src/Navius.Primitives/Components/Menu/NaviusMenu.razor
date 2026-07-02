@@ -1,0 +1,63 @@
+@namespace Navius.Primitives.Components.Menu
+@inherits ComponentBase
+
+@* Root of the menu. Owns open state, cascades the context. Renders no DOM. *@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    private MenuContext _context = default!;
+    private bool _internalOpen;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    /// <summary>
+    /// Modality (the spec default true). When modal the open menu locks page scroll and
+    /// blocks outside pointer interaction; non-modal leaves the page interactive.
+    /// </summary>
+    [Parameter] public bool Modal { get; set; } = true;
+
+    /// <summary>Reading direction: "ltr" (default) or "rtl". Cascaded; flips submenu arrow keys.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsControlled => OpenChanged.HasDelegate;
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _context = new MenuContext(RequestSetAsync);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.Modal = Modal;
+        _context.Dir = EffectiveDir;
+        await _context.SetOpenInternalAsync(IsControlled ? Open : _internalOpen);
+    }
+
+    private async Task RequestSetAsync(bool value)
+    {
+        if (IsControlled)
+        {
+            await OpenChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internalOpen = value;
+            await _context.SetOpenInternalAsync(value);
+            StateHasChanged();
+        }
+    }
+}

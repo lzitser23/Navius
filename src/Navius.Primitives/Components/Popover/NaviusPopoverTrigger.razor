@@ -1,0 +1,44 @@
+@namespace Navius.Primitives.Components.Popover
+@inherits PopoverPart
+
+@*
+    The button that toggles the popover (the spec Popover.Trigger). Captures its own
+    element reference into the context after first render so the popup can anchor its
+    positioning here. Emits Base UI's discrete data-popup-open (present only when open)
+    and data-pressed (present while the button is pressed) — the discrete-boolean contract.
+*@
+
+<button type="button"
+        @ref="_element"
+        aria-haspopup="dialog"
+        aria-expanded="@(Context.Open ? "true" : "false")"
+        aria-controls="@Context.ContentId"
+        data-popup-open="@(Context.Open ? "" : null)"
+        data-pressed="@(_pressed ? "" : null)"
+        data-navius-popover-trigger
+        @onclick="Context.RequestToggleAsync"
+        @onpointerdown="() => _pressed = true"
+        @onpointerup="() => _pressed = false"
+        @onpointerleave="() => _pressed = false"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    private ElementReference _element;
+    private bool _pressed;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Context.TriggerElement = _element;
+            Context.HasTrigger = true;
+        }
+    }
+}

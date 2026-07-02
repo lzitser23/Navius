@@ -1,0 +1,14 @@
+@namespace Navius.Primitives.Components.Meter
+
+@* Base UI Meter.Value — renders the formatted value; defaults to the rounded percentage.
+   Provide ChildContent to override. *@
+<span data-navius-meter-value @attributes="Attributes">@if (ChildContent is not null) { @ChildContent } else { @DefaultText }</span>
+
+@code {
+    [CascadingParameter] private MeterContext Context { get; set; } = default!;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    private string DefaultText =>
+        Math.Round(Context.Percentage).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+}

@@ -1,0 +1,80 @@
+@namespace Navius.Primitives.Components.Select
+@inherits SelectPart
+
+@*
+    The button that opens the listbox. role=combobox per the APG select pattern.
+
+    Closed-trigger keyboard (the spec): Enter / Space / ArrowDown open and land focus
+    on the FIRST item; ArrowUp opens and lands on the LAST item. On a re-open the
+    listbox lands focus on the currently-selected item. Space/Arrow keys
+    preventDefault so the page doesn't scroll. Honours the root's Disabled.
+*@
+
+<button @ref="_element"
+        type="button"
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded="@(Context.Open ? "true" : "false")"
+        aria-controls="@Context.ContentId"
+        aria-required="@(Context.Required ? "true" : null)"
+        data-popup-open="@(Context.Open ? "" : null)"
+        data-disabled="@(Context.Disabled ? "" : null)"
+        data-placeholder="@(Context.HasSelection ? null : "")"
+        data-multiple="@(Context.Multiple ? "" : null)"
+        dir="@Context.Dir"
+        disabled="@Context.Disabled"
+        data-navius-select-trigger
+        @onclick="OnClickAsync"
+        @onkeydown="OnKeyDownAsync"
+        @onkeydown:preventDefault="_preventNextKeyDefault"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    private ElementReference _element;
+    private bool _preventNextKeyDefault;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Context.TriggerElement = _element;
+            Context.HasTrigger = true;
+        }
+    }
+
+    private Task OnClickAsync()
+    {
+        if (Context.Disabled) return Task.CompletedTask;
+        return Context.RequestToggleAsync();
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        // Default to NOT preventing; only suppress for the keys we act on so normal
+        // typing/Tab still works on the closed trigger.
+        _preventNextKeyDefault = false;
+
+        if (Context.Disabled || Context.Open) return;
+
+        switch (e.Key)
+        {
+            case "ArrowDown":
+            case "Enter":
+            case " ":
+                _preventNextKeyDefault = true;
+                await Context.RequestOpenWithFocusAsync("first");
+                break;
+            case "ArrowUp":
+                _preventNextKeyDefault = true;
+                await Context.RequestOpenWithFocusAsync("last");
+                break;
+        }
+    }
+}

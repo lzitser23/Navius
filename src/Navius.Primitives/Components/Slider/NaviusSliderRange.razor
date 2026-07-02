@@ -1,0 +1,43 @@
+@namespace Navius.Primitives.Components.Slider
+@inherits SliderPart
+
+@*
+    The filled portion of the track: the band between the lowest and highest thumb
+    values (for a single-thumb slider it runs from the track origin to the thumb).
+    Its inset + size are set inline because they are data, not theming — consumers
+    still bring all colour/rounding via @attributes (e.g. bg-primary). The band
+    honours orientation, inversion and RTL through the context's RangeBounds().
+*@
+
+<span data-navius-slider-range
+      data-orientation="@Context.Orientation"
+      data-disabled="@(Context.Disabled ? "" : null)"
+      style="@RangeStyle"
+      @attributes="Attributes">
+</span>
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private string RangeStyle
+    {
+        get
+        {
+            var (start, end) = Context.RangeBounds();
+            var startPct = $"{start * 100:0.####}%";
+            var sizePct = $"{(end - start) * 100:0.####}%";
+
+            if (Context.Orientation == "vertical")
+            {
+                // Vertical axis grows upward: start measured from the bottom edge.
+                return $"position:absolute;bottom:{startPct};height:{sizePct};";
+            }
+
+            // Horizontal axis: start measured from the physical left edge. The context
+            // has already folded dir + inversion into the bounds, so use physical props
+            // (logical props would double-flip RTL).
+            return $"position:absolute;left:{startPct};width:{sizePct};";
+        }
+    }
+}

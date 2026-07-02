@@ -1,0 +1,558 @@
+@namespace Navius.Primitives.Components.Toast
+@inherits Navius.Primitives.Components.Overlays.OverlayPresence
+
+@*
+    A single toast. Unified Base UI Toast.Root, built on the shared OverlayPresence machine:
+    - Manager-driven (Toast param) OR manual (Open / DefaultOpen / @bind-Open).
+    - Inherits OverlayPresence, so C# owns the discrete data-open / data-closed +
+      data-starting-style / data-ending-style attributes, and the engine defers unmount
+      until the exit animation finishes (WaitForAnimations). On unmount a manager-driven
+      toast calls Manager.Remove(id), which auto-promotes the next queued toast.
+    - Pausable auto-close timer (gated on !Limited — a queued toast starts its timer only
+      once promoted) that pauses on hover / focus-within / window-blur.
+    - Swipe-to-dismiss with the C#-owned data-swiping flag + engine-owned
+      --toast-swipe-movement-x/y CSS vars.
+    - role=status|alert (priority low=polite | high=assertive) + a live-region announcement.
+    - Esc closes the focused toast; tabindex=0 so the viewport's Tab order can reach it.
+*@
+
+@if (Rendered)
+{
+    <li @ref="Element"
+        role="@RoleAttr"
+        tabindex="0"
+        aria-live="off"
+        aria-atomic="true"
+        aria-labelledby="@(_ctx.HasTitle ? _ctx.TitleId : null)"
+        aria-describedby="@(_ctx.HasDescription ? _ctx.DescriptionId : null)"
+        data-navius-toast
+        data-open="@(IsOpen ? "" : null)"
+        data-closed="@(IsOpen ? null : "")"
+        data-starting-style="@(Entering ? "" : null)"
+        data-ending-style="@(Exiting ? "" : null)"
+        data-swiping="@(_swiping ? "" : null)"
+        data-swipe-direction="@EffectiveSwipeDirection"
+        data-expanded="@(Provider.Expanded ? "" : null)"
+        data-limited="@(((Toast?.Limited ?? false)) ? "" : null)"
+        data-type="@EffectiveType"
+        @onkeydown="OnKeyDownAsync"
+        @attributes="Attributes">
+        <CascadingValue Value="_ctx" IsFixed="true">
+            @ChildContent
+        </CascadingValue>
+    </li>
+}
+
+@code {
+    [CascadingParameter] private ToastProviderContext Provider { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>The source toast when driven by a <see cref="ToastManager"/>; null for a manual toast.</summary>
+    [Parameter] public ToastObject? Toast { get; set; }
+
+    /// <summary>Controlled open state (manual). Pair with <see cref="OpenChanged"/> for @bind-Open.</summary>
+    [Parameter] public bool Open { get; set; } = true;
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>Uncontrolled initial open state (manual; default true).</summary>
+    [Parameter] public bool DefaultOpen { get; set; } = true;
+
+    /// <summary>Keep the toast mounted while closed (for CSS-driven presence). Maps to OverlayPresence.ShouldStayMounted.</summary>
+    [Parameter] public bool ForceMount { get; set; }
+
+    /// <summary>Per-toast auto-close override (ms). null → Toast.Timeout → Provider.Timeout; 0 → sticky.</summary>
+    [Parameter] public int? Timeout { get; set; }
+
+    /// <summary>Announcement urgency: <c>low</c> (role=status, polite) or <c>high</c> (role=alert, assertive).</summary>
+    [Parameter] public string Priority { get; set; } = "low";
+
+    /// <summary>Visual/semantic type (success | error | loading). Defaults to Toast.Type. Drives data-type.</summary>
+    [Parameter] public string? Type { get; set; }
+
+    /// <summary>Per-toast swipe direction; falls back to the Provider default.</summary>
+    [Parameter] public string? SwipeDirection { get; set; }
+
+    [Parameter] public EventCallback<NaviusEscapeKeyDownEventArgs> OnEscapeKeyDown { get; set; }
+    [Parameter] public EventCallback OnSwipeStart { get; set; }
+    [Parameter] public EventCallback<(double X, double Y)> OnSwipeMove { get; set; }
+    [Parameter] public EventCallback<(double X, double Y)> OnSwipeEnd { get; set; }
+    [Parameter] public EventCallback OnSwipeCancel { get; set; }
+    [Parameter] public EventCallback OnPause { get; set; }
+    [Parameter] public EventCallback OnResume { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ToastContext _ctx = default!;
+    private PresenceAdapter _presence = default!;
+    private readonly string _id = $"navius-toast-{Guid.NewGuid():N}";
+
+    private ToastInteractions? _interactions;
+    private DotNetObjectReference<NaviusToastRoot>? _selfRef;
+
+    // Manual open-state tracking (controlled vs uncontrolled).
+    private bool _internalOpen;
+    private bool _controlledSeen;
+    private bool IsControlled => _controlledSeen;
+
+    // Transition detection + gating.
+    private bool _lastOpen;
+    private bool _lastLimited;
+    private int _lastUpdateKey;
+    private bool _scheduleInitialEnter;
+    private bool _reMeasureScheduled;
+    private bool _rootEngaged;
+    private bool _finalized;
+    private bool _disposing;
+
+    // Timer state.
+    private CancellationTokenSource? _timerCts;
+    private long _deadlineTicks;
+    private long _remainingMs;
+    private bool _paused;
+    private bool _announced;
+
+    // Swipe state (C#-owned data-swiping).
+    private bool _swiping;
+
+    private string Id => Toast?.Id ?? _id;
+
+    private bool CurrentOpen => Toast is not null ? Toast.Open : (IsControlled ? Open : _internalOpen);
+
+    private string EffectivePriority => Toast?.Priority ?? Priority;
+
+    private string RoleAttr => EffectivePriority == "high" ? "alert" : "status";
+
+    private string? EffectiveType => Type ?? Toast?.Type;
+
+    private string EffectiveSwipeDirection => SwipeDirection ?? Provider.SwipeDirection;
+
+    // null → the Provider default; an explicit 0/negative → sticky (via StartTimer's <=0 guard).
+    // "loading" is kept sticky by TYPE regardless of this value (see StartTimer).
+    private int EffectiveDuration => Timeout ?? Toast?.Timeout ?? Provider.Timeout;
+
+    private int StackIndex => Toast is not null ? Provider.Manager.VisibleIndexOf(Toast) : 0;
+
+    protected override IOverlayContext OverlayContext => _presence;
+
+    protected override bool ShouldStayMounted => ForceMount;
+
+    public override async Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<bool>(nameof(Open), out _))
+        {
+            _controlledSeen = true;
+        }
+
+        await base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _presence = new PresenceAdapter(() => CurrentOpen, RequestCloseAsync);
+        base.OnInitialized();               // reads OverlayContext + IsOpen; subscribes to _presence.Changed
+
+        _ctx = new ToastContext(RequestCloseAsync);
+        _ctx.Changed += OnContextChanged;
+
+        _lastOpen = IsOpen;
+        _lastLimited = Toast?.Limited ?? false;
+        _lastUpdateKey = Toast?.UpdateKey ?? 0;
+
+        if (IsOpen)
+        {
+            Entering = true;                // mount carrying data-starting-style (enter animation)
+            _scheduleInitialEnter = true;
+        }
+
+        PushContextState();
+    }
+
+    private void OnContextChanged() => InvokeAsync(StateHasChanged);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        PushContextState();
+
+        var open = IsOpen;
+        if (open != _lastOpen)
+        {
+            _lastOpen = open;
+            await _presence.RaiseChangedAsync();   // drive the shared presence machine (enter/exit)
+        }
+
+        // Queue promotion / demotion: keep the auto-close timer in sync with visibility.
+        var limited = Toast?.Limited ?? false;
+        if (_lastLimited && !limited && open && _rootEngaged)
+        {
+            StartTimer();                 // promoted (queued -> visible): arm the timer
+            _reMeasureScheduled = true;   // and re-measure — it was display:none while queued (§4)
+        }
+        else if (!_lastLimited && limited && _rootEngaged)
+        {
+            StopTimer();                  // demoted (visible -> queued): stop the now-stale timer
+            _paused = false;
+        }
+        _lastLimited = limited;
+
+        // Update() bumps UpdateKey (loading -> success/error). Re-arm the auto-close timer for
+        // the settled toast and replay the enter animation for one frame.
+        var updateKey = Toast?.UpdateKey ?? 0;
+        if (updateKey != _lastUpdateKey && open && _rootEngaged)
+        {
+            StopTimer();
+            StartTimer();
+            Entering = true;
+            _scheduleInitialEnter = true;
+        }
+        _lastUpdateKey = updateKey;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);   // engages on first render; runs enter/exit scheduling
+
+        // A manager toast closed before it ever engaged (added + closed in the same handler)
+        // never runs DisengageAsync, so the Manager would never Remove it. Finalize it once.
+        if (!_finalized && Toast is not null && !_rootEngaged && !IsOpen && !ShouldStayMounted)
+        {
+            _finalized = true;
+            Provider.Manager.Remove(Toast.Id);
+            return;
+        }
+
+        // Re-measure a just-promoted toast: it was display:none (data-limited) at engage time so
+        // GetRectAsync read 0; now the data-limited removal has flushed and it is laid out (§4).
+        if (_reMeasureScheduled)
+        {
+            _reMeasureScheduled = false;
+            try
+            {
+                Interop ??= new NaviusJsInterop(JS);
+                var rect = await Interop!.GetRectAsync(Element);
+                _ctx.Height = rect.Height;
+                Provider.ReportHeight(Id, rect.Height);
+                StateHasChanged();
+            }
+            catch { /* element may be detached */ }
+        }
+
+        if (_scheduleInitialEnter)
+        {
+            _scheduleInitialEnter = false;
+            Interop ??= new NaviusJsInterop(JS);
+            await Interop.NextFrameAsync();            // commit the starting-style frame
+            Entering = false;
+            StateHasChanged();                        // drop data-starting-style -> transition in
+        }
+    }
+
+    private void PushContextState()
+    {
+        if (_ctx is null)
+        {
+            return;
+        }
+
+        _ctx.Toast = Toast;
+        _ctx.Type = EffectiveType;
+        _ctx.Priority = EffectivePriority;
+        _ctx.Index = StackIndex;
+        _ctx.Expanded = Provider.Expanded;
+        _ctx.Limited = Toast?.Limited ?? false;
+        _ctx.Swiping = _swiping;
+        _ctx.SwipeDirection = EffectiveSwipeDirection;
+    }
+
+    // ---- OverlayPresence engage / disengage --------------------------------------------
+
+    protected override async Task EngageAsync()
+    {
+        _selfRef ??= DotNetObjectReference.Create(this);
+        _interactions = await Interop!.CreateToastInteractionsAsync(
+            Element, _selfRef,
+            new ToastInteractionOptions(EffectiveSwipeDirection, Provider.SwipeThreshold));
+
+        if (!_announced)
+        {
+            _announced = true;
+            Provider.Announce(await ResolveAnnouncementTextAsync(), assertive: EffectivePriority == "high");
+        }
+
+        try
+        {
+            var rect = await Interop!.GetRectAsync(Element);
+            _ctx.Height = rect.Height;
+            Provider.ReportHeight(Id, rect.Height);
+        }
+        catch { /* element may be detached */ }
+
+        _rootEngaged = true;
+
+        if (!(Toast?.Limited ?? false))
+        {
+            StartTimer();
+        }
+    }
+
+    protected override async Task DisengageAsync()
+    {
+        StopTimer();
+        _rootEngaged = false;
+        await TeardownInteractionsAsync();
+
+        if (!_disposing)
+        {
+            Provider.ForgetHeight(Id);
+            if (Toast is not null)
+            {
+                Provider.Manager.Remove(Toast.Id);   // final removal after the exit animation
+            }
+        }
+
+        _selfRef?.Dispose();
+        _selfRef = null;
+    }
+
+    private async Task<string> ResolveAnnouncementTextAsync()
+    {
+        if (Toast is not null)
+        {
+            var text = Toast.Title ?? string.Empty;
+            if (!string.IsNullOrEmpty(Toast.Description))
+            {
+                text = string.IsNullOrEmpty(text) ? Toast.Description! : $"{text}. {Toast.Description}";
+            }
+            if (!string.IsNullOrEmpty(text))
+            {
+                return text;
+            }
+        }
+
+        try { return await Interop!.GetTextContentAsync(Element); }
+        catch { return Provider.Label; }
+    }
+
+    // ---- open-state plumbing (manual) --------------------------------------------------
+
+    private async Task SetOpenAsync(bool value)
+    {
+        if (IsControlled)
+        {
+            await OpenChanged.InvokeAsync(value);
+        }
+        else
+        {
+            if (_internalOpen == value)
+            {
+                return;
+            }
+
+            _internalOpen = value;
+            await OpenChanged.InvokeAsync(value);
+            await _presence.RaiseChangedAsync();   // uncontrolled: drive the presence machine directly
+        }
+    }
+
+    private Task RequestCloseAsync()
+    {
+        if (Toast is not null)
+        {
+            Provider.Manager.Close(Toast.Id);
+            return Task.CompletedTask;
+        }
+        return SetOpenAsync(false);
+    }
+
+    // ---- keyboard ----------------------------------------------------------------------
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            var args = new NaviusEscapeKeyDownEventArgs();
+            await OnEscapeKeyDown.InvokeAsync(args);
+            if (!args.DefaultPrevented)
+            {
+                await RequestCloseAsync();
+            }
+        }
+    }
+
+    // ---- auto-close timer (pausable) ---------------------------------------------------
+
+    private void StartTimer()
+    {
+        if (EffectiveType == "loading")
+        {
+            return; // loading toasts are sticky by type — they never arm a timer
+        }
+
+        var duration = EffectiveDuration;
+        if (duration <= 0)
+        {
+            return; // Provider.Timeout <= 0 => sticky
+        }
+
+        _remainingMs = duration;
+        _paused = false;
+        RunTimer(_remainingMs);
+    }
+
+    private void RunTimer(long ms)
+    {
+        StopTimer();
+        if (ms <= 0)
+        {
+            return;
+        }
+
+        _deadlineTicks = Environment.TickCount64 + ms;
+        _timerCts = new CancellationTokenSource();
+        var token = _timerCts.Token;
+        _ = TickAsync(ms, token);
+    }
+
+    private async Task TickAsync(long ms, CancellationToken token)
+    {
+        try { await Task.Delay((int)ms, token); }
+        catch (TaskCanceledException) { return; }
+
+        if (!token.IsCancellationRequested)
+        {
+            await InvokeAsync(RequestCloseAsync);
+        }
+    }
+
+    private void StopTimer()
+    {
+        _timerCts?.Cancel();
+        _timerCts?.Dispose();
+        _timerCts = null;
+    }
+
+    private async Task PauseTimerAsync()
+    {
+        if (_paused || _timerCts is null)
+        {
+            return;
+        }
+
+        _paused = true;
+        _remainingMs = Math.Max(0, _deadlineTicks - Environment.TickCount64);
+        StopTimer();
+        await OnPause.InvokeAsync();
+    }
+
+    private async Task ResumeTimerAsync()
+    {
+        if (!_paused)
+        {
+            return;
+        }
+
+        _paused = false;
+        if (_remainingMs > 0)
+        {
+            RunTimer(_remainingMs);
+        }
+        await OnResume.InvokeAsync();
+    }
+
+    // ---- swipe / pause JS callbacks ----------------------------------------------------
+
+    [JSInvokable("OnSwipeStart")]
+    public async Task OnSwipeStartJs()
+    {
+        _swiping = true;
+        _ctx.Swiping = true;
+        await InvokeAsync(StateHasChanged);
+        await OnSwipeStart.InvokeAsync();
+    }
+
+    [JSInvokable("OnSwipeMove")]
+    public Task OnSwipeMoveJs(SwipeDelta d) => OnSwipeMove.InvokeAsync((d.X, d.Y));
+
+    [JSInvokable("OnSwipeEnd")]
+    public async Task OnSwipeEndJs(SwipeDelta d)
+    {
+        _swiping = false;
+        _ctx.Swiping = false;
+        await InvokeAsync(StateHasChanged);
+        await OnSwipeEnd.InvokeAsync((d.X, d.Y));
+    }
+
+    [JSInvokable("OnSwipeCancel")]
+    public async Task OnSwipeCancelJs()
+    {
+        _swiping = false;
+        _ctx.Swiping = false;
+        await InvokeAsync(StateHasChanged);
+        await OnSwipeCancel.InvokeAsync();
+    }
+
+    [JSInvokable("OnSwipeDismiss")]
+    public Task OnSwipeDismissJs() => InvokeAsync(RequestCloseAsync);
+
+    [JSInvokable("OnPause")]
+    public Task OnPauseJs() => InvokeAsync(PauseTimerAsync);
+
+    [JSInvokable("OnResume")]
+    public Task OnResumeJs() => InvokeAsync(ResumeTimerAsync);
+
+    public sealed record SwipeDelta(double X, double Y);
+
+    // ---- teardown ----------------------------------------------------------------------
+
+    private async Task TeardownInteractionsAsync()
+    {
+        if (_interactions is not null)
+        {
+            await _interactions.DisposeAsync();
+            _interactions = null;
+        }
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        _disposing = true;
+        if (_ctx is not null)
+        {
+            _ctx.Changed -= OnContextChanged;
+        }
+
+        await base.DisposeAsync();          // disengages if still engaged (StopTimer + teardown via DisengageAsync)
+
+        StopTimer();
+        await TeardownInteractionsAsync();
+        _selfRef?.Dispose();
+    }
+
+    /// <summary>Minimal IOverlayContext adapter: the Root owns open state; Modal/trigger are inert for a toast.</summary>
+    private sealed class PresenceAdapter : IOverlayContext
+    {
+        private readonly Func<bool> _open;
+        private readonly Func<Task> _close;
+
+        public PresenceAdapter(Func<bool> open, Func<Task> close)
+        {
+            _open = open;
+            _close = close;
+        }
+
+        public bool Open => _open();
+        public bool Modal => false;
+        public string ContentId { get; } = $"navius-toast-content-{Guid.NewGuid():N}";
+        public ElementReference TriggerElement => default;
+        public bool HasTrigger => false;
+
+        public event Func<Task>? Changed;
+
+        public Task RequestCloseAsync() => _close();
+
+        public Task RaiseChangedAsync() => Changed?.Invoke() ?? Task.CompletedTask;
+    }
+}

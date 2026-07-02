@@ -1,0 +1,226 @@
+@page "/wave3"
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-10">
+    <h1 class="text-2xl font-semibold tracking-tight">Navius — Wave 3 (spec parity, the hard ones)</h1>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Slider</h2>
+        <div class="w-64 py-2">
+            <NaviusSlider @bind-Value="_volume" Min="0" Max="100" Step="1"
+                          class="relative flex w-full touch-none select-none items-center">
+                <NaviusSliderTrack class="relative h-1.5 w-full grow overflow-hidden rounded-full bg-muted">
+                    <NaviusSliderRange class="absolute h-full bg-primary" />
+                </NaviusSliderTrack>
+                <NaviusSliderThumb class="block h-4 w-4 -translate-x-1/2 rounded-full border border-primary/50 bg-background shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+            </NaviusSlider>
+            <p class="mt-3 text-sm text-muted-foreground">Value: <span data-slider-value>@_volume[0]</span></p>
+        </div>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">ScrollArea</h2>
+        <NaviusScrollArea Type="always" class="relative h-48 w-64 overflow-hidden rounded-md border border-border bg-card text-card-foreground">
+            <NaviusScrollAreaViewport class="h-full w-full overflow-auto">
+                <div class="p-4">
+                    @foreach (var i in Enumerable.Range(1, 40))
+                    {
+                        <div class="border-t border-border py-2 text-sm text-muted-foreground">Row @i — lorem ipsum dolor sit amet</div>
+                    }
+                </div>
+            </NaviusScrollAreaViewport>
+            <NaviusScrollAreaScrollbar Orientation="vertical" class="absolute right-0 top-0 flex h-full w-2.5 select-none touch-none p-px">
+                <NaviusScrollAreaThumb class="flex-1 rounded-full bg-muted-foreground/40" />
+            </NaviusScrollAreaScrollbar>
+        </NaviusScrollArea>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">NavigationMenu</h2>
+        @*
+            Standalone layout (no shared Viewport under the root): each Item nests its own
+            Base UI Portal > Positioner > Popup > Content, anchored to that item's trigger.
+            The Popup owns presence + the dismissable layer + positioning (engine mirrors
+            data-side onto it); the Content is the sliding panel (data-activation-direction).
+            Uses the brain parts directly. No data-state anywhere; the Arrow replaces the
+            former Indicator.
+        *@
+        <NaviusNavigationMenu class="relative flex max-w-max">
+            <NaviusNavigationMenuList class="flex list-none items-center gap-1 rounded-md border border-border bg-background p-1">
+                <NaviusNavigationMenuItem Value="products" class="relative">
+                    <NaviusNavigationMenuTrigger class="group inline-flex h-9 items-center rounded-md px-4 text-sm font-medium outline-none hover:bg-accent focus:bg-accent data-[popup-open]:bg-accent">
+                        Products
+                        <NaviusNavigationMenuIcon class="ml-1 inline-flex transition duration-300 data-[popup-open]:rotate-180">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3"><path d="m6 9 6 6 6-6" /></svg>
+                        </NaviusNavigationMenuIcon>
+                    </NaviusNavigationMenuTrigger>
+                    <NaviusNavigationMenuPortal>
+                        <NaviusNavigationMenuPositioner Side="bottom" Align="start" SideOffset="8">
+                            <NaviusNavigationMenuPopup class="z-50 outline-none data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-90">
+                                <NaviusNavigationMenuArrow class="fill-border" />
+                                <NaviusNavigationMenuContent class="w-72 rounded-md border border-border bg-card p-3 text-card-foreground shadow-md data-[activation-direction=right]:slide-in-from-right-8 data-[activation-direction=left]:slide-in-from-left-8 data-[activation-direction]:animate-in">
+                                    <ul class="grid gap-1">
+                                        <li><NaviusNavigationMenuLink Href="/analytics" class="block rounded-md p-2 text-sm hover:bg-accent hover:text-accent-foreground">Analytics</NaviusNavigationMenuLink></li>
+                                        <li><NaviusNavigationMenuLink Href="/automations" class="block rounded-md p-2 text-sm hover:bg-accent hover:text-accent-foreground">Automations</NaviusNavigationMenuLink></li>
+                                    </ul>
+                                </NaviusNavigationMenuContent>
+                            </NaviusNavigationMenuPopup>
+                        </NaviusNavigationMenuPositioner>
+                    </NaviusNavigationMenuPortal>
+                </NaviusNavigationMenuItem>
+                <NaviusNavigationMenuItem Value="solutions" class="relative">
+                    <NaviusNavigationMenuTrigger class="group inline-flex h-9 items-center rounded-md px-4 text-sm font-medium outline-none hover:bg-accent focus:bg-accent data-[popup-open]:bg-accent">
+                        Solutions
+                        <NaviusNavigationMenuIcon class="ml-1 inline-flex transition duration-300 data-[popup-open]:rotate-180">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3"><path d="m6 9 6 6 6-6" /></svg>
+                        </NaviusNavigationMenuIcon>
+                    </NaviusNavigationMenuTrigger>
+                    <NaviusNavigationMenuPortal>
+                        <NaviusNavigationMenuPositioner Side="bottom" Align="start" SideOffset="8">
+                            <NaviusNavigationMenuPopup class="z-50 outline-none data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-90">
+                                <NaviusNavigationMenuArrow class="fill-border" />
+                                <NaviusNavigationMenuContent class="w-72 rounded-md border border-border bg-card p-3 text-card-foreground shadow-md data-[activation-direction=right]:slide-in-from-right-8 data-[activation-direction=left]:slide-in-from-left-8 data-[activation-direction]:animate-in">
+                                    <ul class="grid gap-1">
+                                        <li><NaviusNavigationMenuLink Href="/support" class="block rounded-md p-2 text-sm hover:bg-accent hover:text-accent-foreground">Support</NaviusNavigationMenuLink></li>
+                                        <li><NaviusNavigationMenuLink Href="/consulting" class="block rounded-md p-2 text-sm hover:bg-accent hover:text-accent-foreground">Consulting</NaviusNavigationMenuLink></li>
+                                    </ul>
+                                </NaviusNavigationMenuContent>
+                            </NaviusNavigationMenuPopup>
+                        </NaviusNavigationMenuPositioner>
+                    </NaviusNavigationMenuPortal>
+                </NaviusNavigationMenuItem>
+                <NaviusNavigationMenuItem Value="docs" class="relative">
+                    <NaviusNavigationMenuLink Href="/docs" class="inline-flex h-9 items-center rounded-md px-4 text-sm font-medium hover:bg-accent">Docs</NaviusNavigationMenuLink>
+                </NaviusNavigationMenuItem>
+            </NaviusNavigationMenuList>
+        </NaviusNavigationMenu>
+    </section>
+
+    <section class="space-y-2" data-navius-navmenu-shared>
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">NavigationMenu (shared viewport)</h2>
+        @*
+            Shared-viewport layout via the helm (Viewport=true): ONE root-level
+            Portal > Positioner > Popup > (Arrow + Viewport). Each item's Content teleports
+            its panel into the single resizing Viewport, which morphs/re-anchors between
+            active items (the bespoke moving-anchor re-place). No data-state anywhere.
+        *@
+        <ZitsNavigationMenu>
+            <ZitsNavigationMenuList>
+                <ZitsNavigationMenuItem Value="learn">
+                    <ZitsNavigationMenuTrigger>Learn</ZitsNavigationMenuTrigger>
+                    <ZitsNavigationMenuContent>
+                        <ul class="grid w-64 gap-1 p-2">
+                            <li><ZitsNavigationMenuLink Href="/guides" class="block rounded-md p-2 text-sm hover:bg-accent hover:text-accent-foreground">Guides</ZitsNavigationMenuLink></li>
+                            <li><ZitsNavigationMenuLink Href="/tutorials" class="block rounded-md p-2 text-sm hover:bg-accent hover:text-accent-foreground">Tutorials</ZitsNavigationMenuLink></li>
+                        </ul>
+                    </ZitsNavigationMenuContent>
+                </ZitsNavigationMenuItem>
+                <ZitsNavigationMenuItem Value="company">
+                    <ZitsNavigationMenuTrigger>Company</ZitsNavigationMenuTrigger>
+                    <ZitsNavigationMenuContent>
+                        <ul class="grid w-72 gap-1 p-2">
+                            <li><ZitsNavigationMenuLink Href="/about" class="block rounded-md p-2 text-sm hover:bg-accent hover:text-accent-foreground">About us — the team behind it all</ZitsNavigationMenuLink></li>
+                            <li><ZitsNavigationMenuLink Href="/careers" class="block rounded-md p-2 text-sm hover:bg-accent hover:text-accent-foreground">Careers</ZitsNavigationMenuLink></li>
+                        </ul>
+                    </ZitsNavigationMenuContent>
+                </ZitsNavigationMenuItem>
+            </ZitsNavigationMenuList>
+        </ZitsNavigationMenu>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Field + Form (validation, errors-by-name)</h2>
+        <NaviusForm OnSubmit="HandleSubmit" Errors="_formErrors" class="w-72 space-y-3 rounded-lg border border-border bg-card p-4 text-card-foreground">
+            <NaviusField Name="email" ValidationMode="FieldValidationMode.OnChange" class="flex flex-col gap-1.5">
+                <div class="flex items-baseline justify-between">
+                    <NaviusFieldLabel class="text-sm font-medium">Email</NaviusFieldLabel>
+                    <NaviusFieldError Match="typeMismatch" data-navius-email-error class="text-xs text-destructive">Enter a valid email</NaviusFieldError>
+                </div>
+                <NaviusFieldControl type="email" required="required" data-navius-email placeholder="you@example.com"
+                                    class="h-9 rounded-md border border-input bg-background px-3 text-sm data-[invalid]:border-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                <NaviusFieldDescription class="text-xs text-muted-foreground">We'll never share it.</NaviusFieldDescription>
+            </NaviusField>
+
+            <NaviusField Name="promo" class="flex flex-col gap-1.5">
+                <NaviusFieldLabel class="text-sm font-medium">Promo code</NaviusFieldLabel>
+                <NaviusFieldControl data-navius-promo
+                                    class="h-9 rounded-md border border-input bg-background px-3 text-sm data-[invalid]:border-destructive" />
+                <NaviusFieldError data-navius-promo-error class="text-xs text-destructive" />
+            </NaviusField>
+
+            <div class="flex gap-2">
+                <button type="submit" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Save</button>
+                <button type="button" @onclick="RejectPromo" class="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm">Reject promo</button>
+            </div>
+        </NaviusForm>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Fieldset (disabled cascade) + Input</h2>
+        <div class="space-y-3">
+            <label class="flex items-center gap-2 text-sm text-muted-foreground">
+                <input type="checkbox" @bind="_fieldsetDisabled" data-navius-fieldset-toggle /> Disable the fieldset
+            </label>
+            <NaviusFieldset Disabled="_fieldsetDisabled" data-navius-fieldset-demo
+                            class="w-72 space-y-2 rounded-lg border border-border bg-card p-4 text-card-foreground data-[disabled]:opacity-60">
+                <NaviusFieldsetLegend class="text-sm font-medium" data-navius-legend>Shipping</NaviusFieldsetLegend>
+                <NaviusField Name="city" class="flex flex-col gap-1.5">
+                    <NaviusFieldLabel class="text-sm">City</NaviusFieldLabel>
+                    <NaviusFieldControl data-navius-city
+                                        class="h-9 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50" />
+                </NaviusField>
+            </NaviusFieldset>
+
+            <div class="w-72">
+                <NaviusInput DefaultValue="hello" data-navius-standalone-input
+                             class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm data-[filled]:border-primary data-[focused]:ring-2 data-[focused]:ring-ring focus-visible:outline-none" />
+            </div>
+        </div>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Number Field</h2>
+        <NaviusNumberField @bind-Value="_qty" Min="0" Max="10" Step="1" LargeStep="5" data-navius-numfield>
+            <NaviusNumberFieldGroup class="inline-flex items-center overflow-hidden rounded-md border border-input">
+                <NaviusNumberFieldDecrement data-navius-numfield-dec
+                                            class="grid h-9 w-9 place-items-center text-sm hover:bg-accent disabled:opacity-40">−</NaviusNumberFieldDecrement>
+                <NaviusNumberFieldInput data-navius-numfield-input
+                                        class="h-9 w-16 border-x border-input bg-background px-2 text-center text-sm tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" />
+                <NaviusNumberFieldIncrement data-navius-numfield-inc
+                                            class="grid h-9 w-9 place-items-center text-sm hover:bg-accent disabled:opacity-40">+</NaviusNumberFieldIncrement>
+            </NaviusNumberFieldGroup>
+        </NaviusNumberField>
+        <p class="text-xs text-muted-foreground">value: <span data-numfield-value>@(_qty?.ToString() ?? "—")</span></p>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Slot (asChild approximation)</h2>
+        <NaviusSlot Attributes="_forwarded" Context="attrs">
+            <a href="/dashboard"
+               @attributes="attrs"
+               class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                Go to dashboard
+            </a>
+        </NaviusSlot>
+    </section>
+</div>
+
+@code {
+    private IReadOnlyList<double> _volume = new double[] { 50 };
+
+    private IReadOnlyDictionary<string, string[]>? _formErrors;
+    private bool _fieldsetDisabled;
+    private double? _qty = 3;
+
+    private Task HandleSubmit() => Task.CompletedTask;
+
+    // Push a server-side error keyed by field name (the spec errors-by-name); the
+    // promo field's catch-all Error surfaces it and it auto-clears when the user edits.
+    private void RejectPromo() =>
+        _formErrors = new Dictionary<string, string[]> { ["promo"] = new[] { "That promo code is invalid" } };
+
+    private readonly Dictionary<string, object> _forwarded = new()
+    {
+        ["data-navius-trigger"] = "open",
+        ["aria-haspopup"] = "dialog",
+    };
+}

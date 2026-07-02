@@ -1,0 +1,20 @@
+@namespace Navius.Playground
+
+@*
+    Demo consumer: reads the NaviusDirection cascade and stamps `dir`, proving the
+    now DOM-transparent NaviusDirectionProvider reaches descendant components
+    (this is exactly how real direction-aware primitives consume it).
+*@
+<div data-navius-direction-readout dir="@(Dir ?? "ltr")" @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter(Name = "NaviusDirection")]
+    public string? Dir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

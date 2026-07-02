@@ -1,0 +1,79 @@
+@namespace Navius.Primitives.Portal
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    the spec Portal.Root. Renders ChildContent into a wrapper element, then physically
+    relocates that wrapper to document.body (or the Container target) in the real DOM
+    via the engine's teleport helper. Because the node lives at the body level it
+    escapes the overflow:hidden, transform, and z-index stacking contexts of ALL
+    ancestors — a true document.body portal, not a Blazor-tree outlet.
+
+    Self-contained: no DI registration and no <NaviusPortalOutlet /> mount are
+    required. The wrapper uses display:contents so it generates no box of its own;
+    the portaled markup lays out as a direct child of the target.
+*@
+
+<div @ref="_element"
+     data-navius-portal
+     style="display:contents"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// CSS selector for the element the portal mounts into. When null (the default)
+    /// the portal mounts into <c>document.body</c>, matching the spec's default container.
+    /// Mirrors the spec's <c>container</c> prop (which there is an HTMLElement); here it is
+    /// a selector resolved against the live DOM.
+    /// </summary>
+    [Parameter] public string? Container { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private Teleport? _teleport;
+    private string? _teleportedTo;
+    private bool _teleported;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // (Re)teleport on first render and whenever the Container target changes.
+        if (!_teleported || _teleportedTo != Container)
+        {
+            await ReleaseTeleportAsync();
+
+            _interop ??= new NaviusJsInterop(JS);
+            _teleport = Container is null
+                ? await _interop.TeleportToBodyAsync(_element)
+                : await _interop.TeleportToBodyAsync(_element, Container);
+
+            _teleported = true;
+            _teleportedTo = Container;
+        }
+    }
+
+    private async Task ReleaseTeleportAsync()
+    {
+        if (_teleport is not null)
+        {
+            await _teleport.DisposeAsync();
+            _teleport = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await ReleaseTeleportAsync();
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+    }
+}

@@ -1,0 +1,123 @@
+@namespace Navius.Primitives.Components.RadioGroup
+@inherits RadioGroupPart
+
+@*
+    role=radio. Roving tabindex: the checked radio is in the Tab order (tabindex=0);
+    if nothing is checked, the first enabled radio is tabindex=0 so the group is
+    reachable; all others are -1 and reached via arrow keys. Space / click selects.
+    Emits Base UI's discrete data-checked / data-unchecked (+ data-disabled /
+    data-readonly / data-required). A visually-hidden mirror input carries the value
+    into native form submission when Name is set on the group.
+*@
+
+<CascadingValue Value="_itemContext" IsFixed="true">
+    <button @ref="_element"
+            type="button"
+            role="radio"
+            aria-checked="@(IsChecked ? "true" : "false")"
+            aria-readonly="@(IsReadOnly ? "true" : null)"
+            aria-required="@(IsRequired ? "true" : null)"
+            tabindex="@TabIndex"
+            disabled="@IsDisabled"
+            data-checked="@(IsChecked ? "" : null)"
+            data-unchecked="@(IsChecked ? null : "")"
+            data-disabled="@(IsDisabled ? "" : null)"
+            data-readonly="@(IsReadOnly ? "" : null)"
+            data-required="@(IsRequired ? "" : null)"
+            data-navius-radio-group-item
+            @onclick="SelectAsync"
+            @onkeydown="OnKeyDownAsync"
+            @attributes="Attributes">
+        @ChildContent
+    </button>
+</CascadingValue>
+@if (Context.Name is not null)
+{
+    @* Native form mirror. Rendered for every item (even unchecked) so a
+       required group with no selection still blocks submission with native
+       validation. Only the checked item carries the checked attribute. *@
+    <NaviusBubbleInput InputType="radio"
+                       Name="@Context.Name"
+                       Value="@Value"
+                       Checked="IsChecked"
+                       Required="IsRequired"
+                       Disabled="IsDisabled"
+                       data-navius-radio-group-input />
+}
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public bool Required { get; set; }
+
+    /// <summary>When true the radio is focusable but its selection cannot be changed (the spec <c>readOnly</c>).</summary>
+    [Parameter] public bool ReadOnly { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private RadioGroupItemContext _itemContext = default!;
+
+    // Group-level Required applies to every radio; per-item Required also counts.
+    private bool IsRequired => Required || Context.Required;
+
+    private bool IsChecked => Context.Value == Value;
+
+    private bool IsDisabled => Disabled || Context.Disabled;
+
+    private bool IsReadOnly => ReadOnly;
+
+    private int TabIndex
+    {
+        get
+        {
+            if (IsDisabled)
+            {
+                return -1;
+            }
+
+            // Checked item is focusable; otherwise the first enabled item keeps
+            // the group reachable when nothing is selected yet.
+            if (Context.Value is null)
+            {
+                return Context.IsFirstEnabled(Value) ? 0 : -1;
+            }
+
+            return IsChecked ? 0 : -1;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _itemContext = new RadioGroupItemContext(() => IsChecked, () => IsDisabled, () => IsReadOnly, () => IsRequired);
+        Context.Register(Value, () => _element, () => IsDisabled);
+    }
+
+    private async Task SelectAsync()
+    {
+        if (IsDisabled || IsReadOnly)
+        {
+            return;
+        }
+
+        await Context.SelectAsync(Value);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        // WAI-ARIA radio pattern: only Space checks the focused radio; Enter is
+        // not an activation key (it submits the form instead).
+        if (e.Key == " ")
+        {
+            await SelectAsync();
+        }
+    }
+
+    protected override void OnDispose() => Context.Unregister(Value);
+}

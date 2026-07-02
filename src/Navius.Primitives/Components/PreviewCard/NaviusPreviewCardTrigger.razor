@@ -1,0 +1,39 @@
+@namespace Navius.Primitives.Components.PreviewCard
+@inherits PreviewCardPart
+
+@*
+    Anchor for the preview card (the spec PreviewCard.Trigger). Opens on pointer-enter
+    (after OpenDelay) and immediately on keyboard focus; closes on pointer-leave or blur
+    (after CloseDelay). Rendered as an <a> so it stays focusable and link-like. Emits
+    Base UI's discrete data-popup-open (present only when open). Captures its element ref
+    so the popup positions against it.
+*@
+
+<a @ref="_element"
+   data-popup-open="@(Context.Open ? "" : null)"
+   data-navius-preview-card-trigger
+   @onpointerenter="Context.OpenDelayed"
+   @onpointerleave="Context.CloseDelayed"
+   @onfocus="Context.OpenNow"
+   @onblur="Context.CloseDelayed"
+   @attributes="Attributes">
+    @ChildContent
+</a>
+
+@code {
+    private ElementReference _element;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Context.TriggerElement = _element;
+            Context.HasTrigger = true;
+        }
+    }
+}

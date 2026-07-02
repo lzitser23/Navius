@@ -1,0 +1,35 @@
+@namespace Navius.Primitives.Components.Drawer
+@inherits OverlayPresence
+
+@*
+    The drawer backdrop (the spec Drawer.Backdrop). A presentational scrim portaled as a
+    sibling of the popup. Carries discrete data-open / data-closed + data-starting-style /
+    data-ending-style. Outside dismissal is owned by the Popup's dismissable layer.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="Element"
+             data-open="@(Context.Open ? "" : null)"
+             data-closed="@(Context.Open ? null : "")"
+             data-starting-style="@(Entering ? "" : null)"
+             data-ending-style="@(Exiting ? "" : null)"
+             data-navius-drawer-backdrop
+             @attributes="Attributes">
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private DrawerContext Context { get; set; } = default!;
+
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override IOverlayContext OverlayContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalForceMount == true;
+}

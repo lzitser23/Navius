@@ -1,0 +1,116 @@
+@namespace Navius.Primitives.Components.ContextMenu
+@inherits ContextMenuPart
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    The right-clickable area. @oncontextmenu:preventDefault suppresses the native
+    browser context menu, captures the pointer coordinates (clientX/clientY), and
+    opens the menu anchored at that point. On touch devices a long-press (engine
+    CreateLongPressAsync) opens the menu at the touch point. Also supports the
+    keyboard menu key (Shift+F10 / ContextMenu) per the APG, opening anchored at the
+    element's own rect (measured via GetRectAsync) rather than the viewport corner.
+    Carries no ARIA (spec parity) — it is the surface, not a button.
+*@
+
+<div @ref="_element"
+     data-popup-open="@(Context.Open ? "" : null)"
+     data-disabled="@(Disabled ? "" : null)"
+     data-navius-context-menu-trigger
+     @oncontextmenu="OnContextMenuAsync"
+     @oncontextmenu:preventDefault="true"
+     @onkeydown="OnKeyDownAsync"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private LongPress? _longPress;
+    private DotNetObjectReference<NaviusContextMenuTrigger>? _selfRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Context.TriggerElement = _element;
+            Context.HasTrigger = true;
+
+            // Touch long-press opens the menu at the touch point (spec parity).
+            _interop ??= new NaviusJsInterop(JS);
+            _selfRef ??= DotNetObjectReference.Create(this);
+            _longPress = await _interop.CreateLongPressAsync(_element, _selfRef, new LongPressOptions());
+        }
+    }
+
+    private async Task OnContextMenuAsync(MouseEventArgs e)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        await Context.RequestOpenAtAsync(e.ClientX, e.ClientY);
+    }
+
+    /// <summary>Invoked by the engine after a touch press-and-hold; opens at the touch coordinates.</summary>
+    [JSInvokable]
+    public async Task OnLongPress(double x, double y)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        await Context.RequestOpenAtAsync(x, y);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        // APG keyboard equivalents for invoking a context menu.
+        var isMenuKey = e.Key == "ContextMenu" || (e.Key == "F10" && e.ShiftKey);
+        if (isMenuKey)
+        {
+            // Anchor at the focused trigger's location instead of the viewport corner.
+            _interop ??= new NaviusJsInterop(JS);
+            try
+            {
+                var rect = await _interop.GetRectAsync(_element);
+                await Context.RequestOpenAtAsync(rect.Left, rect.Top + rect.Height);
+            }
+            catch
+            {
+                // Fall back to the viewport origin if measurement fails.
+                await Context.RequestOpenAtAsync(0, 0);
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_longPress is not null)
+        {
+            await _longPress.DisposeAsync();
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+
+        _selfRef?.Dispose();
+    }
+}

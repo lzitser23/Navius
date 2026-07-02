@@ -1,0 +1,177 @@
+@namespace Navius.Primitives.Components.ContextMenu
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    A nested submenu surface. Anchored to its SubTrigger (side=right align=start, the
+    the spec default; rtl flips to left). On open it engages positioning, a dismissable
+    layer, and roving focus (DataHighlight, non-looping) which focuses the first sub
+    item. ArrowLeft (ArrowRight in rtl) closes the submenu and restores focus to the
+    SubTrigger. Mirrors the spec ContextMenu.SubContent. role="menu"; the engine
+    positions it, so add NO position classes.
+*@
+
+@*
+    Kept inline (not portaled) so it stays inside the parent Content's DOM subtree
+    (and its roving/dismiss scope); the engine positioner still places it against the
+    SubTrigger. data-side/align reflect the resolved placement.
+*@
+@if (Sub.Open || ForceMount)
+{
+    <div @ref="_element"
+         id="@Sub.ContentId"
+         role="menu"
+         tabindex="-1"
+         aria-labelledby="@Sub.TriggerId"
+         data-open="@(Sub.Open ? "" : null)"
+         data-closed="@(Sub.Open ? null : "")"
+         data-side="@EffectiveSide"
+         data-align="@Align"
+         data-navius-context-menu-sub-content
+         @onkeydown="OnKeyDownAsync"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [CascadingParameter] private ContextMenuSubContext Sub { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    /// <summary>Submenus open to the side (right in ltr). rtl flips to left.</summary>
+    [Parameter] public string Side { get; set; } = "right";
+
+    [Parameter] public string Align { get; set; } = "start";
+
+    [Parameter] public double SideOffset { get; set; }
+
+    [Parameter] public double AlignOffset { get; set; }
+
+    [Parameter] public bool AvoidCollisions { get; set; } = true;
+
+    [Parameter] public double? CollisionPadding { get; set; }
+
+    /// <summary>Roving wraps at the ends only when true (the spec submenus default false).</summary>
+    [Parameter] public bool Loop { get; set; }
+
+    /// <summary>Keep mounted while closed (for exit animations).</summary>
+    [Parameter] public bool ForceMount { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] private string? CascadedDir { get; set; }
+
+    [Parameter] public string? Dir { get; set; }
+
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private Positioner? _positioner;
+    private DismissableLayer? _dismiss;
+    private RovingFocus? _roving;
+    private DotNetObjectReference<NaviusContextMenuSubContent>? _selfRef;
+    private bool _engaged;
+    private Func<Task>? _onChange;
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    // In rtl a "right" preference becomes "left".
+    private string EffectiveSide => EffectiveDir == "rtl" && Side == "right" ? "left" : Side;
+
+    private string CloseKey => EffectiveDir == "rtl" ? "ArrowRight" : "ArrowLeft";
+
+    protected override void OnInitialized()
+    {
+        _onChange = () => InvokeAsync(StateHasChanged);
+        Sub.Changed += _onChange;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Sub.Open && !_engaged)
+        {
+            _engaged = true;
+            _interop ??= new NaviusJsInterop(JS);
+            _selfRef ??= DotNetObjectReference.Create(this);
+
+            _positioner = await _interop.CreatePositionerAsync(
+                Sub.TriggerElement, _element,
+                new PositionOptions(EffectiveSide, Align, SideOffset, AlignOffset,
+                    Flip: AvoidCollisions, AvoidCollisions: AvoidCollisions,
+                    CollisionPadding: CollisionPadding));
+
+            _dismiss = await _interop.CreateDismissableLayerAsync(
+                _element, Sub.TriggerElement, _selfRef, new DismissOptions());
+
+            _roving = await _interop.CreateRovingFocusAsync(
+                _element,
+                new RovingFocusOptions(
+                    Selector: "[role=\"menuitem\"]:not([data-disabled]),[role=\"menuitemcheckbox\"]:not([data-disabled]),[role=\"menuitemradio\"]:not([data-disabled])",
+                    Loop: Loop,
+                    DataHighlight: true,
+                    Dir: EffectiveDir));
+        }
+        else if (!Sub.Open && _engaged)
+        {
+            _engaged = false;
+            await ReleaseAsync();
+
+            if (Sub.HasTrigger)
+            {
+                try { await Sub.TriggerElement.FocusAsync(); }
+                catch { /* trigger may be gone during teardown */ }
+            }
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == CloseKey)
+        {
+            // Close this submenu and return focus to its trigger (handled on teardown).
+            await Sub.RequestCloseAsync();
+        }
+    }
+
+    [JSInvokable]
+    public Task OnDismiss(string reason) => Sub.RequestCloseAsync();
+
+    private async Task ReleaseAsync()
+    {
+        if (_roving is not null)
+        {
+            await _roving.DisposeAsync();
+            _roving = null;
+        }
+
+        if (_positioner is not null)
+        {
+            await _positioner.DisposeAsync();
+            _positioner = null;
+        }
+
+        if (_dismiss is not null)
+        {
+            await _dismiss.DisposeAsync();
+            _dismiss = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_onChange is not null)
+        {
+            Sub.Changed -= _onChange;
+        }
+
+        await ReleaseAsync();
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+
+        _selfRef?.Dispose();
+    }
+}

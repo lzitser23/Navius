@@ -1,0 +1,106 @@
+@namespace Navius.Primitives.Components.Menubar
+@inherits Navius.Primitives.Components.Overlays.OverlayAnchoredPopupBase
+
+@*
+    The spec Menubar.Popup — the menu surface for one menubar menu, wrapped in the Positioner
+    <div> the engine anchors to the trigger. On open the shared base engages anchored
+    positioning + a dismissable layer (and, when modal, locks scroll); this Popup then adds
+    roving focus (which focuses the first item, mirrors data-highlighted, and does NOT loop by
+    default per the spec) — a menu uses roving rather than a focus trap. ArrowLeft/Right at the
+    top level move to the adjacent menu (reopening it). On close the base tears everything down
+    and returns focus to the trigger. C# owns the discrete data-open / data-closed +
+    data-starting-style / data-ending-style. role="menu"; items are role="menuitem".
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="PositionerElement"
+             data-navius-menubar-positioner
+             style="position:fixed;top:0;left:0;margin:0"
+             @attributes="Context.PositionerAttributes">
+            <div @ref="Element"
+                 id="@Context.ContentId"
+                 role="menu"
+                 tabindex="-1"
+                 aria-labelledby="@Context.TriggerId"
+                 aria-orientation="vertical"
+                 data-orientation="vertical"
+                 dir="@(Context.Dir == "rtl" ? "rtl" : null)"
+                 data-open="@(Context.Open ? "" : null)"
+                 data-closed="@(Context.Open ? null : "")"
+                 data-starting-style="@(Entering ? "" : null)"
+                 data-ending-style="@(Exiting ? "" : null)"
+                 data-navius-menubar-popup
+                 @onkeydown="OnKeyDownAsync"
+                 @attributes="Attributes">
+                @ChildContent
+            </div>
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private MenubarMenuContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>When true arrow navigation wraps at the ends (the spec default false).</summary>
+    [Parameter] public bool Loop { get; set; }
+
+    private RovingFocus? _roving;
+
+    protected override IAnchoredOverlayContext AnchoredContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+
+    // A menu manages focus with roving tabindex, not a focus trap; the base still focuses the
+    // popup on open (so focus lands inside) and restores it to the trigger on close — roving
+    // then moves focus onto the first item.
+    protected override bool TrapFocus => false;
+
+    protected override async Task EngageAsync()
+    {
+        await base.EngageAsync();
+        _roving = await Interop!.CreateRovingFocusAsync(
+            Element,
+            new RovingFocusOptions(
+                "vertical",
+                Selector: "[role=\"menuitem\"]:not([data-disabled]),[role=\"menuitemcheckbox\"]:not([data-disabled]),[role=\"menuitemradio\"]:not([data-disabled])",
+                Loop: Loop,
+                AutoFocus: !OpenAutoFocusPrevented,
+                DataHighlight: true,
+                Dir: Context.Dir));
+    }
+
+    protected override async Task DisengageAsync()
+    {
+        if (_roving is not null)
+        {
+            await _roving.DisposeAsync();
+            _roving = null;
+        }
+        await base.DisengageAsync();
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        // ArrowLeft/Right at the top level move to the adjacent menu, reopening it (the spec
+        // menubar). The engine's vertical roving ignores Left/Right, so they bubble here. A
+        // SubTrigger that just opened a submenu sets SuppressAdjacentOnce so its open key isn't
+        // double-handled.
+        if (e.Key != "ArrowRight" && e.Key != "ArrowLeft")
+        {
+            return;
+        }
+
+        if (Context.ConsumeSuppressAdjacent())
+        {
+            return;
+        }
+
+        var rtl = Context.Dir == "rtl";
+        var next = rtl ? "ArrowLeft" : "ArrowRight";
+        await Context.MoveToAdjacentAsync(e.Key == next ? 1 : -1);
+    }
+}

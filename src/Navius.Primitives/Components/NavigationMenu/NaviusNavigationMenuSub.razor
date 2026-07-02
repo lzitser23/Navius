@@ -1,0 +1,129 @@
+@namespace Navius.Primitives.Components.NavigationMenu
+@inherits ComponentBase
+@implements IDisposable
+
+@*
+    the spec's NavigationMenu.Sub — a nested submenu root placed inside a Content panel. It
+    owns its OWN open value (controlled via @bind-Value / uncontrolled via DefaultValue)
+    and orientation, cascading a fresh NavigationMenuContext that shadows the parent's so
+    descendant List / Item / Trigger / Content operate on the submenu's state.
+
+    Rendered as a <div> (NOT a <nav> — only the outermost menu is the navigation landmark)
+    with data-orientation. Hover open/close timing mirrors the root. ZERO styling.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div data-navius-navigationmenu-sub
+         data-orientation="@Orientation"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled open value (value of the open sub-item, or null).</summary>
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>Initial open value for uncontrolled use.</summary>
+    [Parameter] public string? DefaultValue { get; set; }
+
+    /// <summary><c>"horizontal"</c> or <c>"vertical"</c> (default). Sub menus default to vertical.</summary>
+    [Parameter] public string Orientation { get; set; } = "vertical";
+
+    /// <summary>Delay (ms) before a hover opens a sub-item's content. Base UI default 50.</summary>
+    [Parameter] public int Delay { get; set; } = 50;
+
+    /// <summary>Delay (ms) before leaving closes the open sub-content. Base UI default 50.</summary>
+    [Parameter] public int CloseDelay { get; set; } = 50;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private NavigationMenuContext _context = default!;
+    private string? _internal;
+    private CancellationTokenSource? _hoverCts;
+
+    private bool IsControlled => ValueChanged.HasDelegate;
+
+    protected override void OnInitialized()
+    {
+        _internal = DefaultValue;
+        _context = new NavigationMenuContext(SetValueAsync, Orientation, isRoot: false);
+        _context.RegisterHover(OnTriggerPointerEnterAsync, OnPointerLeaveAsync, OnPointerReenter);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var current = IsControlled ? Value : _internal;
+        await _context.SetValueInternalAsync(current);
+    }
+
+    private async Task SetValueAsync(string? value)
+    {
+        CancelPendingHover();
+
+        if (IsControlled)
+        {
+            await ValueChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internal = value;
+            await _context.SetValueInternalAsync(value);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnTriggerPointerEnterAsync(string value)
+    {
+        CancelPendingHover();
+
+        if (_context.Value is not null)
+        {
+            await SetValueAsync(value);
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _hoverCts = cts;
+        try
+        {
+            await Task.Delay(Delay, cts.Token);
+            await SetValueAsync(value);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task OnPointerLeaveAsync()
+    {
+        CancelPendingHover();
+
+        var cts = new CancellationTokenSource();
+        _hoverCts = cts;
+        try
+        {
+            await Task.Delay(CloseDelay, cts.Token);
+            await SetValueAsync(null);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private void OnPointerReenter() => CancelPendingHover();
+
+    private void CancelPendingHover()
+    {
+        _hoverCts?.Cancel();
+        _hoverCts?.Dispose();
+        _hoverCts = null;
+    }
+
+    public void Dispose() => CancelPendingHover();
+}

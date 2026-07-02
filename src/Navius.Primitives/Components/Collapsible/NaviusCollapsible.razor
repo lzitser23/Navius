@@ -1,0 +1,51 @@
+@namespace Navius.Primitives.Components.Collapsible
+
+<CascadingValue Value="_context" IsFixed="false">
+    @* Base UI Collapsible.Root exposes no data-* state attributes. *@
+    <div data-navius-collapsible @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public bool DefaultOpen { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    private CollapsibleContext _context = default!;
+    private bool _internalOpen;
+
+    private bool IsControlled => OpenChanged.HasDelegate;
+    private bool CurrentOpen => IsControlled ? Open : _internalOpen;
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _context = new CollapsibleContext(RequestSetOpenAsync);
+        _context.SetDisabled(Disabled);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.SetDisabled(Disabled);
+        await _context.SetOpenInternalAsync(CurrentOpen);
+    }
+
+    private async Task RequestSetOpenAsync(bool open)
+    {
+        if (Disabled) return;
+        if (IsControlled)
+        {
+            await OpenChanged.InvokeAsync(open);
+        }
+        else
+        {
+            _internalOpen = open;
+            await _context.SetOpenInternalAsync(open);
+            StateHasChanged();
+        }
+    }
+}

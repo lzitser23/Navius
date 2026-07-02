@@ -1,0 +1,29 @@
+@namespace Navius.Primitives.Components.Menubar
+
+@*
+    Renders its children only while the parent checkbox/radio item is checked (or always when
+    ForceMount), mirroring the spec's Menubar.ItemIndicator. Reads the parent's state via the
+    cascaded MenubarItemIndicatorContext. ZERO styling.
+*@
+
+@if (Indicator.IsChecked || ForceMount)
+{
+    <span data-navius-menubar-item-indicator
+          data-checked="@(Indicator.IsChecked ? "" : null)"
+          data-unchecked="@(Indicator.IsChecked ? null : "")"
+          @attributes="Attributes">
+        @ChildContent
+    </span>
+}
+
+@code {
+    [CascadingParameter] private MenubarItemIndicatorContext Indicator { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>When true the indicator stays mounted even when unchecked (for CSS animation).</summary>
+    [Parameter] public bool ForceMount { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

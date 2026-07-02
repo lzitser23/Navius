@@ -1,0 +1,47 @@
+@namespace Navius.Primitives.Components.PreviewCard
+@inherits OverlayAnchoredPopupBase
+
+@*
+    The preview card panel (the spec PreviewCard.Popup), wrapped in the Positioner div
+    the engine anchors. Non-modal and NOT a dialog (a hover preview, not role="dialog"):
+    no focus trap, scroll lock, or focus move. Pointer enter/leave keep it open / start
+    the close grace so the cursor can travel trigger->card. Carries discrete data-open /
+    data-closed + data-starting-style / data-ending-style; the engine writes
+    data-side / data-align onto the Positioner and mirrors them here.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="PositionerElement"
+             data-navius-preview-card-positioner
+             style="position:fixed;top:0;left:0;margin:0"
+             @attributes="Context.PositionerAttributes">
+            <div @ref="Element"
+                 id="@Context.ContentId"
+                 data-open="@(Context.Open ? "" : null)"
+                 data-closed="@(Context.Open ? null : "")"
+                 data-starting-style="@(Entering ? "" : null)"
+                 data-ending-style="@(Exiting ? "" : null)"
+                 data-navius-preview-card-popup
+                 @onpointerenter="Context.OpenNow"
+                 @onpointerleave="Context.CloseDelayed"
+                 @attributes="Attributes">
+                @ChildContent
+            </div>
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private PreviewCardContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override IAnchoredOverlayContext AnchoredContext => Context;
+
+    // Preview cards are non-modal and never take focus (the trigger keeps focus).
+    protected override bool MoveFocusInside => false;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+}

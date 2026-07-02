@@ -1,0 +1,29 @@
+@namespace Navius.Primitives.Components.Popover
+
+@*
+    The spec Popover.Portal. A flag-setter: records the custom mount container +
+    keepMounted into the context. The actual teleport to document.body (or the
+    container) is performed by the Popup / Backdrop via <NaviusPortal>, so a single
+    shared portal implementation is used across every overlay (no per-component
+    teleport fork). Renders no DOM of its own.
+*@
+
+@ChildContent
+
+@code {
+    [CascadingParameter] private PopoverContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>CSS selector of a custom mount container; null teleports into <c>document.body</c>.</summary>
+    [Parameter] public string? Container { get; set; }
+
+    /// <summary>Keep the popup + backdrop mounted while the popover is closed (for exit animations).</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        Context.PortalContainer = Container;
+        Context.PortalKeepMounted = KeepMounted;
+    }
+}

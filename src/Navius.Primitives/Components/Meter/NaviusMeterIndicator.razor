@@ -1,0 +1,17 @@
+@namespace Navius.Primitives.Components.Meter
+
+@* Base UI Meter.Indicator — the filled portion. Headless: the consumer sizes it from
+   the value (Base UI Meter exposes no CSS var). Context.Percentage is available for
+   binding a width/height in consumer markup. *@
+<div data-navius-meter-indicator @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private MeterContext Context { get; set; } = default!;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    /// <summary>The min-aware completion percentage (0..100), for sizing the fill in consumer markup.</summary>
+    public double Percentage => Context.Percentage;
+}

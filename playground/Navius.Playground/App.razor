@@ -1,0 +1,12 @@
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <p role="alert">Sorry, there's nothing at this address.</p>
+    </NotFound>
+</Router>
+
+@* Single portal outlet for the whole app — portaled content renders here. *@
+<NaviusPortalOutlet />

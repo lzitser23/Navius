@@ -1,0 +1,20 @@
+@namespace Navius.Primitives.Components.Drawer
+
+@* The spec Drawer.Portal. Flag-setter: records the container + keepMounted into the
+   context; the Popup / Backdrop teleport via <NaviusPortal>. Renders no DOM. *@
+
+@ChildContent
+
+@code {
+    [CascadingParameter] private DrawerContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Container { get; set; }
+    [Parameter] public bool KeepMounted { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        Context.PortalContainer = Container;
+        Context.PortalForceMount = KeepMounted ? true : null;
+    }
+}

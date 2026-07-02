@@ -1,0 +1,14 @@
+@namespace Navius.Primitives.Components.Combobox
+
+@*
+    The Base UI Combobox.Row — a role="row" passthrough for grid-layout lists.
+*@
+
+<div role="row" data-navius-combobox-row @attributes="Attributes">@ChildContent</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

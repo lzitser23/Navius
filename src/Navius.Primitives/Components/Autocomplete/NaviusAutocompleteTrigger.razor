@@ -1,0 +1,40 @@
+@namespace Navius.Primitives.Components.Autocomplete
+@inherits AutocompletePart
+
+@*
+    The Base UI Autocomplete.Trigger — the optional dropdown toggle button. tabindex=-1 so
+    it never steals Tab focus from the input (which owns focus for virtual navigation);
+    clicking it toggles the popup. data-popup-open reflects the open state.
+*@
+
+<button type="button"
+        @ref="_element"
+        tabindex="-1"
+        data-popup-open="@(Context.Open ? "" : null)"
+        data-navius-autocomplete-trigger
+        @onclick="OnClickAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    private ElementReference _element;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Register so the dismiss layer treats this button as "inside": its click then
+            // toggles the popup instead of firing outside-dismiss (close) then click (reopen).
+            Context.TriggerButtonElement = _element;
+            Context.HasTriggerButton = true;
+        }
+    }
+
+    private Task OnClickAsync() => Context.RequestSetAsync(!Context.Open);
+}

@@ -1,0 +1,32 @@
+@namespace Navius.Primitives.Components.Drawer
+@implements IDisposable
+
+@* The spec Drawer.Title. Registers presence so the Popup wires aria-labelledby only when mounted. *@
+
+<h2 id="@Context.TitleId" data-navius-drawer-title @attributes="Attributes">@ChildContent</h2>
+
+@code {
+    [CascadingParameter] private DrawerContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool _registered;
+
+    protected override void OnInitialized()
+    {
+        Context.RegisterTitle();
+        _registered = true;
+    }
+
+    public void Dispose()
+    {
+        if (_registered)
+        {
+            Context.UnregisterTitle();
+            _registered = false;
+        }
+    }
+}

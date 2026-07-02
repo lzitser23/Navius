@@ -1,0 +1,289 @@
+@namespace Navius.Primitives.Components.NavigationMenu
+@inherits Navius.Primitives.Components.Overlays.OverlayPopupBase
+@using Navius.Primitives.Components.Overlays
+@using Navius.Primitives.Interop
+@using Navius.Primitives.Portal
+
+@*
+    The navigation menu surface — Base UI's NavigationMenu.Popup, wrapped in the
+    Positioner <div> the engine anchors to a trigger. Reuses the shared overlay
+    machinery (presence + dismissable layer via OverlayPopupBase) but OWNS its engine
+    positioner directly, so it can dispose+recreate it against a NEW active trigger when
+    the menu morphs between items while the popup stays open (the bespoke moving-anchor
+    re-place the presence machine cannot express, since Open never toggled).
+
+    Two layouts, chosen by whether the Popup is nested under an Item:
+      * Standalone (Item != null): one popup per item, anchored to that item's trigger,
+        open iff that item is active. Its child Content renders inline.
+      * Shared (Item == null): a single root-level popup hosting the Arrow + Viewport;
+        anchored to the ACTIVE trigger; open iff any item is active. Each item's Content
+        teleports its panel into the Viewport.
+
+    C# owns the discrete data-open / data-closed + data-starting-style / data-ending-style;
+    the engine mirrors data-side / data-align / data-anchor-hidden onto this Popup. It is
+    NOT a menu (site navigation, not a menu widget) so it carries no role; the trigger
+    wires aria-expanded / aria-controls instead. Focus: roving lives on the trigger row,
+    not here — a keyboard open moves focus to the first focusable child; hover leaves it.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="PositionerElement"
+             data-navius-navigationmenu-positioner
+             style="position:fixed;top:0;left:0;margin:0"
+             @attributes="Context.PositionerAttributes">
+            <div @ref="Element"
+                 id="@PopupCtx.ContentId"
+                 tabindex="-1"
+                 aria-labelledby="@LabelledBy"
+                 data-open="@(PopupCtx.Open ? "" : null)"
+                 data-closed="@(PopupCtx.Open ? null : "")"
+                 data-starting-style="@(Entering ? "" : null)"
+                 data-ending-style="@(Exiting ? "" : null)"
+                 data-activation-direction="@Context.ActivationDirection"
+                 data-orientation="@Context.Orientation"
+                 data-navius-navigationmenu-popup
+                 @attributes="Attributes">
+                <CascadingValue Value="_panel" IsFixed="false">
+                    @ChildContent
+                </CascadingValue>
+            </div>
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private NavigationMenuContext Context { get; set; } = default!;
+
+    // Non-null only when this Popup is nested under a single Item (standalone layout).
+    [CascadingParameter] private NaviusNavigationMenuItem? Item { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>The Positioner div the engine transforms — captured as <c>@ref</c>.</summary>
+    protected ElementReference PositionerElement;
+
+    private NavigationMenuPopupContext PopupCtx = default!;
+    private Positioner? _positioner;
+    private string? _lastAnchorValue;
+    private bool _hadArrow;
+    private bool _reAnchorScheduled;
+    private bool _arrowRewireScheduled;
+    private Func<Task>? _onContextChanged;
+    private Func<Task>? _onArrowChanged;
+    private Func<string, Task>? _onFocusPanelRequested;
+
+    protected override IOverlayContext OverlayContext => PopupCtx;
+
+    // Non-modal navigation menu: no scroll-lock, no focus-trap. Roving lives on the
+    // trigger row (the List), so the popup does not run a roving controller of its own.
+    protected override bool TrapFocus => false;
+
+    // The base never auto-focuses the popup: a hover open leaves focus on the trigger; a
+    // keyboard open moves focus to the first child (handled in EngageAsync via the flag).
+    protected override bool MoveFocusInside => false;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+
+    private NavigationMenuPanelState _panel => new(PopupCtx.Open, Entering, Exiting);
+
+    private string? LabelledBy =>
+        PopupCtx.ResolvedValue is { } v ? Context.TriggerId(v) : null;
+
+    protected override void OnInitialized()
+    {
+        PopupCtx = new NavigationMenuPopupContext(Context, Item?.Value);
+
+        // A root-level (Item-less) Popup is the shared-viewport layout: flag it now, from
+        // init, so Content sees shared mode from page load — independent of the Viewport's
+        // open/close mount lifecycle (it lives inside this Popup, mounted only while open).
+        if (Item is null)
+        {
+            Context.RegisterSharedPopup();
+        }
+
+        base.OnInitialized();
+
+        _onContextChanged = HandleContextChangedAsync;
+        _onArrowChanged = HandleArrowChangedAsync;
+        _onFocusPanelRequested = HandleFocusPanelRequestedAsync;
+        Context.Changed += _onContextChanged;
+        Context.ArrowChanged += _onArrowChanged;
+        Context.FocusPanelRequested += _onFocusPanelRequested;
+    }
+
+    protected override async Task EngageAsync()
+    {
+        _lastAnchorValue = PopupCtx.ResolvedValue;
+        await EngagePositionerAsync();
+        await base.EngageAsync();
+
+        // APG: a keyboard-opened panel moves focus to its first focusable child.
+        if (Context.ConsumeKeyboardOpen(PopupCtx.ResolvedValue))
+        {
+            await Interop!.FocusFirstDescendantAsync(Element);
+        }
+
+        await Context.NotifyOpenChangeCompletedAsync(true);
+    }
+
+    protected override async Task DisengageAsync()
+    {
+        await base.DisengageAsync();
+
+        // Drop any pending keyboard-open marker so a later hover/focus open of this same item
+        // can't inherit it and yank focus into the panel (a hover open must leave focus put).
+        Context.ClearKeyboardOpen();
+
+        if (_positioner is not null)
+        {
+            await _positioner.DisposeAsync();
+            _positioner = null;
+        }
+
+        // APG: Esc / dismiss returns focus to the trigger, but only when focus is still
+        // inside this popup (a hover-close left focus on the trigger already).
+        if (Interop is not null && _lastAnchorValue is not null &&
+            Context.TryGetTrigger(_lastAnchorValue, out var trigger))
+        {
+            var restorable = await Interop.IsFocusRestorableAsync(Element);
+            if (restorable)
+            {
+                try { await trigger.FocusAsync(); } catch { /* trigger may be gone */ }
+            }
+        }
+
+        await Context.NotifyOpenChangeCompletedAsync(false);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+
+        if (_reAnchorScheduled)
+        {
+            _reAnchorScheduled = false;
+            await ReanchorAsync();
+        }
+
+        if (_arrowRewireScheduled)
+        {
+            _arrowRewireScheduled = false;
+            await RewireArrowAsync();
+        }
+    }
+
+    private async Task EngagePositionerAsync()
+    {
+        Interop ??= new NaviusJsInterop(JS);
+        _hadArrow = Context.HasArrow;
+        _positioner = await Interop.CreatePositionerAsync(
+            PopupCtx.PositionReference,
+            PositionerElement,
+            Context.Options,
+            Context.HasArrow ? Context.ArrowElement : (ElementReference?)null,
+            Element);
+    }
+
+    // Shared mode: the active item switched while the popup stayed open. Dispose the
+    // positioner and re-create it against the new active trigger (moving anchor).
+    private async Task ReanchorAsync()
+    {
+        if (_positioner is null)
+        {
+            return;
+        }
+
+        _lastAnchorValue = PopupCtx.ResolvedValue;
+        await _positioner.DisposeAsync();
+        _positioner = null;
+        await EngagePositionerAsync();
+
+        // The single shared popup stays engaged across the switch, so the dismissable layer
+        // still excludes the PREVIOUS active trigger. Rebuild it against the now-active
+        // trigger (DismissReference resolves to it) or a click on the active trigger reads
+        // as outside -> dismiss-then-reopen flicker.
+        await RebuildDismissableLayerAsync();
+    }
+
+    // An Arrow registered/unregistered after the popup engaged: re-wire the positioner.
+    private async Task RewireArrowAsync()
+    {
+        if (_positioner is null || Context.HasArrow == _hadArrow)
+        {
+            return;
+        }
+
+        await _positioner.DisposeAsync();
+        _positioner = null;
+        await EngagePositionerAsync();
+    }
+
+    private async Task HandleContextChangedAsync()
+    {
+        // Re-anchor only while engaged, still open, and the active anchor moved.
+        if (_positioner is not null && PopupCtx.Open &&
+            !string.Equals(PopupCtx.ResolvedValue, _lastAnchorValue, StringComparison.Ordinal))
+        {
+            _reAnchorScheduled = true;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task HandleArrowChangedAsync()
+    {
+        if (_positioner is not null && Context.HasArrow != _hadArrow)
+        {
+            _arrowRewireScheduled = true;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // A keyboard "enter content" fired for a value this popup is ALREADY engaged for
+    // (open->open): the open transition didn't toggle, so EngageAsync (and its
+    // ConsumeKeyboardOpen focus path) never re-ran. Move focus into the panel directly.
+    // The closed->open case is skipped here (_positioner still null) and handled by EngageAsync.
+    private async Task HandleFocusPanelRequestedAsync(string value)
+    {
+        if (_positioner is not null && Interop is not null &&
+            string.Equals(PopupCtx.ResolvedValue, value, StringComparison.Ordinal))
+        {
+            await Interop.FocusFirstDescendantAsync(Element);
+        }
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        if (Item is null)
+        {
+            Context.UnregisterSharedPopup();
+        }
+
+        if (_onContextChanged is not null)
+        {
+            Context.Changed -= _onContextChanged;
+            _onContextChanged = null;
+        }
+
+        if (_onArrowChanged is not null)
+        {
+            Context.ArrowChanged -= _onArrowChanged;
+            _onArrowChanged = null;
+        }
+
+        if (_onFocusPanelRequested is not null)
+        {
+            Context.FocusPanelRequested -= _onFocusPanelRequested;
+            _onFocusPanelRequested = null;
+        }
+
+        if (_positioner is not null)
+        {
+            await _positioner.DisposeAsync();
+            _positioner = null;
+        }
+
+        await base.DisposeAsync();
+    }
+}

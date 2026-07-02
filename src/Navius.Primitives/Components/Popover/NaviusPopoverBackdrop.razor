@@ -1,0 +1,37 @@
+@namespace Navius.Primitives.Components.Popover
+@inherits OverlayPresence
+
+@*
+    The spec Popover.Backdrop — a dimming scrim, meaningful in modal mode. Presentational
+    and portaled as a sibling of the positioner so inside-clicks don't bubble here.
+    Carries discrete data-open / data-closed + data-starting-style / data-ending-style.
+    Outside dismissal is owned by the Popup's dismissable layer, not this element.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="Element"
+             data-open="@(Context.Open ? "" : null)"
+             data-closed="@(Context.Open ? null : "")"
+             data-starting-style="@(Entering ? "" : null)"
+             data-ending-style="@(Exiting ? "" : null)"
+             data-navius-popover-backdrop
+             @attributes="Attributes">
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private PopoverContext Context { get; set; } = default!;
+
+    /// <summary>Keep the backdrop mounted while closed (for exit animations).</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override IOverlayContext OverlayContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+}

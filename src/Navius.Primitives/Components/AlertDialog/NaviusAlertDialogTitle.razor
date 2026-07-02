@@ -1,0 +1,14 @@
+@namespace Navius.Primitives.Components.AlertDialog
+
+@* Labels the alert dialog (aria-labelledby points here). Lives inside the content. *@
+
+<h2 id="@Context.TitleId" data-navius-alert-dialog-title @attributes="Attributes">@ChildContent</h2>
+
+@code {
+    [CascadingParameter] private AlertDialogContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

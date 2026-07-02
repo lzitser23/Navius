@@ -1,0 +1,25 @@
+@namespace Navius.Primitives.Components.Toolbar
+
+@*
+    A non-focusable visual divider between groups of toolbar items. role=separator with
+    aria-orientation perpendicular to the toolbar axis (a horizontal toolbar uses a
+    vertical separator). Not a Tab stop and excluded from the roving selector.
+*@
+
+<div role="separator"
+     aria-orientation="@SeparatorOrientation"
+     data-orientation="@SeparatorOrientation"
+     data-navius-toolbar-separator
+     @attributes="Attributes">
+</div>
+
+@code {
+    [CascadingParameter] private ToolbarContext Context { get; set; } = default!;
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    // The separator's own orientation is perpendicular to the toolbar's flow direction.
+    private string SeparatorOrientation =>
+        Context.Orientation == "horizontal" ? "vertical" : "horizontal";
+}

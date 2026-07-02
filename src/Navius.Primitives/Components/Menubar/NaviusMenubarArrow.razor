@@ -1,0 +1,42 @@
+@namespace Navius.Primitives.Components.Menubar
+@implements IAsyncDisposable
+
+@*
+    An optional arrow (default 10x5) pointing from the Popup at its Trigger. Registers its
+    element with the menu context so the Popup wires it into the positioner. Mirrors the spec
+    Menubar.Arrow. Hidden from assistive tech. ZERO styling.
+*@
+
+<svg @ref="_element"
+     width="@Width"
+     height="@Height"
+     viewBox="0 0 @Width @Height"
+     preserveAspectRatio="none"
+     aria-hidden="true"
+     data-navius-menubar-arrow
+     @attributes="Attributes">
+    <polygon points="0,0 @Width,0 @(Width / 2.0),@Height" />
+</svg>
+
+@code {
+    [CascadingParameter] private MenubarMenuContext MenuContext { get; set; } = default!;
+
+    [Parameter] public double Width { get; set; } = 10;
+
+    [Parameter] public double Height { get; set; } = 5;
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await MenuContext.RegisterArrowAsync(_element);
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await MenuContext.UnregisterArrowAsync();
+}

@@ -1,0 +1,16 @@
+@namespace Navius.Primitives.Components.Popover
+@inherits OverlayPositionerBase
+
+@*
+    The spec Popover.Positioner — owns placement (side / align / offsets / collision).
+    A flag-setter (see OverlayPositionerBase): it publishes the placement options + its
+    styling attributes into the context; the Popup renders the positioning <div>.
+*@
+
+@ChildContent
+
+@code {
+    [CascadingParameter] private PopoverContext Context { get; set; } = default!;
+
+    protected override IAnchoredOverlayContext AnchoredContext => Context;
+}

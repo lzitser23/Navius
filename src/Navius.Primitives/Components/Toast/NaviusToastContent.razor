@@ -1,0 +1,39 @@
+@namespace Navius.Primitives.Components.Toast
+@inherits ComponentBase
+
+@*
+    The stacking element between Root and Title/Description/Action/Close. Mirrors the Base UI
+    Toast.Content: it carries data-behind / data-expanded and the C#-computed --toast-* CSS
+    vars (index / height / offset-y / frontmost-height). The helm/consumer CSS turns those
+    vars + flags into the collapsed-overlap vs expanded-fan-out transforms (the brain stays
+    headless — it never computes a transform, only publishes the vars).
+*@
+
+<div data-navius-toast-content
+     data-behind="@(Context.Behind ? "" : null)"
+     data-expanded="@(Context.Expanded ? "" : null)"
+     style="@StackStyle"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private ToastContext Context { get; set; } = default!;
+    [CascadingParameter] private ToastProviderContext Provider { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private string StackStyle
+    {
+        get
+        {
+            var height = Context.Height.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var offset = Provider.OffsetYFor(Context.Index).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var frontmost = Provider.FrontmostHeight.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return $"--toast-index:{Context.Index};--toast-height:{height}px;--toast-offset-y:{offset}px;--toast-frontmost-height:{frontmost}px;";
+        }
+    }
+}

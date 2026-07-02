@@ -1,0 +1,88 @@
+@namespace Navius.Primitives.Components.Menu
+
+@*
+    role="group" that cascades a selected value to its RadioItem children. Controlled
+    via @bind-Value, uncontrolled via DefaultValue. Selecting an item asks the group
+    to update the value (and closes the menu unless the item's OnSelect prevents it).
+*@
+
+<div role="group" data-navius-menu-radio-group @attributes="Attributes">
+    <CascadingValue Value="_radioContext" IsFixed="true">
+        @ChildContent
+    </CascadingValue>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Controlled selected value. Use @bind-Value.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial selected value.</summary>
+    [Parameter] public string? DefaultValue { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private MenuRadioContext _radioContext = default!;
+
+    private string? _internalValue;
+    private bool _initialized;
+    private bool _valueSet;
+
+    private bool IsControlled => _valueSet;
+
+    private string? CurrentValue => IsControlled ? Value : _internalValue;
+
+    protected override void OnInitialized()
+    {
+        _radioContext = new MenuRadioContext(SelectAsync);
+    }
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        _valueSet = false;
+        foreach (var p in parameters)
+        {
+            if (p.Name == nameof(Value))
+            {
+                _valueSet = true;
+            }
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!_initialized)
+        {
+            _internalValue = DefaultValue;
+            _initialized = true;
+        }
+
+        SyncContext();
+    }
+
+    private void SyncContext()
+    {
+        _radioContext.Value = CurrentValue;
+        _radioContext.NotifyChanged();
+    }
+
+    private async Task SelectAsync(string value)
+    {
+        if (IsControlled)
+        {
+            await ValueChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internalValue = value;
+            await ValueChanged.InvokeAsync(value);
+            SyncContext();
+        }
+    }
+}

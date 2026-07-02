@@ -1,0 +1,27 @@
+@namespace Navius.Primitives.Components.Label
+@using Microsoft.AspNetCore.Components.Web
+<label data-navius-label
+       for="@For"
+       @onmousedown="OnMouseDown"
+       @onmousedown:preventDefault="_preventSelect"
+       @attributes="Attributes">@ChildContent</label>
+@code {
+    [Parameter] public string? For { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    // Mirrors the spec Label Root onMouseDown: on a double-click (detail > 1) prevent the
+    // browser's default text-selection. Blazor evaluates the @onmousedown:preventDefault
+    // expression for the current event, so we arm it synchronously inside the handler.
+    private bool _preventSelect;
+
+    private void OnMouseDown(MouseEventArgs e)
+    {
+        // the spec only prevents default when the click did not originate on a nested
+        // interactive control. Blazor doesn't surface event.target, but only prevents
+        // text-selection (it never blocks the control's own focus/activation because
+        // mousedown on a focusable child isn't suppressed by selection prevention here),
+        // and the guard matches the meaningful part of the spec: skip single clicks.
+        _preventSelect = e.Detail > 1;
+    }
+}

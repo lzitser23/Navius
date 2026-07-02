@@ -1,0 +1,38 @@
+@namespace Navius.Primitives.Components.AlertDialog
+@inherits OverlayPresence
+
+@*
+    The alert dialog backdrop (the spec AlertDialog.Backdrop — renamed from Overlay).
+    Purely visual: clicking it does NOT close the dialog (an alert dialog demands an
+    explicit Cancel/Action), and outside-pointer dismissal is disabled on the Popup's
+    dismissable layer too. Portaled as a sibling of the popup. Carries Base UI's discrete
+    data-open / data-closed + data-starting-style / data-ending-style.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="Element"
+             data-open="@(Context.Open ? "" : null)"
+             data-closed="@(Context.Open ? null : "")"
+             data-starting-style="@(Entering ? "" : null)"
+             data-ending-style="@(Exiting ? "" : null)"
+             data-navius-alert-dialog-backdrop
+             @attributes="Attributes">
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private AlertDialogContext Context { get; set; } = default!;
+
+    /// <summary>Keep the backdrop mounted while closed (for exit animations).</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override IOverlayContext OverlayContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalForceMount == true;
+}

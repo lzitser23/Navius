@@ -1,0 +1,56 @@
+@namespace Navius.Primitives.Components.Checkbox
+@inherits ComponentBase
+@implements IDisposable
+
+@*
+    Renders the visual indicator (check / minus glyph). Mirrors Base UI
+    Checkbox.Indicator: present in the DOM only when the checkbox is checked or
+    indeterminate, unless KeepMounted keeps it mounted. Carries its own discrete
+    data attributes (data-checked / data-unchecked / data-indeterminate +
+    data-disabled / data-readonly / data-required) so CSS can target it directly.
+*@
+
+@if (Context.IsPresent || KeepMounted)
+{
+    <span data-checked="@(Context.Checked == true ? "" : null)"
+          data-unchecked="@(Context.Checked == false ? "" : null)"
+          data-indeterminate="@(Context.Checked is null ? "" : null)"
+          data-disabled="@(Context.Disabled ? "" : null)"
+          data-readonly="@(Context.ReadOnly ? "" : null)"
+          data-required="@(Context.Required ? "" : null)"
+          data-navius-checkbox-indicator
+          style="pointer-events:none"
+          @attributes="Attributes">
+        @ChildContent
+    </span>
+}
+
+@code {
+    [CascadingParameter] private CheckboxContext Context { get; set; } = default!;
+
+    /// <summary>Keep the indicator mounted even when unchecked (mirrors the spec <c>keepMounted</c>).</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private Action? _onChange;
+
+    protected override void OnInitialized()
+    {
+        _onChange = () => InvokeAsync(StateHasChanged);
+        Context.Changed += _onChange;
+    }
+
+    public void Dispose()
+    {
+        if (_onChange is not null)
+        {
+            Context.Changed -= _onChange;
+        }
+
+        GC.SuppressFinalize(this);
+    }
+}

@@ -1,0 +1,93 @@
+@namespace Navius.Primitives.Components.Menubar
+
+@*
+    A single radio choice inside a NaviusMenubarRadioGroup. role="menuitemradio"; aria-checked
+    reflects whether this item's Value equals the group's selected value. Activating selects it
+    and fires OnSelect (PreventDefault keeps the menu open). Cascades its checked state to a
+    nested NaviusMenubarItemIndicator. ZERO styling.
+*@
+
+<CascadingValue Value="_indicatorContext" IsFixed="true">
+    <div role="menuitemradio"
+         tabindex="-1"
+         data-navius-menubar-radio-item
+         data-navius-text-value="@TextValue"
+         aria-checked="@(IsSelected ? "true" : "false")"
+         data-checked="@(IsSelected ? "" : null)"
+         data-unchecked="@(IsSelected ? null : "")"
+         data-disabled="@(Disabled ? "" : null)"
+         aria-disabled="@(Disabled ? "true" : null)"
+         @onclick="ActivateAsync"
+         @onkeydown="OnKeyDownAsync"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    [CascadingParameter] private MenubarMenuContext MenuContext { get; set; } = default!;
+    [CascadingParameter] private MenubarRadioGroupContext RadioGroup { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>This item's value within the radio group. Required and must be unique.</summary>
+    [Parameter] public string Value { get; set; } = default!;
+
+    /// <summary>
+    /// Invoked when chosen. Call <see cref="NaviusSelectEventArgs.PreventDefault"/> to keep the
+    /// menu open after selection.
+    /// </summary>
+    [Parameter] public EventCallback<NaviusSelectEventArgs> OnSelect { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Overrides the type-ahead match string (emitted as <c>data-navius-text-value</c>).</summary>
+    [Parameter] public string? TextValue { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private MenubarItemIndicatorContext _indicatorContext = default!;
+
+    private bool IsSelected => Value is not null && RadioGroup.IsSelected(Value);
+
+    protected override void OnInitialized()
+    {
+        if (string.IsNullOrEmpty(Value))
+        {
+            throw new InvalidOperationException(
+                $"{nameof(NaviusMenubarRadioItem)} requires a non-empty {nameof(Value)}.");
+        }
+
+        _indicatorContext = new MenubarItemIndicatorContext(() => IsSelected);
+    }
+
+    private async Task ActivateAsync()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        await RadioGroup.SelectAsync(Value);
+
+        var args = new NaviusSelectEventArgs();
+        if (OnSelect.HasDelegate)
+        {
+            await OnSelect.InvokeAsync(args);
+        }
+
+        if (!args.DefaultPrevented)
+        {
+            await MenuContext.RequestCloseAsync();
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            await ActivateAsync();
+        }
+    }
+}

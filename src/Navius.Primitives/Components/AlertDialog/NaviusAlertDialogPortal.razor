@@ -1,0 +1,39 @@
+@namespace Navius.Primitives.Components.AlertDialog
+@using Navius.Primitives.Portal
+
+@*
+    the spec AlertDialog.Portal. Optional wrapper around Overlay + Content that hoists
+    them to document.body (or Container), escaping ancestor overflow/transform/z-index
+    stacking contexts. The actual teleport is performed per-part by the Overlay/Content
+    (each wraps itself in NaviusPortal); this wrapper exists for API parity and to push
+    its Container / ForceMount into the shared context so the parts honour them.
+
+    Mirrors the spec props:
+      - Container : CSS selector for the mount target (default document.body).
+      - ForceMount: keep Overlay AND Content mounted while closed, so an external
+                    presence/animation lib controls unmount. Equivalent to setting
+                    ForceMount on both parts.
+*@
+
+@ChildContent
+
+@code {
+    [CascadingParameter] private AlertDialogContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>CSS selector for the portal mount target. Null = document.body (the spec default).</summary>
+    [Parameter] public string? Container { get; set; }
+
+    /// <summary>
+    /// Force-mount Overlay and Content even while closed (the spec <c>forceMount</c>). When set,
+    /// exit transitions are driven off <c>data-closed</c> rather than unmounting.
+    /// </summary>
+    [Parameter] public bool ForceMount { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        Context.PortalContainer = Container;
+        Context.PortalForceMount = ForceMount ? true : null;
+    }
+}

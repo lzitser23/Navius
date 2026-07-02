@@ -1,0 +1,51 @@
+@namespace Navius.Primitives.Components.Menu
+@implements IDisposable
+
+@*
+    Renders the check / dot glyph for a CheckboxItem or RadioItem. Mirrors the spec
+    ItemIndicator: present only when the parent item is checked (or indeterminate),
+    unless ForceMount keeps it mounted. Carries data-state mirroring the parent.
+*@
+
+@if (Context is not null && (Context.IsPresent || ForceMount))
+{
+    <span data-checked="@(Context.Checked == true ? "" : null)"
+          data-unchecked="@(Context.Checked == false ? "" : null)"
+          data-indeterminate="@(Context.Checked is null ? "" : null)"
+          data-navius-menu-item-indicator
+          style="pointer-events:none"
+          @attributes="Attributes">
+        @ChildContent
+    </span>
+}
+
+@code {
+    [CascadingParameter] private MenuItemStateContext? Context { get; set; }
+
+    /// <summary>Keep the indicator mounted even when unchecked, for CSS exit animations.</summary>
+    [Parameter] public bool ForceMount { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private Action? _onChange;
+
+    protected override void OnInitialized()
+    {
+        if (Context is not null)
+        {
+            _onChange = () => InvokeAsync(StateHasChanged);
+            Context.Changed += _onChange;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_onChange is not null && Context is not null)
+        {
+            Context.Changed -= _onChange;
+        }
+    }
+}

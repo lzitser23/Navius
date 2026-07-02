@@ -1,0 +1,217 @@
+@namespace Navius.Primitives.Components.Select
+@inherits ComponentBase
+
+@*
+    Root of the select. Owns value AND open state and cascades the context.
+    Renders no visible DOM (plus an optional visually-hidden form mirror).
+
+    Controlled-ness is determined by whether the value/open param was explicitly
+    supplied this render (tracked in SetParametersAsync), NOT by whether a change
+    callback is attached — so ValueChanged/OpenChanged fire as pure observers in
+    the uncontrolled case too (the spec semantics).
+
+      value     / @bind-Value  / DefaultValue   (controlled vs. DefaultValue)
+      open      / @bind-Open   / DefaultOpen
+      Disabled  — disables the whole control (Trigger non-interactive)
+      Name/Required — render a hidden native <select> mirror for form submission
+      Dir       — ltr | rtl, cascades to positioner/roving via the context
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+    @if (_context.Name is not null)
+    {
+        @* Hidden native mirror so the select participates in real form submission. *@
+        @if (_context.Multiple)
+        {
+            @* One hidden input per selected value — the correct multi-value form encoding. *@
+            @foreach (var v in _context.SelectedValues)
+            {
+                <NaviusBubbleInput @key="v"
+                                   InputType="hidden"
+                                   Name="@_context.Name"
+                                   Value="@v"
+                                   Required="Required"
+                                   Disabled="Disabled" />
+            }
+        }
+        else
+        {
+            <NaviusBubbleInput InputType="hidden"
+                               Name="@_context.Name"
+                               Value="@(_context.Value ?? string.Empty)"
+                               Required="Required"
+                               Disabled="Disabled" />
+        }
+    }
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled selected value (opaque key). Use @bind-Value.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial value.</summary>
+    [Parameter] public string? DefaultValue { get; set; }
+
+    /// <summary>Enable multi-select: clicking an option toggles it in the set and keeps the popup open.</summary>
+    [Parameter] public bool Multiple { get; set; }
+
+    /// <summary>Controlled selected set (opaque keys). Use @bind-Values. Only used when Multiple.</summary>
+    [Parameter] public IReadOnlyList<string> Values { get; set; } = Array.Empty<string>();
+
+    [Parameter] public EventCallback<IReadOnlyList<string>> ValuesChanged { get; set; }
+
+    /// <summary>Uncontrolled initial selected set. Only used when Multiple.</summary>
+    [Parameter] public IReadOnlyList<string>? DefaultValues { get; set; }
+
+    /// <summary>Controlled open state. Use @bind-Open.</summary>
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>Uncontrolled initial open state.</summary>
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    /// <summary>Placeholder shown by NaviusSelectValue when nothing is selected.</summary>
+    [Parameter] public string? Placeholder { get; set; }
+
+    /// <summary>Disables the whole control: the trigger cannot open and is marked disabled.</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>When set, a hidden native mirror is rendered for form submission.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>Marks the hidden form mirror required for native validation.</summary>
+    [Parameter] public bool Required { get; set; }
+
+    /// <summary>Reading direction: ltr | rtl. Cascades into positioner/roving.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private SelectContext _context = default!;
+    private string? _internalValue;
+    private IReadOnlyList<string> _internalValues = Array.Empty<string>();
+    private bool _internalOpen;
+    private bool _initialized;
+
+    // Whether the parent explicitly supplied the controlling param this render.
+    private bool _valueSet;
+    private bool _valuesSet;
+    private bool _openSet;
+
+    private bool ValueControlled => _valueSet;
+    private bool ValuesControlled => _valuesSet;
+    private bool OpenControlled => _openSet;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        _valueSet = false;
+        _valuesSet = false;
+        _openSet = false;
+
+        foreach (var p in parameters)
+        {
+            if (p.Name == nameof(Value)) _valueSet = true;
+            else if (p.Name == nameof(Values)) _valuesSet = true;
+            else if (p.Name == nameof(Open)) _openSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _internalValue = DefaultValue;
+        _internalValues = DefaultValues ?? Array.Empty<string>();
+        _internalOpen = DefaultOpen;
+        _context = new SelectContext(SetOpenAsync, SelectValueAsync) { Placeholder = Placeholder };
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_initialized)
+        {
+            _internalValue = DefaultValue;
+            _internalValues = DefaultValues ?? Array.Empty<string>();
+            _internalOpen = DefaultOpen;
+            _initialized = true;
+        }
+
+        _context.Placeholder = Placeholder;
+        _context.Disabled = Disabled;
+        _context.Required = Required;
+        _context.Name = Name;
+        _context.Dir = Dir ?? CascadedDir;
+        _context.Multiple = Multiple;
+
+        if (Multiple)
+        {
+            // Sequence-compared inside the context so a controlled @bind-Values re-render
+            // pushing an equal list is a no-op (never fights this method).
+            await _context.SetSelectedValuesInternalAsync(ValuesControlled ? Values : _internalValues);
+        }
+        else
+        {
+            await _context.SetValueInternalAsync(ValueControlled ? Value : _internalValue);
+        }
+
+        await _context.SetOpenInternalAsync(OpenControlled ? Open : _internalOpen);
+    }
+
+    private async Task SetOpenAsync(bool open)
+    {
+        // Always notify observers, regardless of controlled/uncontrolled.
+        await OpenChanged.InvokeAsync(open);
+
+        if (!OpenControlled)
+        {
+            _internalOpen = open;
+            await _context.SetOpenInternalAsync(open);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task SelectValueAsync(string value)
+    {
+        if (Multiple)
+        {
+            // Toggle the value in the set; keep the popup OPEN (Escape/outside-click close it).
+            var next = new List<string>(ValuesControlled ? Values : _internalValues);
+            var i = next.IndexOf(value);
+            if (i >= 0) next.RemoveAt(i); else next.Add(value);
+
+            // onValuesChange fires on every toggle (controlled or not).
+            await ValuesChanged.InvokeAsync(next);
+
+            if (!ValuesControlled)
+            {
+                _internalValues = next;
+                await _context.SetSelectedValuesInternalAsync(next);
+            }
+
+            // No SetOpenAsync(false): a multi select stays open. The context's Changed event
+            // already re-rendered the subscribed parts (trigger/value/items/indicators);
+            // re-render the root too so the hidden form mirror tracks the set.
+            StateHasChanged();
+        }
+        else
+        {
+            // onValueChange fires on every selection (controlled or not).
+            await ValueChanged.InvokeAsync(value);
+
+            if (!ValueControlled)
+            {
+                _internalValue = value;
+                await _context.SetValueInternalAsync(value);
+            }
+
+            await SetOpenAsync(false);
+        }
+    }
+}

@@ -1,0 +1,52 @@
+@namespace Navius.Primitives.Components.Menu
+@inherits ComponentBase
+
+@*
+    the spec Sub: owns its OWN nested open state and cascades a sub-context to its
+    SubTrigger / SubContent. Controlled via @bind-Open, uncontrolled via DefaultOpen.
+    Renders no DOM of its own.
+*@
+
+<CascadingValue Value="_subContext" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    private MenuSubContext _subContext = default!;
+    private bool _internalOpen;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsControlled => OpenChanged.HasDelegate;
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _subContext = new MenuSubContext(RequestSetAsync);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await _subContext.SetOpenInternalAsync(IsControlled ? Open : _internalOpen);
+    }
+
+    private async Task RequestSetAsync(bool value)
+    {
+        if (IsControlled)
+        {
+            await OpenChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internalOpen = value;
+            await _subContext.SetOpenInternalAsync(value);
+            StateHasChanged();
+        }
+    }
+}

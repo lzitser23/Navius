@@ -1,0 +1,56 @@
+@namespace Navius.Primitives.Components.ContextMenu
+@inherits ComponentBase
+
+@* Root of the context menu. Owns open state, cascades the context. Renders no DOM. *@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    private ContextMenuContext _context = default!;
+    private bool _internalOpen;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    /// <summary>Reading direction: "ltr" (default) or "rtl". Cascaded; flips roving arrow keys.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsControlled => OpenChanged.HasDelegate;
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    protected override void OnInitialized()
+    {
+        _internalOpen = DefaultOpen;
+        _context = new ContextMenuContext(RequestSetAsync);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.Dir = EffectiveDir;
+        await _context.SetOpenInternalAsync(IsControlled ? Open : _internalOpen);
+    }
+
+    private async Task RequestSetAsync(bool value)
+    {
+        if (IsControlled)
+        {
+            await OpenChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internalOpen = value;
+            await _context.SetOpenInternalAsync(value);
+            StateHasChanged();
+        }
+    }
+}

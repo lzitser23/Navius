@@ -1,0 +1,42 @@
+@namespace Navius.Primitives.Components.Field
+@inherits FieldPart
+
+@*
+    Base UI Field.Control. Two modes:
+      1. Default (no ChildContent): renders a field-aware NaviusInput which adopts
+         the field's control id + aria wiring and mirrors its native ValidityState
+         and interaction state back into the field.
+      2. ChildContent: cascades a ControlProps the consumer splats onto their own
+         element (e.g. a Select trigger) via @attributes, plus the field-state attrs.
+*@
+
+@if (ChildContent is null)
+{
+    <NaviusInput @attributes="Attributes" />
+}
+else
+{
+    <CascadingValue Value="CurrentProps" IsFixed="false">
+        @ChildContent(CurrentProps)
+    </CascadingValue>
+}
+
+@code {
+    /// <summary>
+    /// Optional custom control. Receives the computed <see cref="ControlProps"/> so it
+    /// can splat <c>id</c>/<c>aria-*</c> onto whatever element it renders. When omitted,
+    /// a field-aware <c>NaviusInput</c> is rendered instead.
+    /// </summary>
+    [Parameter] public RenderFragment<ControlProps>? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    // Recomputed on every render so it stays current after a field-state change.
+    private ControlProps CurrentProps => new()
+    {
+        Id = Field.ControlId,
+        DescribedBy = Field.DescribedBy,
+        Invalid = Field.IsInvalid,
+    };
+}

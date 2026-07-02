@@ -1,0 +1,79 @@
+@namespace Navius.Primitives.Components.NavigationMenu
+@inherits ComponentBase
+
+@*
+    A navigational anchor. Used either as a top-level item (in place of a Trigger +
+    Content) or inside a Content panel. Per the spec it exposes data-active when it points
+    at the current page and sets aria-current="page" for assistive tech. Plain <a>, so
+    focus + activation come natively.
+
+    onSelect (cancelable) fires on activation; unless prevented, selecting a link closes
+    the open disclosure (the spec closes the menu after a link is chosen). A TOP-LEVEL link
+    (one not nested inside a Content panel) also joins the trigger row's arrow-key roving
+    via the shared [data-navius-navigationmenu-rovable] marker and a roving tabindex seat.
+    ZERO styling.
+*@
+
+<a href="@Href"
+   data-navius-navigationmenu-link
+   data-active="@(Active ? "" : null)"
+   data-navius-navigationmenu-rovable="@(IsTopLevel ? "" : null)"
+   aria-current="@(Active ? "page" : null)"
+   tabindex="@(IsTopLevel ? RovingTabIndex : null)"
+   @onclick="OnClickAsync"
+   @attributes="Attributes">
+    @ChildContent
+</a>
+
+@code {
+    /// <summary>The link target.</summary>
+    [Parameter] public string? Href { get; set; }
+
+    /// <summary>Marks this link as the active/current page (data-active + aria-current="page").</summary>
+    [Parameter] public bool Active { get; set; }
+
+    /// <summary>
+    /// Fired (cancelable) when the link is selected. Call
+    /// <see cref="Navius.Primitives.Common.NaviusSelectEventArgs.PreventDefault"/> to keep the
+    /// disclosure open after selection. Mirrors the spec's Link <c>onSelect</c>.
+    /// </summary>
+    [Parameter] public EventCallback<NaviusSelectEventArgs> OnSelect { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    // Resolved when the Link is rendered as a direct top-level item (no Content above it).
+    [CascadingParameter] private NavigationMenuContext? Context { get; set; }
+
+    // Non-null only when this Link sits inside a Content panel; used to suppress roving.
+    [CascadingParameter] private NaviusNavigationMenuContent? InContent { get; set; }
+
+    private bool IsTopLevel => Context is not null && InContent is null;
+
+    // A top-level link is not the seated Tab stop (the trigger row owns one composite
+    // seat), so it carries tabindex -1 and is reached by arrow keys. If there are no
+    // triggers at all the roving engine still gives the first rovable a 0 seat at runtime.
+    private int RovingTabIndex => -1;
+
+    private async Task OnClickAsync()
+    {
+        if (OnSelect.HasDelegate)
+        {
+            var args = new NaviusSelectEventArgs();
+            await OnSelect.InvokeAsync(args);
+            if (args.DefaultPrevented)
+            {
+                return;
+            }
+        }
+
+        // Selecting a link dismisses the open disclosure (the spec default). The native
+        // anchor navigation still proceeds.
+        if (Context is not null)
+        {
+            await Context.RequestCloseAsync();
+        }
+    }
+}

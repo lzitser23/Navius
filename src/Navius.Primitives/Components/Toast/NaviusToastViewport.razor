@@ -1,0 +1,143 @@
+@namespace Navius.Primitives.Components.Toast
+@inherits ComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@using Navius.Primitives.Portal
+
+@*
+    The fixed region that hosts the live toasts. Mirrors the Base UI Toast.Viewport:
+    - role=region with a templated accessible label ("{Label} ({hotkey})").
+    - The F6 hotkey focuses the viewport from anywhere on the page (Base UI default).
+    - tabindex=-1 so the hotkey can move focus here; hover/focus fans the stack out
+      (data-expanded on the viewport; each Root/Content mirrors it).
+    - Portalled to document.body (or the Portal's container) so it escapes ancestor
+      stacking contexts, exactly like every other overlay.
+    - Hosts the visually-hidden polite + assertive aria-live announcer regions each Root
+      pushes its title/description text into.
+    Bring your own positioning/classes via @attributes (headless).
+*@
+
+<NaviusPortal Container="@Context.PortalContainer">
+    <ol @ref="_element"
+        tabindex="-1"
+        role="region"
+        aria-label="@AccessibleLabel"
+        data-navius-toast-viewport
+        data-expanded="@(Context.Expanded ? "" : null)"
+        @onpointerenter="Expand"
+        @onpointerleave="Collapse"
+        @onfocusin="Expand"
+        @onfocusout="Collapse"
+        @attributes="Attributes">
+        @ChildContent
+    </ol>
+</NaviusPortal>
+
+@* Visually-hidden announcer regions. *@
+<div data-navius-toast-announcer
+     style="position:absolute;border:0;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;word-wrap:normal;">
+    <div role="status" aria-live="polite" aria-atomic="true" data-navius-toast-announce-polite>@_politeText</div>
+    <div role="status" aria-live="assertive" aria-atomic="true" data-navius-toast-announce-assertive>@_assertiveText</div>
+</div>
+
+@code {
+    [CascadingParameter] private ToastProviderContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Keyboard shortcut (as DOM <c>KeyboardEvent.key</c> values) that focuses the
+    /// viewport from anywhere. Base UI default is <c>["F6"]</c>.
+    /// </summary>
+    [Parameter] public string[] Hotkey { get; set; } = new[] { "F6" };
+
+    /// <summary>Template for the viewport's accessible label: "{label} ({hotkey})" by default.</summary>
+    [Parameter] public Func<string, string, string>? LabelTemplate { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private ToastHotkey? _hotkey;
+    private DotNetObjectReference<NaviusToastViewport>? _selfRef;
+
+    private string _politeText = string.Empty;
+    private string _assertiveText = string.Empty;
+
+    private string AccessibleLabel
+    {
+        get
+        {
+            var label = Context?.Label ?? "Notification";
+            var hotkeyText = HumanHotkey();
+            return LabelTemplate is not null
+                ? LabelTemplate(label, hotkeyText)
+                : $"{label} ({hotkeyText})";
+        }
+    }
+
+    private string HumanHotkey()
+        => Hotkey is { Length: > 0 } ? string.Join("+", Hotkey) : "F6";
+
+    protected override void OnInitialized()
+    {
+        Context.PoliteRequested += OnPolite;
+        Context.AssertiveRequested += OnAssertive;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Context.ViewportElement = _element;
+            Context.HasViewport = true;
+
+            _interop = new NaviusJsInterop(JS);
+            _selfRef = DotNetObjectReference.Create(this);
+            _hotkey = await _interop.CreateToastHotkeyAsync(_selfRef, Hotkey);
+        }
+    }
+
+    /// <summary>Invoked from JS when the configured hotkey is pressed: focus the viewport.</summary>
+    [JSInvokable]
+    public async Task OnHotkey()
+    {
+        try { await _element.FocusAsync(); }
+        catch { /* viewport may be detached */ }
+    }
+
+    private void Expand() => Context.SetExpanded(true);
+
+    private void Collapse() => Context.SetExpanded(false);
+
+    private void OnPolite(string text)
+    {
+        _politeText = text;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnAssertive(string text)
+    {
+        _assertiveText = text;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Context.PoliteRequested -= OnPolite;
+        Context.AssertiveRequested -= OnAssertive;
+
+        if (_hotkey is not null)
+        {
+            await _hotkey.DisposeAsync();
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+
+        _selfRef?.Dispose();
+    }
+}

@@ -1,0 +1,27 @@
+@namespace Navius.Primitives.Components.Select
+@inherits SelectPart
+
+@*
+    the spec Select.ItemIndicator — renders ChildContent (e.g. a check glyph) ONLY
+    when its parent item is the selected one. Reads the selected state from the
+    cascaded SelectItemContext. aria-hidden because it is decorative; the item's
+    aria-selected already conveys selection to assistive tech.
+*@
+
+@if (ItemContext is not null && ItemContext.IsSelected)
+{
+    <span aria-hidden="true"
+          data-navius-select-item-indicator
+          @attributes="Attributes">
+        @ChildContent
+    </span>
+}
+
+@code {
+    [CascadingParameter] private SelectItemContext ItemContext { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

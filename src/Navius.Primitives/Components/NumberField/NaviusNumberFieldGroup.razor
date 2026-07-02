@@ -1,0 +1,23 @@
+@namespace Navius.Primitives.Components.NumberField
+@inherits NumberFieldPart
+
+@*
+    Base UI NumberField.Group — a <div role="group"> wrapping the input and the
+    increment/decrement buttons. Reflects the field's discrete state.
+*@
+
+<div role="group"
+     data-navius-number-field-group
+     data-disabled="@(Context.Disabled ? "" : null)"
+     data-readonly="@(Context.ReadOnly ? "" : null)"
+     data-required="@(Context.Required ? "" : null)"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

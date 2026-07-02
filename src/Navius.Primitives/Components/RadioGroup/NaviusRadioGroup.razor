@@ -1,0 +1,124 @@
+@namespace Navius.Primitives.Components.RadioGroup
+@inherits ComponentBase
+
+@*
+    role=radiogroup. Controlled via @bind-Value or uncontrolled via DefaultValue.
+    Arrow keys move focus AND selection (automatic activation), Home/End jump to
+    the first/last enabled radio — handled here in C# (the engine cannot
+    synchronously touch the DOM).
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div role="radiogroup"
+         aria-orientation="@Orientation"
+         aria-required="@(Required ? "true" : null)"
+         dir="@EffectiveDir"
+         data-orientation="@Orientation"
+         data-disabled="@(Disabled ? "" : null)"
+         data-navius-radio-group
+         @onkeydown="OnKeyDownAsync"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    [Parameter] public string? DefaultValue { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public bool Required { get; set; }
+
+    [Parameter] public string? Name { get; set; }
+
+    // the spec default is undefined: aria-orientation / data-orientation only
+    // reflect an explicitly-set value rather than being forced to "vertical".
+    [Parameter] public string? Orientation { get; set; }
+
+    /// <summary>When true (default) arrow navigation wraps around the ends.</summary>
+    [Parameter] public bool Loop { get; set; } = true;
+
+    /// <summary>Reading direction. Under "rtl" the horizontal arrows are mirrored.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private RadioGroupContext _context = default!;
+    private string? _internal;
+
+    private bool IsControlled => ValueChanged.HasDelegate;
+
+    // Only emit a dir attribute when one was explicitly provided/cascaded.
+    private string? EffectiveDir => Dir ?? CascadedDir;
+
+    private bool IsRtl => string.Equals(Dir ?? CascadedDir ?? "ltr", "rtl", StringComparison.OrdinalIgnoreCase);
+
+    protected override void OnInitialized()
+    {
+        _internal = DefaultValue;
+        _context = new RadioGroupContext(SelectAsync, Name, Disabled, Required, Orientation, Loop);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await _context.SetValueInternalAsync(IsControlled ? Value : _internal);
+    }
+
+    private async Task SelectAsync(string value)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        if (IsControlled)
+        {
+            await ValueChanged.InvokeAsync(value);
+        }
+        else
+        {
+            _internal = value;
+            await _context.SetValueInternalAsync(value);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        // APG radiogroup: both axes navigate. Vertical arrows are unaffected by
+        // direction; under rtl the horizontal arrows mirror (Left -> next).
+        var horizontalNext = IsRtl ? "ArrowLeft" : "ArrowRight";
+        var horizontalPrev = IsRtl ? "ArrowRight" : "ArrowLeft";
+
+        if (e.Key == "ArrowDown" || e.Key == horizontalNext)
+        {
+            await _context.MoveAsync(1);
+        }
+        else if (e.Key == "ArrowUp" || e.Key == horizontalPrev)
+        {
+            await _context.MoveAsync(-1);
+        }
+        else if (e.Key == "Home")
+        {
+            await _context.MoveToEdgeAsync(last: false);
+        }
+        else if (e.Key == "End")
+        {
+            await _context.MoveToEdgeAsync(last: true);
+        }
+    }
+}

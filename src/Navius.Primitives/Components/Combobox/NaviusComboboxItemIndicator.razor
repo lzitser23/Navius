@@ -1,0 +1,31 @@
+@namespace Navius.Primitives.Components.Combobox
+
+@*
+    The Base UI Combobox.ItemIndicator — the check glyph inside an Item, shown only when that
+    item is selected. Reads the cascaded ComboboxItemContext.IsSelected (mirrors
+    NaviusMenuItemIndicator reading MenuItemStateContext). KeepMounted renders the span while
+    unselected (hidden) so CSS exit animations can run.
+*@
+
+@if (ItemContext is not null && (ItemContext.IsSelected || KeepMounted))
+{
+    <span data-navius-combobox-item-indicator
+          data-selected="@(ItemContext.IsSelected ? "" : null)"
+          hidden="@(KeepMounted && !ItemContext.IsSelected)"
+          style="pointer-events:none"
+          @attributes="Attributes">
+        @ChildContent
+    </span>
+}
+
+@code {
+    [CascadingParameter] private ComboboxItemContext? ItemContext { get; set; }
+
+    /// <summary>Keep the indicator mounted even when unselected, for CSS exit animations.</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

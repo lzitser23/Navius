@@ -1,0 +1,22 @@
+@namespace Navius.Primitives.Components.Menubar
+
+@*
+    A non-interactive group label inside a menu. Not a menuitem; skipped by roving focus.
+    When placed inside a NaviusMenubarGroup it registers its id so the group can reference
+    it via aria-labelledby. ZERO styling.
+*@
+
+<div id="@_id" data-navius-menubar-label @attributes="Attributes">@ChildContent</div>
+
+@code {
+    [CascadingParameter] private MenubarGroupContext? Group { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private readonly string _id = $"navius-menubar-label-{Guid.NewGuid():N}";
+
+    protected override void OnInitialized() => Group?.RegisterLabel(_id);
+}

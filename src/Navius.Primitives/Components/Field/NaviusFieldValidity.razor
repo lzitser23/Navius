@@ -1,0 +1,17 @@
+@namespace Navius.Primitives.Components.Field
+@inherits FieldPart
+
+@*
+    Base UI Field.Validity — a render-prop exposing the field's live FieldValidity.
+    Renders nothing itself; the consumer's ChildContent function decides what to draw.
+*@
+
+@if (ChildContent is not null)
+{
+    @ChildContent(Field.CurrentValidity)
+}
+
+@code {
+    /// <summary>Receives the field's current <see cref="FieldValidity"/>. Required.</summary>
+    [Parameter, EditorRequired] public RenderFragment<FieldValidity>? ChildContent { get; set; }
+}

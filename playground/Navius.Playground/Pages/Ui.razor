@@ -1,0 +1,109 @@
+@page "/ui"
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-10" data-zits-ui-showcase>
+    <header class="space-y-1">
+        <h1 class="text-2xl font-semibold tracking-tight">zits/ui</h1>
+        <p class="text-sm text-muted-foreground">The styled helm — copy-paste components on the Navius headless brain, OKLCH token theme.</p>
+    </header>
+
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Button</h2>
+        <div class="flex flex-wrap items-center gap-3">
+            <ZitsButton>Default</ZitsButton>
+            <ZitsButton Variant="secondary">Secondary</ZitsButton>
+            <ZitsButton Variant="destructive">Destructive</ZitsButton>
+            <ZitsButton Variant="outline">Outline</ZitsButton>
+            <ZitsButton Variant="ghost">Ghost</ZitsButton>
+            <ZitsButton Variant="link">Link</ZitsButton>
+            <ZitsButton Size="sm">Small</ZitsButton>
+            <ZitsButton Size="lg">Large</ZitsButton>
+            <ZitsButton Disabled="true">Disabled</ZitsButton>
+        </div>
+    </section>
+
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Badge</h2>
+        <div class="flex flex-wrap items-center gap-3">
+            <ZitsBadge>Default</ZitsBadge>
+            <ZitsBadge Variant="secondary">Secondary</ZitsBadge>
+            <ZitsBadge Variant="destructive">Destructive</ZitsBadge>
+            <ZitsBadge Variant="outline">Outline</ZitsBadge>
+        </div>
+    </section>
+
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Card · Input · Switch</h2>
+        <ZitsCard class="max-w-sm">
+            <ZitsCardHeader>
+                <ZitsCardTitle>Create project</ZitsCardTitle>
+                <ZitsCardDescription>Deploy your new project in one click.</ZitsCardDescription>
+            </ZitsCardHeader>
+            <ZitsCardContent class="space-y-4">
+                <div class="space-y-1.5">
+                    <ZitsLabel For="name">Name</ZitsLabel>
+                    <ZitsInput id="name" placeholder="Acme Inc." />
+                </div>
+                <div class="flex items-center gap-2">
+                    <ZitsSwitch @bind-Checked="_notify" id="notify" />
+                    <ZitsLabel For="notify">Email notifications</ZitsLabel>
+                </div>
+            </ZitsCardContent>
+            <ZitsCardFooter class="justify-between">
+                <ZitsButton Variant="outline">Cancel</ZitsButton>
+                <ZitsButton>Deploy</ZitsButton>
+            </ZitsCardFooter>
+        </ZitsCard>
+    </section>
+
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Tabs</h2>
+        <ZitsTabs DefaultValue="account" class="max-w-md">
+            <ZitsTabsList>
+                <ZitsTabsTrigger Value="account">Account</ZitsTabsTrigger>
+                <ZitsTabsTrigger Value="password">Password</ZitsTabsTrigger>
+            </ZitsTabsList>
+            <ZitsTabsContent Value="account" class="text-sm text-muted-foreground">Make changes to your account here.</ZitsTabsContent>
+            <ZitsTabsContent Value="password" class="text-sm text-muted-foreground">Change your password here.</ZitsTabsContent>
+        </ZitsTabs>
+    </section>
+
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Accordion</h2>
+        <ZitsAccordion Type="single" Collapsible="true" DefaultValue="a" class="max-w-md">
+            <ZitsAccordionItem Value="a">
+                <ZitsAccordionTrigger>Is it accessible?</ZitsAccordionTrigger>
+                <ZitsAccordionContent>Yes. It uses the Navius brain's ARIA + keyboard model.</ZitsAccordionContent>
+            </ZitsAccordionItem>
+            <ZitsAccordionItem Value="b">
+                <ZitsAccordionTrigger>Is it styled?</ZitsAccordionTrigger>
+                <ZitsAccordionContent>Yes. The helm is Tailwind on top, copy-paste and yours.</ZitsAccordionContent>
+            </ZitsAccordionItem>
+        </ZitsAccordion>
+    </section>
+
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Dialog</h2>
+        <ZitsDialog>
+            <ZitsDialogTrigger class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                Open dialog
+            </ZitsDialogTrigger>
+            <ZitsDialogContent>
+                <ZitsDialogHeader>
+                    <ZitsDialogTitle>Edit profile</ZitsDialogTitle>
+                    <ZitsDialogDescription>Make changes to your profile here. Click save when you're done.</ZitsDialogDescription>
+                </ZitsDialogHeader>
+                <div class="space-y-1.5">
+                    <ZitsLabel For="dname">Name</ZitsLabel>
+                    <ZitsInput id="dname" value="Lior" />
+                </div>
+                <ZitsDialogFooter>
+                    <ZitsButton>Save changes</ZitsButton>
+                </ZitsDialogFooter>
+            </ZitsDialogContent>
+        </ZitsDialog>
+    </section>
+</div>
+
+@code {
+    private bool _notify = true;
+}

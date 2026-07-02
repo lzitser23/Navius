@@ -1,0 +1,123 @@
+@page "/wave2"
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-10">
+    <h1 class="text-2xl font-semibold tracking-tight">Navius — Wave 2 (spec parity)</h1>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">ContextMenu (right-click)</h2>
+        <NaviusContextMenu>
+            <NaviusContextMenuTrigger class="flex h-28 w-72 items-center justify-center rounded-md border border-dashed border-border bg-card text-sm text-muted-foreground select-none">
+                Right-click here
+            </NaviusContextMenuTrigger>
+            <NaviusContextMenuPositioner Side="right" Align="start">
+                <NaviusContextMenuPopup class="z-50 min-w-[12rem] rounded-md border border-border bg-card p-1 text-card-foreground shadow-md">
+                    <NaviusContextMenuLabel class="px-2 py-1.5 text-xs font-medium text-muted-foreground">Actions</NaviusContextMenuLabel>
+                    <NaviusContextMenuItem class="flex cursor-default select-none rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">Back</NaviusContextMenuItem>
+                    <NaviusContextMenuItem Disabled="true" class="flex select-none rounded-sm px-2 py-1.5 text-sm opacity-50">Forward</NaviusContextMenuItem>
+                    <NaviusContextMenuSeparator class="-mx-1 my-1 h-px bg-border" />
+                    <NaviusContextMenuItem class="flex cursor-default select-none rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">Reload</NaviusContextMenuItem>
+                </NaviusContextMenuPopup>
+            </NaviusContextMenuPositioner>
+        </NaviusContextMenu>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Menubar</h2>
+        <NaviusMenubar class="flex h-10 items-center gap-1 rounded-md border border-border bg-background p-1">
+            <NaviusMenubarMenu Value="file">
+                <NaviusMenubarTrigger class="flex select-none rounded-sm px-3 py-1.5 text-sm font-medium outline-none focus:bg-accent focus:text-accent-foreground data-[popup-open]:bg-accent data-[popup-open]:text-accent-foreground">File</NaviusMenubarTrigger>
+                <NaviusMenubarPositioner Side="bottom" Align="start">
+                    <NaviusMenubarPopup class="z-50 min-w-[12rem] rounded-md border border-border bg-card p-1 text-card-foreground shadow-md">
+                        <NaviusMenubarItem class="flex cursor-default rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">New Tab</NaviusMenubarItem>
+                        <NaviusMenubarItem class="flex cursor-default rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">New Window</NaviusMenubarItem>
+                    </NaviusMenubarPopup>
+                </NaviusMenubarPositioner>
+            </NaviusMenubarMenu>
+            <NaviusMenubarMenu Value="edit">
+                <NaviusMenubarTrigger class="flex select-none rounded-sm px-3 py-1.5 text-sm font-medium outline-none focus:bg-accent focus:text-accent-foreground data-[popup-open]:bg-accent data-[popup-open]:text-accent-foreground">Edit</NaviusMenubarTrigger>
+                <NaviusMenubarPositioner Side="bottom" Align="start">
+                    <NaviusMenubarPopup class="z-50 min-w-[12rem] rounded-md border border-border bg-card p-1 text-card-foreground shadow-md">
+                        <NaviusMenubarItem class="flex cursor-default rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">Undo</NaviusMenubarItem>
+                        <NaviusMenubarItem class="flex cursor-default rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">Redo</NaviusMenubarItem>
+                    </NaviusMenubarPopup>
+                </NaviusMenubarPositioner>
+            </NaviusMenubarMenu>
+        </NaviusMenubar>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Toolbar</h2>
+        <NaviusToolbar Orientation="horizontal" aria-label="Formatting" class="flex items-center gap-1 rounded-md border border-border bg-background p-1">
+            <NaviusToolbarButton class="inline-flex h-8 items-center rounded-sm px-2 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Bold</NaviusToolbarButton>
+            <NaviusToolbarButton class="inline-flex h-8 items-center rounded-sm px-2 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Italic</NaviusToolbarButton>
+            <NaviusToolbarSeparator class="mx-1 h-6 w-px bg-border" />
+            <NaviusToolbarLink href="#" class="inline-flex h-8 items-center rounded-sm px-2 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Help</NaviusToolbarLink>
+        </NaviusToolbar>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">AccessibleIcon</h2>
+        <button class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background">
+            <NaviusAccessibleIcon Label="Close dialog">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            </NaviusAccessibleIcon>
+        </button>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">DirectionProvider (rtl)</h2>
+        <NaviusDirectionProvider Dir="rtl">
+            <DirectionReadout class="inline-block">
+                <div class="flex items-center gap-2 rounded-md border border-border bg-card p-4 text-card-foreground">
+                    <span class="text-sm text-muted-foreground">من اليمين إلى اليسار</span>
+                    <button class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground">زر</button>
+                </div>
+            </DirectionReadout>
+
+            @* RTL placement: Align="start" is logical, so under dir=rtl the popup hugs the
+               trigger's RIGHT edge (the engine mirrors the horizontal align by reading the
+               anchor's computed direction — a real RTL app sets dir on its shell like this). *@
+            <div data-testid="rtl-popover" dir="rtl" class="mt-3 inline-block">
+                <NaviusPopover>
+                    <NaviusPopoverTrigger class="inline-flex h-9 items-center rounded-md border border-input bg-background px-4 text-sm">
+                        افتح
+                    </NaviusPopoverTrigger>
+                    <NaviusPopoverPositioner Side="bottom" Align="start" SideOffset="6">
+                        <NaviusPopoverPopup class="z-50 w-56 rounded-md border border-border bg-card p-3 text-sm text-card-foreground shadow-lg">
+                            محاذاة البداية
+                        </NaviusPopoverPopup>
+                    </NaviusPopoverPositioner>
+                </NaviusPopover>
+            </div>
+        </NaviusDirectionProvider>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">PasswordToggleField</h2>
+        <NaviusPasswordToggleField DefaultVisible="false">
+            <div class="relative flex w-64 items-center">
+                <NaviusPasswordToggleFieldInput class="h-10 w-full rounded-md border border-input bg-background px-3 pr-16 text-sm" placeholder="Password" value="@_password" @oninput="OnPwInput" />
+                <NaviusPasswordToggleFieldToggle class="absolute right-1 inline-flex h-8 items-center rounded-sm px-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground">
+                    Toggle
+                </NaviusPasswordToggleFieldToggle>
+            </div>
+        </NaviusPasswordToggleField>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">OneTimePasswordField</h2>
+        <NaviusOneTimePasswordField @bind-Value="_otp" Length="6" class="flex items-center gap-2" aria-label="One-time code">
+            @for (var i = 0; i < 6; i++)
+            {
+                <NaviusOneTimePasswordFieldInput Index="i" class="size-10 rounded-md border border-input bg-background text-center text-lg outline-none focus-visible:ring-2 focus-visible:ring-ring data-[filled]:bg-accent data-[filled]:text-accent-foreground" />
+            }
+        </NaviusOneTimePasswordField>
+        <p class="text-xs text-muted-foreground">value: <span data-otp-value>@_otp</span></p>
+    </section>
+</div>
+
+@code {
+    private string _password = "";
+    private void OnPwInput(ChangeEventArgs e) => _password = e.Value?.ToString() ?? "";
+    private string _otp = "";
+}

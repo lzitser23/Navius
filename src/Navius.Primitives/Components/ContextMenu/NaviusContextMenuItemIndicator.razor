@@ -1,0 +1,48 @@
+@namespace Navius.Primitives.Components.ContextMenu
+@implements IDisposable
+
+@* Renders its content only when the parent CheckboxItem/RadioItem is checked (or
+   indeterminate), unless ForceMount keeps it mounted. data-state mirrors the
+   parent. Mirrors the spec ContextMenu.ItemIndicator. *@
+
+@if (Checkable is not null && (Checkable.IsShown || ForceMount))
+{
+    <span data-checked="@(Checkable?.Checked == true ? "" : null)"
+          data-unchecked="@(Checkable?.Checked == false ? "" : null)"
+          data-indeterminate="@(Checkable?.Checked is null ? "" : null)"
+          data-navius-context-menu-item-indicator
+          @attributes="Attributes">
+        @ChildContent
+    </span>
+}
+
+@code {
+    [CascadingParameter] private ContextMenuCheckableContext? Checkable { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Keep mounted even when unchecked (for exit animations).</summary>
+    [Parameter] public bool ForceMount { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private Action? _onChange;
+
+    protected override void OnInitialized()
+    {
+        if (Checkable is not null)
+        {
+            _onChange = () => InvokeAsync(StateHasChanged);
+            Checkable.Changed += _onChange;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_onChange is not null && Checkable is not null)
+        {
+            Checkable.Changed -= _onChange;
+        }
+    }
+}

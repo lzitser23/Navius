@@ -1,0 +1,60 @@
+@namespace Navius.Primitives.Components.Autocomplete
+@inherits Navius.Primitives.Components.Overlays.OverlayAnchoredPopupBase
+
+@*
+    The Base UI Autocomplete.Popup — the surface that wraps the listbox, inside the
+    Positioner <div> the engine anchors to the input. On open the shared base engages
+    anchored positioning + a dismissable layer (non-modal, so NO scroll lock). Crucially
+    it runs with TrapFocus=false AND MoveFocusInside=false: the base neither moves focus
+    into the popup on open nor restores it to the input on close — focus never leaves the
+    input (virtual focus). There is NO roving; the highlighted row is driven from the
+    Input via aria-activedescendant.
+
+    This Popup div is the listbox WRAPPER, not the listbox itself: role=listbox +
+    id=ContentId live on the List part (which aria-controls points at). The Popup carries
+    only the discrete presence attrs + data-empty. The engine mirrors data-side/data-align
+    onto it via the 5-arg positioner.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="PositionerElement"
+             data-navius-autocomplete-positioner
+             style="position:fixed;top:0;left:0;margin:0"
+             @attributes="Context.PositionerAttributes">
+            <div @ref="Element"
+                 dir="@(Context.IsRtl ? "rtl" : null)"
+                 data-open="@(Context.Open ? "" : null)"
+                 data-closed="@(Context.Open ? null : "")"
+                 data-starting-style="@(Entering ? "" : null)"
+                 data-ending-style="@(Exiting ? "" : null)"
+                 data-empty="@(Context.IsEmpty ? "" : null)"
+                 data-navius-autocomplete-popup
+                 @attributes="Attributes">
+                @ChildContent
+            </div>
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private AutocompleteContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override IAnchoredOverlayContext AnchoredContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalKeepMounted;
+
+    // Virtual focus: focus stays in the input, so the popup neither traps focus nor
+    // moves focus inside on open (and thus does not restore it to the input on close).
+    protected override bool TrapFocus => false;
+
+    protected override bool MoveFocusInside => false;
+
+    // Treat the optional dropdown Trigger button as "inside" the dismiss layer (alongside
+    // the input), so clicking it toggles the popup instead of racing an outside-dismiss.
+    protected override ElementReference? DismissSecondaryReference =>
+        Context.HasTriggerButton ? Context.TriggerButtonElement : null;
+}

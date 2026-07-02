@@ -1,0 +1,113 @@
+@namespace Navius.Primitives.Components.Slider
+@inherits SliderPart
+
+@*
+    The draggable handle and the accessibility surface of the slider. It is the
+    element with role="slider" and the aria-valuemin/max/now + aria-orientation the
+    APG requires. Each thumb registers itself in document order and owns one entry
+    of the value array (Index), so a range slider is just multiple <Thumb> children.
+    tabindex is 0 (focusable) unless disabled, in which case the thumb is removed
+    from tab order entirely (the spec behaviour). The full keyboard model lives here in
+    C# — no JS:
+      ArrowRight / ArrowUp   -> + Step   (direction flips for RTL / Inverted)
+      ArrowLeft  / ArrowDown -> - Step
+      Shift+Arrow            -> +/- LargeStep
+      PageUp / PageDown      -> +/- LargeStep
+      Home / End             -> Min / Max
+    Edits clamp to [Min, Max], to the thumb's neighbours (MinStepsBetweenThumbs)
+    and snap to Step (all via the root). Its inline offset (left/bottom %) positions
+    it along the track; consumers theme it via @attributes.
+*@
+
+<span @ref="_element"
+      role="slider"
+      tabindex="@(IsDisabled ? null : "0")"
+      aria-valuemin="@Fmt(LowerBound)"
+      aria-valuemax="@Fmt(UpperBound)"
+      aria-valuenow="@Fmt(MyValue)"
+      aria-orientation="@Context.Orientation"
+      aria-disabled="@(IsDisabled ? "true" : null)"
+      data-navius-slider-thumb
+      data-index="@_index"
+      data-orientation="@Context.Orientation"
+      data-disabled="@(IsDisabled ? "" : null)"
+      data-dragging="@(Context.ActiveThumb == _index ? "" : null)"
+      style="@OffsetStyle"
+      @onkeydown="OnKeyDownAsync"
+      @attributes="Attributes">
+    @ChildContent
+</span>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private int _index;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _index = Context.RegisterThumb();
+    }
+
+    private bool IsDisabled => Context.Disabled;
+
+    private bool IsVertical => Context.Orientation == "vertical";
+
+    private double MyValue =>
+        _index >= 0 && _index < Context.Values.Count ? Context.Values[_index] : Context.Min;
+
+    // aria-valuemin/max narrow to the neighbouring thumbs for multi-thumb sliders
+    // (APG: a thumb's range is bounded by its siblings), else the full track.
+    private double LowerBound =>
+        _index > 0 && _index - 1 < Context.Values.Count ? Context.Values[_index - 1] : Context.Min;
+
+    private double UpperBound =>
+        _index + 1 < Context.Values.Count ? Context.Values[_index + 1] : Context.Max;
+
+    // Horizontal: offset from the left. Vertical: offset from the bottom (value grows upward).
+    private string OffsetStyle =>
+        IsVertical
+            ? $"position:absolute;bottom:{Context.OffsetPercent(_index)};"
+            : $"position:absolute;left:{Context.OffsetPercent(_index)};";
+
+    private static string Fmt(double v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (IsDisabled)
+        {
+            return;
+        }
+
+        var step = Context.Step;
+        var large = Context.LargeStep > 0 ? Context.LargeStep : step * 10;
+
+        // For horizontal sliders the "increasing" arrow flips under RTL or inversion;
+        // for vertical, Up always increases (inversion still flips). Home/End always
+        // map to the value extremes regardless of direction.
+        var horizontalFlip = !IsVertical && Context.Dir == "rtl";
+        var sign = (Context.Inverted ^ horizontalFlip) ? -1 : 1;
+
+        double? next = e.Key switch
+        {
+            "ArrowRight" or "ArrowUp" => MyValue + sign * (e.ShiftKey ? large : step),
+            "ArrowLeft" or "ArrowDown" => MyValue - sign * (e.ShiftKey ? large : step),
+            "PageUp" => MyValue + sign * large,
+            "PageDown" => MyValue - sign * large,
+            "Home" => Context.Min,
+            "End" => Context.Max,
+            _ => null,
+        };
+
+        if (next is null)
+        {
+            return;
+        }
+
+        await Context.RequestSetThumbAsync(_index, next.Value);
+    }
+}

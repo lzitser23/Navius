@@ -1,0 +1,38 @@
+@namespace Navius.Primitives.Components.Dialog
+@inherits OverlayPresence
+
+@*
+    The dialog backdrop (the spec Dialog.Backdrop — renamed from Overlay). A presentational
+    scrim portaled as a sibling of the popup (so inside-clicks don't bubble here). Carries
+    Base UI's discrete data-open / data-closed + data-starting-style / data-ending-style.
+    Outside dismissal is owned by the Popup's document-level dismissable layer (Base UI
+    dismisses through the Root, not the backdrop element) — there is no click handler here.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="Element"
+             data-open="@(Context.Open ? "" : null)"
+             data-closed="@(Context.Open ? null : "")"
+             data-starting-style="@(Entering ? "" : null)"
+             data-ending-style="@(Exiting ? "" : null)"
+             data-navius-dialog-backdrop
+             @attributes="Attributes">
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private DialogContext Context { get; set; } = default!;
+
+    /// <summary>Keep the backdrop mounted while closed (for exit animations).</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override IOverlayContext OverlayContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalForceMount == true;
+}

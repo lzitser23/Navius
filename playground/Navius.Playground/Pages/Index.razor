@@ -1,0 +1,348 @@
+@page "/"
+@inject ToastManager Toast
+
+<div class="min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-8 p-8">
+
+    <div class="text-center space-y-3 max-w-xl">
+        <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Navius · slice 1 · the engine</p>
+        <h1 class="text-4xl font-semibold tracking-tight">A headless Dialog, built on a real C#&#8596;JS engine.</h1>
+        <p class="text-muted-foreground">
+            Focus is trapped, the body is scroll-locked, <kbd class="font-mono">Esc</kbd> and the backdrop close it,
+            and focus returns to the button on close. The behaviour lives in <code class="font-mono">Navius.Primitives</code>;
+            every class on screen is yours.
+        </p>
+    </div>
+
+    <NaviusDialog>
+        <NaviusDialogTrigger class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Open dialog
+        </NaviusDialogTrigger>
+
+        <NaviusDialogBackdrop class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+
+        <NaviusDialogPopup class="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-6 text-card-foreground shadow-2xl focus:outline-none">
+            <NaviusDialogTitle class="text-lg font-semibold leading-none tracking-tight">
+                Navius it.
+            </NaviusDialogTitle>
+            <NaviusDialogDescription class="mt-2 text-sm text-muted-foreground">
+                Press <kbd class="font-mono">Tab</kbd> — focus cycles only through these controls and never escapes
+                to the page behind. Try <kbd class="font-mono">Shift+Tab</kbd>, then <kbd class="font-mono">Esc</kbd>.
+            </NaviusDialogDescription>
+
+            <div class="mt-4 flex items-center gap-3">
+                <input class="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                       placeholder="A focusable input…" />
+                <a href="https://github.com/lzitser23/navius" target="_blank" rel="noreferrer"
+                   class="text-sm underline underline-offset-4 hover:text-foreground text-muted-foreground">
+                    a link
+                </a>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3">
+                <NaviusDialogClose class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Cancel
+                </NaviusDialogClose>
+                <NaviusDialogClose class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Confirm
+                </NaviusDialogClose>
+            </div>
+        </NaviusDialogPopup>
+    </NaviusDialog>
+
+    <NaviusPopover>
+        <NaviusPopoverTrigger class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Open popover
+        </NaviusPopoverTrigger>
+
+        <NaviusPopoverPositioner Side="bottom" Align="center" SideOffset="8">
+            <NaviusPopoverPopup class="z-50 w-72 rounded-md border border-border bg-card p-4 text-card-foreground shadow-lg outline-none">
+                <NaviusPopoverTitle class="text-sm font-medium leading-none">Anchored &amp; dismissable</NaviusPopoverTitle>
+                <NaviusPopoverDescription class="mt-2 text-sm text-muted-foreground">
+                    The engine positions this against the trigger — scroll the page and it follows; near an edge it flips.
+                    Click anywhere outside or press <kbd class="font-mono">Esc</kbd> to dismiss.
+                </NaviusPopoverDescription>
+                <div class="mt-3 flex justify-end">
+                    <NaviusPopoverClose class="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90">
+                        Got it
+                    </NaviusPopoverClose>
+                </div>
+            </NaviusPopoverPopup>
+        </NaviusPopoverPositioner>
+    </NaviusPopover>
+
+    <NaviusTooltip OpenDelay="150">
+        <NaviusTooltipTrigger class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Hover or focus me
+        </NaviusTooltipTrigger>
+        <NaviusTooltipPositioner Side="top">
+            <NaviusTooltipPopup class="z-50 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background shadow-md">
+                Same engine positioner as the popover.
+            </NaviusTooltipPopup>
+        </NaviusTooltipPositioner>
+    </NaviusTooltip>
+
+    <NaviusMenu>
+        <NaviusMenuTrigger class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Open menu
+        </NaviusMenuTrigger>
+        <NaviusMenuPositioner Side="bottom" Align="start">
+            <NaviusMenuPopup class="z-50 min-w-[12rem] rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg outline-none">
+                <NaviusMenuGroupLabel class="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    My account
+                </NaviusMenuGroupLabel>
+                <NaviusMenuItem class="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">Profile</NaviusMenuItem>
+                <NaviusMenuItem class="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">Billing</NaviusMenuItem>
+                <NaviusMenuItem class="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">Settings</NaviusMenuItem>
+                <NaviusMenuSeparator class="my-1 h-px bg-border" />
+                <NaviusMenuItem Disabled="true" class="flex select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none opacity-50 data-[disabled]:pointer-events-none">Disabled item</NaviusMenuItem>
+                <NaviusMenuItem class="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">Log out</NaviusMenuItem>
+            </NaviusMenuPopup>
+        </NaviusMenuPositioner>
+    </NaviusMenu>
+
+    <div class="flex items-center gap-8">
+        <div class="flex items-center gap-2 text-sm">
+            <NaviusSwitch class="group inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors data-[checked]:bg-primary data-[unchecked]:bg-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50">
+                <span class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg transition-transform group-data-[checked]:translate-x-5 group-data-[unchecked]:translate-x-0"></span>
+            </NaviusSwitch>
+            <span>Notifications</span>
+        </div>
+
+        <div class="flex items-center gap-2 text-sm">
+            <NaviusCheckbox DefaultChecked="true"
+                           class="group flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded border border-primary shadow transition-colors data-[checked]:bg-primary data-[checked]:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50">
+                <svg class="h-3.5 w-3.5 opacity-0 transition-opacity group-data-[checked]:opacity-100"
+                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+            </NaviusCheckbox>
+            <span>Accept terms</span>
+        </div>
+    </div>
+
+    <div class="relative h-20 w-72 overflow-hidden rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+        This box is <code class="font-mono">overflow-hidden</code>. The panel declared inside it isn't
+        clipped — <code class="font-mono">NaviusPortal</code> renders it at the page-level outlet.
+        <NaviusPortal>
+            <div class="fixed bottom-4 right-4 z-50 max-w-xs rounded-md border border-border bg-card p-3 text-sm text-card-foreground shadow-xl">
+                🚪 Teleported via <code class="font-mono">NaviusPortal</code> — authored inside the clipped box, rendered here at the outlet.
+            </div>
+        </NaviusPortal>
+    </div>
+
+    <NaviusAutocomplete Items="_fruits" @bind-Value="_fruit" TItem="string">
+        <ItemTemplate Context="fruit">
+            <NaviusAutocompleteItem class="cursor-default select-none rounded-sm px-2 py-1.5 text-sm aria-selected:font-medium data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[selected]:font-medium">
+                @fruit
+            </NaviusAutocompleteItem>
+        </ItemTemplate>
+        <ChildContent>
+            <NaviusAutocompleteInput Placeholder="Search fruit…"
+                                     class="h-10 w-64 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+            <NaviusAutocompletePortal>
+                <NaviusAutocompletePositioner Side="bottom" Align="start" SideOffset="4">
+                    <NaviusAutocompletePopup class="z-50 max-h-56 w-64 overflow-auto rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg">
+                        <NaviusAutocompleteList class="outline-none" />
+                        <NaviusAutocompleteEmpty class="px-2 py-1.5 text-sm text-muted-foreground">No results</NaviusAutocompleteEmpty>
+                    </NaviusAutocompletePopup>
+                </NaviusAutocompletePositioner>
+            </NaviusAutocompletePortal>
+        </ChildContent>
+    </NaviusAutocomplete>
+
+    @* Combobox — value-selection (single). The input is a FILTER; the committed value is
+       the selected item, separate from the filter text. Selecting closes + shows the label. *@
+    <div data-testid="combobox-single" class="relative w-64">
+        <NaviusCombobox Items="_countries" @bind-Value="_country" TItem="string">
+            <ItemTemplate Context="country">
+                <NaviusComboboxItem class="relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none aria-selected:font-medium data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[selected]:font-medium">
+                    <NaviusComboboxItemIndicator class="absolute left-2 inline-flex items-center">
+                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </NaviusComboboxItemIndicator>
+                    @country
+                </NaviusComboboxItem>
+            </ItemTemplate>
+            <ChildContent>
+                <NaviusComboboxInput Placeholder="Select a country…"
+                                     class="h-10 w-64 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                <NaviusComboboxPortal>
+                    <NaviusComboboxPositioner Side="bottom" Align="start" SideOffset="4">
+                        <NaviusComboboxPopup class="z-50 max-h-56 w-64 overflow-auto rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg">
+                            <NaviusComboboxList class="outline-none" />
+                            <NaviusComboboxEmpty class="px-2 py-1.5 text-sm text-muted-foreground">No results</NaviusComboboxEmpty>
+                        </NaviusComboboxPopup>
+                    </NaviusComboboxPositioner>
+                </NaviusComboboxPortal>
+            </ChildContent>
+        </NaviusCombobox>
+    </div>
+
+    @* Combobox — multi-select with chips. Toggling a value adds/removes a chip, clears the
+       filter and keeps the popup open. Backspace on the empty input removes the last chip. *@
+    <div data-testid="combobox-multi" class="w-72">
+        <NaviusCombobox Items="_countries" Multiple="true" @bind-Values="_countriesPicked" TItem="string">
+            <ItemTemplate Context="country">
+                <NaviusComboboxItem class="relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none aria-selected:font-medium data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[selected]:font-medium">
+                    <NaviusComboboxItemIndicator class="absolute left-2 inline-flex items-center">
+                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </NaviusComboboxItemIndicator>
+                    @country
+                </NaviusComboboxItem>
+            </ItemTemplate>
+            <ChipTemplate Context="country">
+                <NaviusComboboxChip Value="country" class="inline-flex items-center gap-1 rounded bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+                    @country
+                    <NaviusComboboxChipRemove aria-label="@($"Remove {country}")" class="rounded-sm leading-none text-muted-foreground hover:text-foreground">×</NaviusComboboxChipRemove>
+                </NaviusComboboxChip>
+            </ChipTemplate>
+            <ChildContent>
+                <div class="flex w-72 flex-wrap items-center gap-1 rounded-md border border-input bg-background p-1 shadow-sm focus-within:ring-2 focus-within:ring-ring">
+                    <NaviusComboboxChips class="contents" />
+                    <NaviusComboboxInput Placeholder="Add countries…"
+                                         class="h-8 min-w-[6rem] flex-1 bg-transparent px-2 text-sm outline-none" />
+                    <NaviusComboboxClear class="shrink-0 rounded-sm px-1 text-sm text-muted-foreground hover:text-foreground">Clear</NaviusComboboxClear>
+                </div>
+                <NaviusComboboxPortal>
+                    <NaviusComboboxPositioner Side="bottom" Align="start" SideOffset="4">
+                        <NaviusComboboxPopup class="z-50 max-h-56 w-72 overflow-auto rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg">
+                            <NaviusComboboxList class="outline-none" />
+                            <NaviusComboboxEmpty class="px-2 py-1.5 text-sm text-muted-foreground">No results</NaviusComboboxEmpty>
+                        </NaviusComboboxPopup>
+                    </NaviusComboboxPositioner>
+                </NaviusComboboxPortal>
+            </ChildContent>
+        </NaviusCombobox>
+    </div>
+
+    <NaviusSelect @bind-Value="_selectedFruit" Placeholder="Select a fruit…">
+        <NaviusSelectTrigger class="inline-flex h-10 w-64 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[popup-open]:ring-2 data-[popup-open]:ring-ring">
+            <NaviusSelectValue class="data-[placeholder]:text-muted-foreground" />
+            <span aria-hidden="true" class="text-muted-foreground">▾</span>
+        </NaviusSelectTrigger>
+        <NaviusSelectPositioner Side="bottom" Align="start">
+            <NaviusSelectPopup class="z-50 max-h-60 w-64 overflow-auto rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg">
+                <NaviusSelectItem Value="Apple" class="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[selected]:font-semibold">Apple</NaviusSelectItem>
+                <NaviusSelectItem Value="Banana" class="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[selected]:font-semibold">Banana</NaviusSelectItem>
+                <NaviusSelectItem Value="Cherry" class="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[selected]:font-semibold">Cherry</NaviusSelectItem>
+                <NaviusSelectItem Value="Mango" class="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[selected]:font-semibold">Mango</NaviusSelectItem>
+            </NaviusSelectPopup>
+        </NaviusSelectPositioner>
+    </NaviusSelect>
+
+    <NaviusSelect Multiple @bind-Values="_selectedFruits" Placeholder="Pick fruits…">
+        <NaviusSelectTrigger class="inline-flex h-10 w-64 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[popup-open]:ring-2 data-[popup-open]:ring-ring">
+            <NaviusSelectValue class="truncate data-[placeholder]:text-muted-foreground" />
+            <span aria-hidden="true" class="text-muted-foreground">▾</span>
+        </NaviusSelectTrigger>
+        <NaviusSelectPositioner Side="bottom" Align="start">
+            <NaviusSelectPopup class="z-50 max-h-60 w-64 overflow-auto rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg">
+                @foreach (var f in _fruits)
+                {
+                    <NaviusSelectItem Value="@f" class="flex cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[selected]:font-semibold">
+                        @f
+                        <NaviusSelectItemIndicator>✓</NaviusSelectItemIndicator>
+                    </NaviusSelectItem>
+                }
+            </NaviusSelectPopup>
+        </NaviusSelectPositioner>
+    </NaviusSelect>
+
+    <NaviusTabs DefaultValue="account" class="w-80">
+        <NaviusTabsList class="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
+            <NaviusTabsTab Value="account" class="inline-flex items-center justify-center rounded-md px-3 py-1 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow">Account</NaviusTabsTab>
+            <NaviusTabsTab Value="password" class="inline-flex items-center justify-center rounded-md px-3 py-1 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[active]:bg-background data-[active]:text-foreground data-[active]:shadow">Password</NaviusTabsTab>
+        </NaviusTabsList>
+        <NaviusTabsPanel Value="account" class="mt-3 text-sm text-muted-foreground">Account settings go here. Arrow keys move between tabs.</NaviusTabsPanel>
+        <NaviusTabsPanel Value="password" class="mt-3 text-sm text-muted-foreground">Change your password here.</NaviusTabsPanel>
+    </NaviusTabs>
+
+    <NaviusAccordion Type="single" DefaultValue="item-1" class="w-80 divide-y divide-border rounded-md border border-border">
+        <NaviusAccordionItem Value="item-1" class="px-4">
+            <h3>
+                <NaviusAccordionTrigger class="flex w-full items-center justify-between py-3 text-sm font-medium transition-all hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Is it accessible?
+                </NaviusAccordionTrigger>
+            </h3>
+            <NaviusAccordionPanel class="pb-3 text-sm text-muted-foreground">Yes — ARIA wired, keyboard friendly.</NaviusAccordionPanel>
+        </NaviusAccordionItem>
+        <NaviusAccordionItem Value="item-2" class="px-4">
+            <h3>
+                <NaviusAccordionTrigger class="flex w-full items-center justify-between py-3 text-sm font-medium transition-all hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Is it styled?
+                </NaviusAccordionTrigger>
+            </h3>
+            <NaviusAccordionPanel class="pb-3 text-sm text-muted-foreground">No — you bring the styles (headless).</NaviusAccordionPanel>
+        </NaviusAccordionItem>
+    </NaviusAccordion>
+
+    <div class="flex flex-wrap items-center justify-center gap-3">
+        <button @onclick="@(() => Toast.Add(new ToastOptions(Title: "Saved your changes.", Timeout: 5000)))"
+                class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            Show toast
+        </button>
+        <button @onclick="ShowThreeToasts"
+                class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            Show 3 toasts
+        </button>
+        <button @onclick="@(() => Toast.Add(new ToastOptions(Title: "Success!", Type: "success", Timeout: 5000)))"
+                class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            Show success
+        </button>
+    </div>
+
+    <p class="font-mono text-xs text-muted-foreground">
+        view source · <code>playground/Navius.Playground/Pages/Index.razor</code>
+    </p>
+</div>
+
+<NaviusToastProvider Manager="Toast" Limit="1">
+    <NaviusToastViewport class="fixed bottom-4 left-4 z-[100] flex w-80 flex-col gap-2">
+        @foreach (var t in Toast.Toasts)
+        {
+            <NaviusToastRoot Toast="t" @key="t.Id"
+                             class="rounded-md border border-border bg-card px-4 py-3 text-sm text-card-foreground shadow-lg data-[swiping]:translate-x-[var(--toast-swipe-movement-x)] data-[open]:animate-in data-[closed]:animate-out data-[limited]:hidden">
+                <NaviusToastContent class="flex w-full items-center justify-between gap-3">
+                    <div>
+                        <NaviusToastTitle class="font-medium" />
+                        <NaviusToastDescription class="text-muted-foreground" />
+                    </div>
+                    <NaviusToastClose class="shrink-0 rounded p-0.5 text-lg leading-none text-muted-foreground hover:text-foreground">&times;</NaviusToastClose>
+                </NaviusToastContent>
+            </NaviusToastRoot>
+        }
+    </NaviusToastViewport>
+</NaviusToastProvider>
+
+@code {
+    private void ShowThreeToasts()
+    {
+        for (var i = 1; i <= 3; i++)
+        {
+            Toast.Add(new ToastOptions(Title: $"Toast {i}", Timeout: 0));
+        }
+    }
+
+    private string? _fruit;
+    private string? _selectedFruit;
+    private IReadOnlyList<string> _selectedFruits = new List<string>();
+
+    private readonly string[] _fruits =
+    {
+        "Apple", "Apricot", "Banana", "Blackberry", "Blueberry",
+        "Cherry", "Grape", "Lemon", "Mango", "Orange", "Peach", "Pear"
+    };
+
+    private string? _country;
+    private IReadOnlyList<string> _countriesPicked = Array.Empty<string>();
+
+    private readonly string[] _countries =
+    {
+        "Argentina", "Australia", "Austria", "Belgium", "Brazil", "Canada",
+        "Chile", "China", "Denmark", "Egypt", "France", "Germany"
+    };
+}

@@ -1,0 +1,169 @@
+@namespace Navius.Primitives.Components.NavigationMenu
+@inherits NavigationMenuPart
+@implements IDisposable
+
+@*
+    The button that discloses its item's content. Per WAI-ARIA APG it is a <button> with
+    aria-expanded reflecting open state and aria-controls pointing at the popup it owns
+    (the per-item Popup in standalone mode, or the shared Popup in viewport mode). Base
+    UI's discrete contract: data-popup-open (present when open), data-pressed (present
+    while pressed), data-disabled.
+
+    Keyboard (APG disclosure-in-a-row model):
+      Space / Enter   -> toggle this item's content
+      ArrowDown       -> (horizontal) enter the content / move focus inside
+      ArrowRight/Left -> move between triggers (handled by the engine roving controller
+                         on the list); in vertical orientation ArrowRight enters content
+      Esc             -> close (handled by the dismissable layer on the popup)
+    The list's roving controller handles ArrowLeft/Right (or Up/Down when vertical) +
+    Home/End across the trigger row, so here we only add the open/enter keys.
+
+    Pointer: hover opens after the root's Delay; pointer-enter cancels a pending close.
+    Only the seated trigger is in the Tab order (roving tabindex). ZERO styling.
+*@
+
+<button @ref="_element"
+        type="@(NativeButton ? "button" : null)"
+        id="@(Item is not null ? Context.TriggerId(Item.Value) : null)"
+        aria-expanded="@(IsOpen ? "true" : "false")"
+        aria-controls="@AriaControls"
+        tabindex="@(IsTabStop ? 0 : -1)"
+        disabled="@Disabled"
+        data-popup-open="@(IsOpen ? "" : null)"
+        data-pressed="@(_pressed ? "" : null)"
+        data-disabled="@(Disabled ? "" : null)"
+        data-orientation="@Context.Orientation"
+        data-navius-navigationmenu-trigger
+        data-navius-navigationmenu-rovable
+        @onclick="OnClickAsync"
+        @onkeydown="OnKeyDownAsync"
+        @onkeyup="OnKeyUp"
+        @onpointerdown="() => _pressed = true"
+        @onpointerup="() => _pressed = false"
+        @onpointerenter="OnPointerEnterAsync"
+        @onpointerleave="OnPointerLeaveAsync"
+        @onfocus="OnFocusAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Render a native <c>&lt;button type="button"&gt;</c> (default). Render-contract parity with Base UI's <c>nativeButton</c>.</summary>
+    [Parameter] public bool NativeButton { get; set; } = true;
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    [CascadingParameter] private NaviusNavigationMenuItem? Item { get; set; }
+
+    private ElementReference _element;
+    private bool _registered;
+    private bool _pressed;
+
+    private string ItemValue => Item?.Value ?? "";
+
+    private bool IsOpen => !string.IsNullOrEmpty(ItemValue) && Context.IsOpen(ItemValue);
+
+    private bool IsTabStop => !Disabled && Context.IsTabStop(ItemValue);
+
+    // Points at the popup this trigger owns when open: the shared Popup in viewport mode,
+    // else this item's own Popup. Null while closed (nothing to control yet).
+    private string? AriaControls =>
+        IsOpen && Item is not null
+            ? (Context.HasViewport && Context.IsRoot ? Context.ContentId : Context.PopupIdFor(Item.Value))
+            : null;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && Item is not null && !_registered)
+        {
+            _registered = true;
+            Context.RegisterTrigger(ItemValue, _element);
+            // Re-render so IsTabStop reflects the now-known registration order.
+            StateHasChanged();
+        }
+    }
+
+    private Task OnClickAsync()
+    {
+        if (Disabled || string.IsNullOrEmpty(ItemValue))
+        {
+            return Task.CompletedTask;
+        }
+
+        return Context.RequestToggleAsync(ItemValue);
+    }
+
+    private void OnKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == " " || e.Key == "Enter")
+        {
+            _pressed = false;
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Disabled || string.IsNullOrEmpty(ItemValue))
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case " ":
+            case "Enter":
+                _pressed = true;
+                await Context.RequestToggleAsync(ItemValue);
+                break;
+
+            // Enter the content. In horizontal orientation that's ArrowDown; in
+            // vertical it's ArrowRight (the cross-axis to the trigger row). Keyboard
+            // entry focuses the first focusable child of the panel (APG).
+            case "ArrowDown" when Context.Orientation == "horizontal":
+            case "ArrowRight" when Context.Orientation == "vertical":
+                await Context.RequestKeyboardOpenAsync(ItemValue);
+                break;
+        }
+    }
+
+    private async Task OnPointerEnterAsync()
+    {
+        if (Disabled || string.IsNullOrEmpty(ItemValue))
+        {
+            return;
+        }
+
+        // Route through the context so nested Sub menus use their own open/close timing.
+        await Context.PointerEnterTriggerAsync(ItemValue);
+    }
+
+    private async Task OnPointerLeaveAsync()
+    {
+        _pressed = false;
+        await Context.PointerLeaveAsync();
+    }
+
+    private async Task OnFocusAsync()
+    {
+        // Focus opens immediately (keyboard users get the same affordance as hover).
+        if (!Disabled && !string.IsNullOrEmpty(ItemValue))
+        {
+            await Context.RequestOpenAsync(ItemValue);
+        }
+    }
+
+    public override void Dispose()
+    {
+        if (_registered)
+        {
+            Context.UnregisterTrigger(ItemValue);
+        }
+
+        base.Dispose();
+    }
+}

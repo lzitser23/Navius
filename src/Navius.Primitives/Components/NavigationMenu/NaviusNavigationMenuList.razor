@@ -1,0 +1,75 @@
+@namespace Navius.Primitives.Components.NavigationMenu
+@inherits NavigationMenuPart
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    The top-level list. Per the spec + WAI-ARIA this is a plain <ul> — it does NOT carry
+    role=menubar (this is site navigation, not a menu widget); items are <li>. The
+    engine's roving controller drives ArrowLeft/Right (horizontal) or ArrowUp/Down
+    (vertical) + Home/End across the triggers/links, so the trigger row behaves as a
+    single composite Tab stop the way the APG describes. data-orientation mirrors the
+    root. ZERO styling.
+*@
+
+<ul @ref="_element"
+    data-navius-navigationmenu-list
+    data-popup-open="@(Context.Value is not null ? "" : null)"
+    data-orientation="@Context.Orientation"
+    @attributes="Attributes"
+    @onpointerenter="OnReenter">
+    @ChildContent
+</ul>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private RovingFocus? _roving;
+    private bool _engaged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_engaged)
+        {
+            _engaged = true;
+            _interop ??= new NaviusJsInterop(JS);
+            // Roving across the trigger row only (links inside content are reached by
+            // entering the content with ArrowDown/Right, handled by the trigger).
+            // Roving across the top-level row: triggers AND top-level links (the spec lets
+            // a bare Link share the same arrow-key roving as triggers).
+            // AutoFocus:false — the trigger row is a persistent composite Tab stop (a
+            // roving tabindex seat), not a popup: it must NOT steal focus on mount (which
+            // would fire the first trigger's focus-open and auto-open the menu on load).
+            // Arrow keys still move focus across the row on keydown.
+            _roving = await _interop.CreateRovingFocusAsync(
+                _element,
+                new RovingFocusOptions(
+                    Context.Orientation,
+                    "[data-navius-navigationmenu-rovable]:not([data-disabled])",
+                    AutoFocus: false));
+        }
+    }
+
+    private void OnReenter() => Context.PointerReenter();
+
+    public async ValueTask DisposeAsync()
+    {
+        base.Dispose();
+
+        if (_roving is not null)
+        {
+            await _roving.DisposeAsync();
+            _roving = null;
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+    }
+}

@@ -1,0 +1,52 @@
+@namespace Navius.Primitives.Components.Menu
+@implements IAsyncDisposable
+
+@*
+    the spec Arrow: an SVG triangle inside the Popup that the positioner aligns to point
+    at the trigger. Registers its element into the menu context so the Popup wires it into
+    the positioner (which keeps it centred on the trigger and offset to the side).
+    Headless default: a downward triangle; override via Width/Height or ChildContent.
+*@
+
+<svg @ref="_element"
+     width="@Width"
+     height="@Height"
+     viewBox="0 0 30 10"
+     preserveAspectRatio="none"
+     data-navius-menu-arrow
+     style="pointer-events:none"
+     @attributes="Attributes">
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else
+    {
+        <polygon points="0,0 30,0 15,10" />
+    }
+</svg>
+
+@code {
+    [CascadingParameter] private MenuContext Context { get; set; } = default!;
+
+    [Parameter] public double Width { get; set; } = 10;
+
+    [Parameter] public double Height { get; set; } = 5;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Context.RegisterArrowAsync(_element);
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await Context.UnregisterArrowAsync();
+}

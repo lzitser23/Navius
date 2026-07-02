@@ -1,0 +1,51 @@
+@namespace Navius.Primitives.Components.Menubar
+@inherits ComponentBase
+@implements IDisposable
+
+@*
+    One menu within the menubar, identified by Value. Renders no DOM of its own; it creates
+    the per-menu context and cascades it to the trigger/content/items. Bridges the root's
+    Changed event into this menu's context so its parts re-render when the open menu changes.
+*@
+
+<CascadingValue Value="_menuContext" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    /// <summary>Identity of this menu within the menubar. Required and must be unique.</summary>
+    [Parameter] public string Value { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [CascadingParameter] private MenubarContext Root { get; set; } = default!;
+
+    private MenubarMenuContext _menuContext = default!;
+    private Func<Task>? _onRootChange;
+
+    protected override void OnInitialized()
+    {
+        if (string.IsNullOrEmpty(Value))
+        {
+            throw new InvalidOperationException(
+                $"{nameof(NaviusMenubarMenu)} requires a non-empty {nameof(Value)}.");
+        }
+
+        _menuContext = new MenubarMenuContext(Root, Value);
+        Root.RegisterMenu(Value);
+
+        // When the root's open value changes, re-fire this menu's Changed so its parts re-render.
+        _onRootChange = () => _menuContext.RaiseChangedAsync();
+        Root.Changed += _onRootChange;
+    }
+
+    public void Dispose()
+    {
+        Root.UnregisterMenu(Value);
+
+        if (_onRootChange is not null)
+        {
+            Root.Changed -= _onRootChange;
+        }
+    }
+}

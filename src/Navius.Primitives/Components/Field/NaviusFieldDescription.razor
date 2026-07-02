@@ -1,0 +1,19 @@
+@namespace Navius.Primitives.Components.Field
+@inherits FieldPart
+
+@*
+    Base UI Field.Description — a <p> of supplementary field information. Reflects
+    the field's discrete state attributes.
+*@
+
+<p data-navius-field-description
+   @attributes="Field.MergeState(Attributes)">
+    @ChildContent
+</p>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

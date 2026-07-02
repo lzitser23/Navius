@@ -1,0 +1,67 @@
+@namespace Navius.Primitives.Components.Dialog
+@inherits OverlayPopupBase
+@inject ILoggerFactory LoggerFactory
+@using Microsoft.Extensions.Logging
+
+@*
+    The dialog panel (the spec Dialog.Popup — renamed from Content). Portaled to the body
+    so it escapes ancestor clipping/stacking. On open the shared base engages a
+    document-level dismissable layer and, when modal, traps focus + locks scroll; on
+    close it tears them down and returns focus to the trigger. Carries Base UI's discrete
+    data-open / data-closed + data-starting-style / data-ending-style. aria-labelledby /
+    aria-describedby are emitted only when a Title / Description is mounted (no dangling
+    IDREF). The cancelable layer callbacks are inherited from OverlayPopupBase.
+*@
+
+@if (Rendered)
+{
+    <NaviusPortal Container="@Context.PortalContainer">
+        <div @ref="Element"
+             id="@Context.ContentId"
+             role="dialog"
+             aria-modal="@(Context.Modal ? "true" : null)"
+             aria-labelledby="@(Context.HasTitle ? Context.TitleId : null)"
+             aria-describedby="@(Context.HasDescription ? Context.DescriptionId : null)"
+             tabindex="-1"
+             data-open="@(Context.Open ? "" : null)"
+             data-closed="@(Context.Open ? null : "")"
+             data-starting-style="@(Entering ? "" : null)"
+             data-ending-style="@(Exiting ? "" : null)"
+             data-navius-dialog-popup
+             @attributes="Attributes">
+            @ChildContent
+        </div>
+    </NaviusPortal>
+}
+
+@code {
+    [CascadingParameter] private DialogContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private ILogger? _logger;
+
+    protected override IOverlayContext OverlayContext => Context;
+
+    protected override bool ShouldStayMounted => KeepMounted || Context.PortalForceMount == true;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _logger = LoggerFactory.CreateLogger("Navius.Dialog");
+    }
+
+    protected override async Task EngageAsync()
+    {
+        // WAI-ARIA: a dialog must have an accessible name. Warn in dev if no Title.
+        if (!Context.HasTitle)
+        {
+            _logger?.LogWarning(
+                "NaviusDialogPopup (id={ContentId}) was opened without a NaviusDialogTitle. " +
+                "A dialog requires an accessible title for screen-reader users; add a <NaviusDialogTitle> " +
+                "(visually hide it if you don't want it shown).",
+                Context.ContentId);
+        }
+        await base.EngageAsync();
+    }
+}

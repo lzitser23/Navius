@@ -1,0 +1,52 @@
+@namespace Navius.Primitives.Components.Autocomplete
+@implements IAsyncDisposable
+
+@*
+    The Base UI Autocomplete.Arrow — an SVG triangle inside the Popup the positioner
+    aligns to point at the input. Registers its element into the context so the Popup
+    wires it into the positioner. Headless default: a downward triangle; override via
+    Width/Height or ChildContent.
+*@
+
+<svg @ref="_element"
+     width="@Width"
+     height="@Height"
+     viewBox="0 0 30 10"
+     preserveAspectRatio="none"
+     data-navius-autocomplete-arrow
+     style="pointer-events:none"
+     @attributes="Attributes">
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else
+    {
+        <polygon points="0,0 30,0 15,10" />
+    }
+</svg>
+
+@code {
+    [CascadingParameter] private AutocompleteContext Context { get; set; } = default!;
+
+    [Parameter] public double Width { get; set; } = 10;
+
+    [Parameter] public double Height { get; set; } = 5;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Context.RegisterArrowAsync(_element);
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await Context.UnregisterArrowAsync();
+}

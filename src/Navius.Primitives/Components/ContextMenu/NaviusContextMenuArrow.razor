@@ -1,0 +1,43 @@
+@namespace Navius.Primitives.Components.ContextMenu
+@implements IAsyncDisposable
+
+@*
+    An optional arrow pointing at the anchor point. Rarely used for point-anchored
+    context menus, included for part parity with the spec ContextMenu.Arrow. It registers
+    its element with the context so the Popup wires it into the positioner. role hidden
+    from SRs.
+*@
+
+<svg @ref="_element"
+     width="@Width"
+     height="@Height"
+     viewBox="0 0 @Width @Height"
+     preserveAspectRatio="none"
+     aria-hidden="true"
+     data-navius-context-menu-arrow
+     @attributes="Attributes">
+    <polygon points="0,0 @Width,0 @(Width / 2.0),@Height" />
+</svg>
+
+@code {
+    [CascadingParameter] private ContextMenuContext Context { get; set; } = default!;
+
+    [Parameter] public double Width { get; set; } = 10;
+
+    [Parameter] public double Height { get; set; } = 5;
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Context.RegisterArrowAsync(_element);
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await Context.UnregisterArrowAsync();
+}

@@ -1,0 +1,34 @@
+@namespace Navius.Primitives.Components.Tooltip
+
+@*
+    the spec Tooltip.Provider. Cascades shared delay/skip-delay/hoverable defaults
+    and the cross-tooltip skip-delay grace window to every NaviusTooltip beneath
+    it. Renders no DOM. Wrap once near the app root.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    /// <summary>Default delay (ms) before tooltips open on hover. Inherited by tooltips that don't set their own DelayDuration.</summary>
+    [Parameter] public int DelayDuration { get; set; } = 700;
+
+    /// <summary>
+    /// Grace window (ms) after a tooltip closes during which the next tooltip
+    /// opens instantly (data-instant).
+    /// </summary>
+    [Parameter] public int SkipDelayDuration { get; set; } = 300;
+
+    /// <summary>When true, tooltips close on trigger leave even when the pointer moves over the content.</summary>
+    [Parameter] public bool DisableHoverableContent { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private TooltipProviderContext _context = default!;
+
+    protected override void OnInitialized()
+    {
+        _context = new TooltipProviderContext(DelayDuration, SkipDelayDuration, DisableHoverableContent);
+    }
+}

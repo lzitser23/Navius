@@ -1,0 +1,23 @@
+@namespace Navius.Primitives.Components.Select
+
+@*
+    the spec Select.Label — an accessible heading for a NaviusSelectGroup. It adopts
+    the group's generated id (so the group's aria-labelledby points at it) and is
+    NOT a [role=option], so roving focus skips it. Used standalone (no group) it
+    still renders, just without the association.
+*@
+
+<div id="@(Group?.LabelId)"
+     data-navius-select-label
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private SelectGroupContext? Group { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}
