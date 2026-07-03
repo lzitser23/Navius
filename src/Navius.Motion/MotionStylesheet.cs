@@ -43,6 +43,7 @@ public static class MotionStylesheet
         AppendSpringVariables(sb, baked);
         AppendPresenceClasses(sb, baked);
         AppendEnterClasses(sb, baked);
+        AppendInViewClasses(sb, baked);
         AppendGestureClasses(sb);
         AppendMicroKeyframes(sb);
         AppendMicroClasses(sb);
@@ -123,6 +124,31 @@ public static class MotionStylesheet
             sb.Append("  ").Append(cls).Append(" {\n");
             AppendState(sb, preset.Hidden, indent: "    ");
             sb.Append("  }\n");
+            sb.Append("}\n\n");
+        }
+    }
+
+    private static void AppendInViewClasses(StringBuilder sb, Dictionary<string, BakedEasing> baked)
+    {
+        sb.Append("/* Scroll-reveal presets: start hidden, transition to visible when the observer\n");
+        sb.Append(" * sets [data-in-view] (see navius-motion.js createInView). Stagger a group by\n");
+        sb.Append(" * setting --navius-motion-delay per child (createStagger / the stagger option). */\n");
+        foreach (var preset in MotionPresets.All)
+        {
+            var cls = "." + preset.InViewClass;
+            var enter = VarsFor(preset.EnterSpring, baked);
+
+            sb.Append(cls).Append(" {\n");
+            AppendState(sb, preset.Hidden);
+            sb.Append("  transition:\n");
+            sb.Append("    opacity ").Append(enter.Duration).Append(' ').Append(enter.Easing).Append(",\n");
+            sb.Append("    transform ").Append(enter.Duration).Append(' ').Append(enter.Easing).Append(";\n");
+            sb.Append("  transition-delay: var(--navius-motion-delay, 0ms);\n");
+            sb.Append("}\n");
+
+            sb.Append(cls).Append("[data-in-view] {\n");
+            sb.Append("  opacity: 1;\n");
+            sb.Append("  transform: none;\n");
             sb.Append("}\n\n");
         }
     }
@@ -233,6 +259,7 @@ public static class MotionStylesheet
             sb.Append("  ").Append(cls).Append("[data-starting-style],\n");
             sb.Append("  ").Append(cls).Append("[data-closed],\n");
             sb.Append("  ").Append(cls).Append("[data-ending-style],\n");
+            sb.Append("  .").Append(preset.InViewClass).Append(",\n");
             sb.Append("  .").Append(preset.EnterClass).Append(preset == MotionPresets.All[^1] ? " {\n" : ",\n");
         }
         sb.Append("    transition-property: opacity;\n");

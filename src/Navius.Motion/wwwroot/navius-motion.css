@@ -314,6 +314,125 @@
   }
 }
 
+/* Scroll-reveal presets: start hidden, transition to visible when the observer
+ * sets [data-in-view] (see navius-motion.js createInView). Stagger a group by
+ * setting --navius-motion-delay per child (createStagger / the stagger option). */
+.motion-in-view-fade {
+  opacity: 0;
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-fade[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-fade-up {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-fade-up[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-fade-down {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-fade-down[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-zoom {
+  opacity: 0;
+  transform: scale(0.95);
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-zoom[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-pop {
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity var(--navius-spring-bouncy-duration) var(--navius-spring-bouncy),
+    transform var(--navius-spring-bouncy-duration) var(--navius-spring-bouncy);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-pop[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-slide-up {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-slide-up[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-slide-down {
+  opacity: 0;
+  transform: translateY(-24px);
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-slide-down[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-slide-left {
+  opacity: 0;
+  transform: translateX(24px);
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-slide-left[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-slide-right {
+  opacity: 0;
+  transform: translateX(-24px);
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-slide-right[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
 /* Gesture micro-interactions (CSS tier). :active also covers keyboard
  * activation on buttons; the hover media query filters emulated touch hover. */
 .motion-press {
@@ -396,46 +515,55 @@
   .motion-fade[data-starting-style],
   .motion-fade[data-closed],
   .motion-fade[data-ending-style],
+  .motion-in-view-fade,
   .motion-enter-fade,
   .motion-fade-up,
   .motion-fade-up[data-starting-style],
   .motion-fade-up[data-closed],
   .motion-fade-up[data-ending-style],
+  .motion-in-view-fade-up,
   .motion-enter-fade-up,
   .motion-fade-down,
   .motion-fade-down[data-starting-style],
   .motion-fade-down[data-closed],
   .motion-fade-down[data-ending-style],
+  .motion-in-view-fade-down,
   .motion-enter-fade-down,
   .motion-zoom,
   .motion-zoom[data-starting-style],
   .motion-zoom[data-closed],
   .motion-zoom[data-ending-style],
+  .motion-in-view-zoom,
   .motion-enter-zoom,
   .motion-pop,
   .motion-pop[data-starting-style],
   .motion-pop[data-closed],
   .motion-pop[data-ending-style],
+  .motion-in-view-pop,
   .motion-enter-pop,
   .motion-slide-up,
   .motion-slide-up[data-starting-style],
   .motion-slide-up[data-closed],
   .motion-slide-up[data-ending-style],
+  .motion-in-view-slide-up,
   .motion-enter-slide-up,
   .motion-slide-down,
   .motion-slide-down[data-starting-style],
   .motion-slide-down[data-closed],
   .motion-slide-down[data-ending-style],
+  .motion-in-view-slide-down,
   .motion-enter-slide-down,
   .motion-slide-left,
   .motion-slide-left[data-starting-style],
   .motion-slide-left[data-closed],
   .motion-slide-left[data-ending-style],
+  .motion-in-view-slide-left,
   .motion-enter-slide-left,
   .motion-slide-right,
   .motion-slide-right[data-starting-style],
   .motion-slide-right[data-closed],
   .motion-slide-right[data-ending-style],
+  .motion-in-view-slide-right,
   .motion-enter-slide-right {
     transition-property: opacity;
     transform: none;

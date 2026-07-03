@@ -332,3 +332,161 @@ test('auto-animate: a rapid mutation storm settles at the correct layout with no
   // No reconciliation corruption: the surviving DOM children equal the C# state exactly.
   await expectDomMatchesState(page);
 });
+
+// --- In-view + stagger (M3) ---------------------------------------------------
+// A reveal-on-scroll group at the bottom of /motion: six .motion-in-view-fade-up cards
+// whose IntersectionObserver sets data-in-view, with an 80ms left-to-right stagger baked
+// into --navius-motion-delay per child. The group starts below the fold, so nothing
+// reveals until it is scrolled into view.
+
+test('in-view (M3): the group is hidden and staggered until scrolled into view, then reveals', async ({ page }) => {
+  await page.evaluate(() => window.scrollTo(0, 0)); // ensure the group starts off-screen
+
+  const group = page.locator('[data-testid="reveal-group"]');
+  const items = page.locator('[data-testid="reveal-item"]');
+
+  // Off-screen at load: the observer has not fired, so no data-in-view and the cards are
+  // hidden (opacity 0 from the .motion-in-view-* base state).
+  await expect(group).not.toHaveAttribute('data-in-view', /.*/);
+  await expect.poll(() => opacity(items.first())).toBe(0);
+
+  // Stagger: --navius-motion-delay increases across the children (set up front by the
+  // stagger option, so it is present before any reveal).
+  const delays = await items.evaluateAll((ns) =>
+    ns.map((n) => parseFloat(getComputedStyle(n).getPropertyValue('--navius-motion-delay')))
+  );
+  expect(delays).toEqual([0, 80, 160, 240, 320, 400]);
+
+  // Scroll it into view: the observer sets data-in-view and the cards transition in.
+  await group.scrollIntoViewIfNeeded();
+  await expect(group).toHaveAttribute('data-in-view', '');
+  await expect.poll(() => opacity(items.first())).toBe(1);
+  await expect.poll(() => opacity(items.last())).toBe(1);
+});
+
+test('in-view (M3, reduced motion): the group still reveals via opacity with no transform', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => window.scrollTo(0, 0));
+
+  const group = page.locator('[data-testid="reveal-group"]');
+  const items = page.locator('[data-testid="reveal-item"]');
+
+  await group.scrollIntoViewIfNeeded();
+  await expect(group).toHaveAttribute('data-in-view', '');
+
+  // Reduced-motion CSS collapses the reveal to opacity only: it still reaches full
+  // opacity, and the transform never leaves identity.
+  await expect.poll(() => opacity(items.first())).toBe(1);
+  expect(await transform(items.first())).toBe('none');
+});
+
+// --- Sequence executor (M3) ---------------------------------------------------
+// Four rising bars driven by a MotionSequence: created paused at t=0 (holding the first
+// frame), then play / seek-to-end / reset drive the whole timeline on a shared clock.
+
+test('sequence (M3): bars hold the start frame, seek jumps to the end, reset rewinds', async ({ page }) => {
+  const bar1 = page.locator('[data-seq="1"]');
+  const bar4 = page.locator('[data-seq="4"]');
+
+  // Paused at the start: every bar holds the first frame (opacity 0, translateY(40)).
+  await expect.poll(() => opacity(bar1)).toBe(0);
+  await expect.poll(() => opacity(bar4)).toBe(0);
+
+  // Seek to end scrubs the whole timeline to its final frame at once.
+  await page.locator('[data-testid="seq-seek-end"]').click();
+  await expect.poll(() => opacity(bar1)).toBe(1);
+  await expect.poll(() => opacity(bar4)).toBe(1);
+  await expect.poll(() => transform(bar4)).toMatch(IDENTITY); // translateY back to 0
+
+  // Reset rewinds every segment to the start frame.
+  await page.locator('[data-testid="seq-reset"]').click();
+  await expect.poll(() => opacity(bar1)).toBe(0);
+  await expect.poll(() => opacity(bar4)).toBe(0);
+});
+
+test('sequence (M3): play runs the whole timeline to completion', async ({ page }) => {
+  await expect.poll(() => opacity(page.locator('[data-seq="1"]'))).toBe(0); // ready, paused at start
+
+  await page.locator('[data-testid="seq-play"]').click();
+
+  // Each of the four segments settles its bar to full opacity as it finishes.
+  for (const i of [1, 2, 3, 4]) {
+    await expect.poll(() => opacity(page.locator(`[data-seq="${i}"]`))).toBe(1);
+  }
+});
+
+// --- Selection indicator (M3) -------------------------------------------------
+// A standalone spring marker across a row of buttons. Position rides a transform, so the
+// marker's translateX grows as later (further-right) tabs are selected.
+
+const translateX = (el: Locator) =>
+  el.evaluate((n) => {
+    const t = getComputedStyle(n).transform;
+    if (!t || t === 'none') return 0;
+    const m = t.match(/matrix3?d?\(([^)]+)\)/);
+    if (!m) return 0;
+    const parts = m[1].split(',').map((v) => parseFloat(v));
+    return parts.length === 6 ? parts[4] : parts[12]; // 2D matrix vs matrix3d translateX
+  });
+
+test('selection indicator (M3): the marker slides to the selected button', async ({ page }) => {
+  const indicator = page.locator('[data-testid="selection-indicator"]');
+
+  // Positioned at the first tab initially (near the container's left edge).
+  await expect.poll(() => translateX(indicator)).toBeLessThan(24);
+  const start = await translateX(indicator);
+
+  // Select the last tab: the marker slides right, so translateX grows well past the start.
+  await page.locator('[data-testid="selection-tab"][data-tab-index="3"]').click();
+  await expect.poll(() => translateX(indicator)).toBeGreaterThan(start + 60);
+
+  // Back to the first tab: it slides back to the left edge.
+  await page.locator('[data-testid="selection-tab"][data-tab-index="0"]').click();
+  await expect.poll(() => translateX(indicator)).toBeLessThan(24);
+});
+
+// --- Page transition (M3, experimental, same-document) ------------------------
+// NaviusPageTransition wraps a region and drives a real document.startViewTransition
+// around a same-document (query string) navigation. The tests spy on the browser API to
+// prove the transition genuinely runs (not faked), and that reduced motion falls back to
+// instant navigation.
+
+test('page transition (M3): a same-document navigation runs through a real view transition', async ({ page }) => {
+  await page.evaluate(() => {
+    (window as any).__vt = 0;
+    const orig = document.startViewTransition && document.startViewTransition.bind(document);
+    if (orig) document.startViewTransition = (cb: any) => ((window as any).__vt++, orig(cb));
+  });
+
+  await expect(page.locator('[data-testid="pt-view-a"]')).toBeVisible();
+
+  await page.locator('[data-testid="pt-link-b"]').click();
+
+  // Navigation completed through the location-changing handler: View B is shown.
+  await expect(page.locator('[data-testid="pt-view-b"]')).toBeVisible();
+  await expect(page.locator('[data-testid="pt-current"]')).toHaveText('b');
+
+  // And a genuine same-document View Transition drove it (Chromium supports the API).
+  expect(await page.evaluate(() => (window as any).__vt)).toBeGreaterThan(0);
+
+  // Back to A.
+  await page.locator('[data-testid="pt-link-a"]').click();
+  await expect(page.locator('[data-testid="pt-view-a"]')).toBeVisible();
+  await expect(page.locator('[data-testid="pt-current"]')).toHaveText('a');
+});
+
+test('page transition (M3, reduced motion): navigates instantly with no view transition', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => {
+    (window as any).__vt = 0;
+    const orig = document.startViewTransition && document.startViewTransition.bind(document);
+    if (orig) document.startViewTransition = (cb: any) => ((window as any).__vt++, orig(cb));
+  });
+
+  await page.locator('[data-testid="pt-link-b"]').click();
+
+  // The guard skipped the transition: instant navigation, and startViewTransition was
+  // never called.
+  await expect(page.locator('[data-testid="pt-view-b"]')).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__vt)).toBe(0);
+});

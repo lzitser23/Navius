@@ -73,6 +73,42 @@ public class JsAgreementTests
         }
     }
 
+    [Fact]
+    public void Stagger_schedules_agree()
+    {
+        // The C# authoring formula (MotionStagger.Delays) and the JS runtime formula
+        // (staggerDelays) must produce identical per-child delays across anchors, counts
+        // and steps, incl. the half-step even-count centre case.
+        var cases = new[]
+        {
+            (Count: 5, Step: 50.0, From: StaggerFrom.First),
+            (Count: 6, Step: 40.0, From: StaggerFrom.Last),
+            (Count: 5, Step: 100.0, From: StaggerFrom.Center),
+            (Count: 4, Step: 100.0, From: StaggerFrom.Center),
+            (Count: 1, Step: 50.0, From: StaggerFrom.Center),
+        };
+
+        using var result = RunNode(new
+        {
+            evals = Array.Empty<object>(),
+            bake = (object?)null,
+            staggers = cases.Select(c => new { count = c.Count, step = c.Step, from = c.From.ToToken() }).ToArray(),
+        });
+
+        var jsStaggers = result.RootElement.GetProperty("staggers");
+        Assert.Equal(cases.Length, jsStaggers.GetArrayLength());
+        for (var i = 0; i < cases.Length; i++)
+        {
+            var expected = MotionStagger.Delays(cases[i].Count, cases[i].Step, cases[i].From);
+            var actual = jsStaggers[i];
+            Assert.Equal(expected.Length, actual.GetArrayLength());
+            for (var j = 0; j < expected.Length; j++)
+            {
+                Assert.Equal(expected[j], actual[j].GetDouble(), 1e-9);
+            }
+        }
+    }
+
     private static object Params(Spring spring, double origin, double target) => new
     {
         stiffness = spring.Stiffness,

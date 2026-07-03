@@ -1,0 +1,98 @@
+@namespace Navius.Motion
+@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+@*
+    EXPERIMENTAL. Same-document page/screen transitions for the Blazor WASM router. Wrap
+    the region whose content changes across navigations (typically the router region) in
+    this component; it registers a NavigationManager location-changing handler and snapshots
+    the change through document.startViewTransition. Treat the API surface as unstable: it
+    may change, and it is scoped to same-document navigation only (see the contract below).
+
+    HONEST CONTRACT (do not oversell): SAME-DOCUMENT ONLY. Where the View Transition API
+    is unsupported, or under prefers-reduced-motion, navigation falls back to instant with
+    no visual effect. Blazor renders the new page through its own cycle, not inside the
+    transition callback, so we split the transition in two: the location-changing handler
+    awaits until the browser has captured the OLD snapshot (the transition callback has
+    fired) BEFORE it returns, which is what guarantees the old snapshot precedes the DOM
+    update; then, once LocationChanged has fired and the new render has settled
+    (SettleFrames), we resolve the transition so the browser captures the new state and
+    cross-fades. One wrapper per app (a single in-flight transition).
+*@
+
+@ChildContent
+
+@code {
+    private IDisposable? _changing;
+    private MotionJsInterop? _interop;
+    private bool _transitioning;
+
+    /// <summary>
+    /// The region to transition (usually the router region). Experimental: same-document
+    /// navigation only, and the API surface may change; reduced/unsupported falls back to
+    /// instant navigation.
+    /// </summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Reduced-motion policy: user, always or never (reduced/unsupported = instant nav).</summary>
+    [Parameter] public string ReduceMotion { get; set; } = "user";
+
+    /// <summary>Animation frames to wait for the new render to lay out before capturing the new snapshot.</summary>
+    [Parameter] public int SettleFrames { get; set; } = 2;
+
+    protected override void OnInitialized()
+    {
+        _interop = new MotionJsInterop(JS);
+        _changing = Nav.RegisterLocationChangingHandler(OnLocationChanging);
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private async ValueTask OnLocationChanging(LocationChangingContext context)
+    {
+        // Begin the transition and BLOCK the navigation until the old snapshot is captured.
+        // Returns false (and resolves immediately) under reduced motion / no support, so
+        // navigation is instant.
+        try
+        {
+            _transitioning = await _interop!.StartViewTransitionAsync(ReduceMotion);
+        }
+        catch (JSException)
+        {
+            _transitioning = false;
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (!_transitioning)
+        {
+            return;
+        }
+        _transitioning = false;
+        _ = FinishAfterRenderAsync();
+    }
+
+    private async Task FinishAfterRenderAsync()
+    {
+        try
+        {
+            await _interop!.WaitFramesAsync(SettleFrames);  // let the fresh DOM lay out
+            await _interop!.FinishViewTransitionAsync();     // capture new state, cross-fade
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        _changing?.Dispose();
+        if (_interop is not null)
+        {
+            _ = _interop.DisposeAsync();
+        }
+    }
+}

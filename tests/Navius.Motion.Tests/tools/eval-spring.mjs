@@ -16,6 +16,7 @@ const output = {
     velocity: engine.springVelocity(c.spring, c.t),
   })),
   bake: input.bake ? engine.bakeSpringEasing(input.bake) : null,
+  staggers: (input.staggers || []).map((s) => engine.staggerDelays(s.count, s.step, s.from)),
 };
 
 process.stdout.write(JSON.stringify(output));

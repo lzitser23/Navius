@@ -30,6 +30,26 @@ public static class Motion
     }
 
     /// <summary>
+    /// Reveal on scroll into view (CSS tier): the element starts hidden and transitions
+    /// to visible when <c>data-in-view</c> is set on it. Splat this, then attach the
+    /// observer that toggles the attribute with <see cref="Interop.MotionJsInterop"/>
+    /// (CreateInViewAsync). Optional delay in milliseconds (a stagger composes with this
+    /// via the same var).
+    /// </summary>
+    public static IReadOnlyDictionary<string, object> InView(Preset preset, double delayMs = 0)
+    {
+        var attributes = new Dictionary<string, object>
+        {
+            ["class"] = MotionPresets.Get(preset).InViewClass,
+        };
+        if (delayMs > 0)
+        {
+            attributes["style"] = "--navius-motion-delay: " + Format(delayMs) + "ms";
+        }
+        return attributes;
+    }
+
+    /// <summary>
     /// Animate open/close transitions of an element that carries the Navius discrete
     /// state attributes (data-open, data-closed, data-starting-style,
     /// data-ending-style), i.e. any Navius primitive part.

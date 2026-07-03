@@ -983,3 +983,429 @@ export function createAutoAnimate(parent, options) {
 
   return { enable, disable, destroy };
 }
+
+// --- Small numeric helpers (M3) ----------------------------------------------
+
+function clamp01(value) {
+  return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+// Round to 4 decimals: stagger 'center' on an even child count yields half-steps,
+// so a fixed rounding keeps the emitted CSS var stable and short.
+function round4(value) {
+  return Math.round(value * 10000) / 10000;
+}
+
+// --- Stagger delay math (M3) --------------------------------------------------
+// The distance-from-anchor formula, duplicated in C# (Navius.Motion.MotionStagger);
+// the JS agreement test compares the two so authoring (C#) and runtime (JS) never
+// drift. `from` is 'first' (default), 'last' or 'center'. Center distance is
+// fractional for an even count (Motion's stagger semantics), so delays can be
+// half-steps. Returns an array of delays in milliseconds, index-aligned to children.
+
+export function staggerDelays(count, stepMs, from) {
+  const n = Math.max(0, count | 0);
+  const delays = new Array(n);
+  const center = (n - 1) / 2;
+  for (let i = 0; i < n; i++) {
+    let distance;
+    if (from === 'last') distance = n - 1 - i;
+    else if (from === 'center') distance = Math.abs(i - center);
+    else distance = i; // 'first'
+    delays[i] = round4(distance * stepMs);
+  }
+  return delays;
+}
+
+// Set --navius-motion-delay on each direct element child of `container` from the
+// stagger config, so the CSS tier's transition-delay staggers a group reveal. The
+// var composes with the [data-in-view] / enter classes that already read it.
+function applyStaggerDelays(container, step, from) {
+  const children = [];
+  for (const c of container.children) children.push(c);
+  const delays = staggerDelays(children.length, step, from);
+  children.forEach((child, i) => {
+    child.style.setProperty('--navius-motion-delay', `${delays[i]}ms`);
+  });
+  return children;
+}
+
+// --- In-view (M3) -------------------------------------------------------------
+// IntersectionObserver v1 (the universally safe visibility primitive; v2 is
+// Chromium-only forever). Sets data-in-view on the element while it intersects and
+// removes it when it leaves, unless `once`. The CSS tier's .motion-in-view-* classes
+// start hidden and transition to visible on [data-in-view], so the reveal is a
+// compositor transition with zero JS per frame. An optional dotNetRef receives coarse
+// OnInView(bool) edges. With `stagger`, the same intersection also fans data-in-view
+// out to the direct children (their --navius-motion-delay set up front), so a group
+// reveals in sequence. options: { amount ('some'|'all'|0..1), margin, once, stagger:
+// { step, from } }. Returns { destroy }.
+
+export function createInView(element, options, dotNetRef) {
+  const opts = Object.assign(
+    { amount: 'some', margin: '0px', once: false, stagger: null },
+    options || {}
+  );
+  const threshold =
+    opts.amount === 'some' ? 0 : opts.amount === 'all' ? 1 : clamp01(Number(opts.amount) || 0);
+
+  // The staggered child list is re-read on refresh() (below), so children added or removed
+  // after creation get their delay var and, if the group is already revealed, data-in-view.
+  let staggerChildren = opts.stagger
+    ? applyStaggerDelays(element, opts.stagger.step ?? 50, opts.stagger.from ?? 'first')
+    : null;
+
+  const notify = (value) => {
+    if (dotNetRef) Promise.resolve(dotNetRef.invokeMethodAsync('OnInView', value)).catch(() => {});
+  };
+
+  let inside = false;
+
+  function setInView(on) {
+    inside = on;
+    if (on) {
+      element.setAttribute('data-in-view', '');
+      if (staggerChildren) for (const c of staggerChildren) c.setAttribute('data-in-view', '');
+    } else {
+      element.removeAttribute('data-in-view');
+      if (staggerChildren) for (const c of staggerChildren) c.removeAttribute('data-in-view');
+    }
+  }
+
+  // Recompute the per-child stagger delays after the child list changes (add/remove), the
+  // in-view counterpart of createStagger().refresh(). If the group is already in view, the
+  // new children pick up data-in-view too so they reveal in place. A no-op without stagger
+  // (there is no per-child list to track).
+  function refresh() {
+    if (!opts.stagger) return;
+    staggerChildren = applyStaggerDelays(element, opts.stagger.step ?? 50, opts.stagger.from ?? 'first');
+    if (inside) for (const c of staggerChildren) c.setAttribute('data-in-view', '');
+  }
+
+  // No IntersectionObserver (SSR/prerender, ancient engine): reveal immediately so a
+  // hidden-until-in-view element can never stay stuck invisible.
+  if (typeof IntersectionObserver !== 'function') {
+    setInView(true);
+    notify(true);
+    return { refresh, destroy() {} };
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const on = entry.isIntersecting;
+        if (on === inside) continue;
+        setInView(on);
+        notify(on);
+        if (on && opts.once) observer.disconnect();
+      }
+    },
+    { root: null, rootMargin: opts.margin, threshold }
+  );
+  observer.observe(element);
+
+  return {
+    refresh,
+    destroy() {
+      observer.disconnect();
+    },
+  };
+}
+
+// Standalone stagger: set the delay vars on a container's children without any
+// in-view coupling (for groups that reveal by other means, e.g. an immediate enter).
+// Returns { refresh, destroy }; refresh re-reads the child list.
+
+export function createStagger(container, options) {
+  const opts = Object.assign({ step: 50, from: 'first' }, options || {});
+  function refresh() {
+    applyStaggerDelays(container, opts.step, opts.from);
+  }
+  refresh();
+  return { refresh, destroy() {} };
+}
+
+// --- Selection indicator (M3) -------------------------------------------------
+// A spring-animated marker that moves to the active element within a container: the
+// Navius Tabs/NavigationMenu setIndicatorPosition math generalized. Position rides a
+// compositor transform (translate); size animates width/height so a pill/underline
+// tracks items of differing size without scale distortion. The marker is pinned
+// position:absolute at the container's top-left; measurements are relative to the
+// container's content box (border + scroll compensated), mirroring the auto-animate
+// positionAbsolute math. Resize-aware via a ResizeObserver (re-measures and snaps, no
+// animation, so a viewport resize never janks). options: { activeSelector, axis
+// ('x'|'y'|'both'), durationMs, easing (a baked linear() spring), reduceMotion }.
+// Returns { update, destroy }; call update() after the active element changes.
+
+export function createSelectionIndicator(container, indicator, options) {
+  const opts = Object.assign(
+    { activeSelector: '[data-active]', axis: 'both', durationMs: 200, easing: 'ease', reduceMotion: 'user' },
+    options || {}
+  );
+  const useX = opts.axis === 'x' || opts.axis === 'both';
+  const useY = opts.axis === 'y' || opts.axis === 'both';
+
+  let last = null; // last measured rect: the FLIP "First" for the next move
+  let current = null; // in-flight move (cancelled before a new move or a snap)
+
+  function activeElement() {
+    return container.querySelector(opts.activeSelector);
+  }
+
+  function measure(el) {
+    const cRect = container.getBoundingClientRect();
+    const style = getComputedStyle(container);
+    const borderLeft = parseFloat(style.borderLeftWidth) || 0;
+    const borderTop = parseFloat(style.borderTopWidth) || 0;
+    const r = el.getBoundingClientRect();
+    return {
+      left: r.left - cRect.left - borderLeft + container.scrollLeft,
+      top: r.top - cRect.top - borderTop + container.scrollTop,
+      width: r.width,
+      height: r.height,
+    };
+  }
+
+  function frameFor(rect) {
+    const tx = useX ? rect.left : 0;
+    const ty = useY ? rect.top : 0;
+    const frame = { transform: `translate(${tx}px, ${ty}px)` };
+    if (useX) frame.width = `${rect.width}px`;
+    if (useY) frame.height = `${rect.height}px`;
+    return frame;
+  }
+
+  function apply(animate) {
+    const el = activeElement();
+    if (!el) {
+      indicator.style.visibility = 'hidden';
+      return;
+    }
+    indicator.style.visibility = '';
+    const rect = measure(el);
+    const to = frameFor(rect);
+    if (current) {
+      current.cancel();
+      current = null;
+    }
+    if (animate && last && !shouldReduceMotion(opts.reduceMotion)) {
+      const from = frameFor(last);
+      current = indicator.animate([from, to], {
+        duration: opts.durationMs,
+        easing: opts.easing,
+        fill: 'both',
+      });
+      current.finished.catch(() => {});
+    } else {
+      // First placement, a resize snap, or reduced motion: land immediately. No
+      // animation is holding a fill, so the inline style is what shows.
+      Object.assign(indicator.style, to);
+    }
+    last = rect;
+  }
+
+  indicator.style.position = 'absolute';
+  indicator.style.left = '0';
+  indicator.style.top = '0';
+  indicator.style.transformOrigin = 'top left';
+  apply(false); // initial snap to the active element
+
+  let resize = null;
+  if (typeof ResizeObserver === 'function') {
+    resize = new ResizeObserver(() => apply(false));
+    resize.observe(container);
+  }
+
+  return {
+    update() {
+      apply(true);
+    },
+    destroy() {
+      if (resize) resize.disconnect();
+      if (current) current.cancel();
+      current = null;
+    },
+  };
+}
+
+// --- Same-document view transitions (M3) -------------------------------------
+// The honest, race-free driver for a Blazor same-document navigation. Because Blazor
+// mutates the DOM through its own render cycle (not inside the View Transition
+// callback), we split the transition into two interop calls: startViewTransition()
+// begins the transition and resolves ONLY after the browser has captured the old
+// snapshot (the transition callback has fired); the caller then performs the Blazor
+// navigation and, once the new page has rendered, calls finishViewTransition() to let
+// the browser capture the new state and cross-fade. Because the callback returns a
+// promise we hold pending, the old snapshot is guaranteed to precede the DOM update.
+// Guarded: with reduced motion or no document.startViewTransition support, it resolves
+// false and the caller navigates instantly (the API is inherently progressive). A
+// single in-flight transition at a time (one page-transition wrapper is the contract);
+// a new start supersedes a stuck one, and a safety timeout resolves a missed finish.
+
+let activeViewTransition = null;
+
+export function startViewTransition(options) {
+  const opts = Object.assign({ reduceMotion: 'user', timeoutMs: 2000 }, options || {});
+  if (
+    shouldReduceMotion(opts.reduceMotion) ||
+    typeof document === 'undefined' ||
+    typeof document.startViewTransition !== 'function'
+  ) {
+    return Promise.resolve(false);
+  }
+
+  // Supersede any stuck transition so navigation never wedges.
+  if (activeViewTransition) {
+    activeViewTransition.finish();
+    activeViewTransition = null;
+  }
+
+  let resolveDone;
+  const done = new Promise((resolve) => {
+    resolveDone = resolve;
+  });
+  const entry = {
+    finish() {
+      resolveDone();
+    },
+  };
+  activeViewTransition = entry;
+
+  return new Promise((resolveStarted) => {
+    const transition = document.startViewTransition(() => {
+      // Fired AFTER the old snapshot is captured. Signal the caller to navigate, and
+      // keep the DOM-update phase pending until finishViewTransition() resolves it.
+      resolveStarted(true);
+      return done;
+    });
+    transition.finished.catch(() => {});
+    transition.finished.finally(() => {
+      if (activeViewTransition === entry) activeViewTransition = null;
+    });
+    // Safety net: if a finish is ever missed, unblock the page.
+    setTimeout(() => {
+      if (activeViewTransition === entry) entry.finish();
+    }, opts.timeoutMs);
+  });
+}
+
+export function finishViewTransition() {
+  if (activeViewTransition) activeViewTransition.finish();
+}
+
+// Resolve after `n` animation frames: the page-transition wrapper waits a couple of
+// frames after the new render so the fresh DOM has laid out before the new snapshot.
+export function nextFrames(n) {
+  const count = Math.max(1, n | 0);
+  return new Promise((resolve) => {
+    let remaining = count;
+    function tick() {
+      remaining -= 1;
+      if (remaining <= 0) resolve();
+      else requestAnimationFrame(tick);
+    }
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(tick);
+    else resolve();
+  });
+}
+
+// --- Sequence executor (M3) ---------------------------------------------------
+// The imperative plane. GroupEffect/SequenceEffect are unimplemented in every engine,
+// so we own the scheduling: C# (Navius.Motion.MotionSequence) resolves every segment's
+// at-offset to an absolute start time and bakes its spring to a linear() easing, then
+// serializes the timeline. Here we simply materialize one WAAPI animation per segment
+// with delay = its absolute start, so the browser's own clock keeps them in lockstep:
+// each animation's delay bakes its place in the timeline, therefore setting every
+// animation's currentTime to the same master time yields a coherent snapshot, which is
+// what makes seek() a one-liner. Deterministic, no rAF loop, no per-frame callbacks.
+//
+// NOT supported (documented limits): per-frame / onUpdate callbacks, nested sequences,
+// and infinite iterations. A segment target resolves to a single element (a selector's
+// first match, scoped to `root`, or a serialized ElementReference). program:
+// { segments: [{ target: { selector?|ref? }, keyframes, startMs, durationMs, easing,
+// composite }], totalMs, reduceMotion }. Returns a handle: play/pause/seek(ms)/stop,
+// finished() (a Promise resolving when the whole timeline completes), duration(),
+// destroy().
+
+function resolveTarget(target, scope) {
+  if (!target) return null;
+  // A serialized ElementReference is revived to the DOM element (recursive __internalId
+  // reviver), so target.ref is already the node.
+  if (target.ref && typeof target.ref.animate === 'function') return target.ref;
+  if (target.selector) return scope.querySelector(target.selector);
+  return null;
+}
+
+export function runProgram(program, root) {
+  const prog = program || {};
+  const segments = prog.segments || [];
+  const reduce = shouldReduceMotion(prog.reduceMotion);
+  const scope = root || (typeof document !== 'undefined' ? document : null);
+  const animations = [];
+  let total = 0;
+
+  for (const segment of segments) {
+    const end = (segment.startMs || 0) + (segment.durationMs || 0);
+    if (end > total) total = end;
+
+    const element = resolveTarget(segment.target, scope);
+    if (!element) continue;
+
+    let frames = (segment.keyframes || []).map(sanitizeFrame);
+    if (reduce) frames = collapseToOpacity(frames);
+    if (!hasAnimatableProps(frames)) continue;
+
+    const animation = element.animate(frames, {
+      delay: segment.startMs || 0,
+      duration: segment.durationMs || 0,
+      easing: segment.easing || 'linear',
+      fill: 'both',
+      composite: segment.composite || 'replace',
+    });
+    animation.pause();
+    animation.currentTime = 0;
+    animation.finished.catch(() => {});
+    animations.push(animation);
+  }
+
+  if (typeof prog.totalMs === 'number') total = prog.totalMs;
+
+  return {
+    play() {
+      // Resume from the current position. WAAPI's play() auto-rewinds any animation whose
+      // currentTime is at/after its effect end (resets it to 0), so on a staggered timeline
+      // a plain play() would replay the segments that already finished while the others
+      // resume, desyncing the timeline. Skip the finished segments: fill:'both' holds them
+      // on their final frame, which is where a resume must leave them. Replay from the top
+      // is stop() (rewinds every segment) followed by play().
+      for (const a of animations) {
+        const endTime = a.effect ? Number(a.effect.getComputedTiming().endTime) : Infinity;
+        if (a.currentTime !== null && Number(a.currentTime) >= endTime) continue;
+        a.play();
+      }
+    },
+    pause() {
+      for (const a of animations) a.pause();
+    },
+    seek(ms) {
+      const t = Math.max(0, Math.min(Number(ms) || 0, total));
+      for (const a of animations) a.currentTime = t;
+    },
+    stop() {
+      for (const a of animations) {
+        a.pause();
+        a.currentTime = 0;
+      }
+    },
+    finished() {
+      return Promise.all(animations.map((a) => a.finished.catch(() => {})));
+    },
+    duration() {
+      return total;
+    },
+    destroy() {
+      for (const a of animations) a.cancel();
+      animations.length = 0;
+    },
+  };
+}

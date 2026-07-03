@@ -50,7 +50,7 @@ public class MotionStylesheetTests
             Assert.Contains($"--navius-spring-{name}-duration:", css);
         }
 
-        // Every preset in both tiers, keyed to the discrete state attributes.
+        // Every preset in every tier, keyed to the discrete state attributes.
         foreach (var preset in MotionPresets.All)
         {
             Assert.Contains($".{preset.PresenceClass}[data-open]", css);
@@ -58,8 +58,12 @@ public class MotionStylesheetTests
             Assert.Contains($".{preset.PresenceClass}[data-closed]", css);
             Assert.Contains($".{preset.PresenceClass}[data-ending-style]", css);
             Assert.Contains($".{preset.EnterClass}", css);
+            // Scroll-reveal tier: a hidden base plus the [data-in-view] visible state.
+            Assert.Contains($".{preset.InViewClass} {{", css);
+            Assert.Contains($".{preset.InViewClass}[data-in-view]", css);
         }
         Assert.Contains("@starting-style", css);
+        Assert.Contains("transition-delay: var(--navius-motion-delay, 0ms);", css);
 
         // Gestures and the reduced-motion collapse.
         Assert.Contains(".motion-press:active", css);

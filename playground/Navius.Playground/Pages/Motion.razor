@@ -1,6 +1,7 @@
 @page "/motion"
 @namespace Navius.Playground.Pages
 @inject IJSRuntime JS
+@inject NavigationManager Nav
 @implements IAsyncDisposable
 
 @*
@@ -248,6 +249,130 @@
         </NaviusAutoAnimate>
     </section>
 
+    @* --- M3: selection indicator -------------------------------------------- *@
+    <section class="space-y-3" data-testid="selection-section">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Selection indicator · spring marker (runtime tier)</h2>
+        <p class="text-sm text-muted-foreground">
+            A standalone marker that slides to the active button on a C#-baked spring. Position rides a
+            compositor <code class="font-mono">transform</code>; the pill's size animates so it tracks buttons of
+            differing width. Resize-aware. Not the Tabs engine: the math is generalized into navius-motion.js.
+        </p>
+        <div @ref="_selectionRow" data-testid="selection-row"
+             class="relative inline-flex items-center gap-1 rounded-lg border border-border bg-muted p-1">
+            <NaviusSelectionIndicator Container="_selectionRow" Active="_selected" Spring="Spring.Snappy" Axis="both"
+                                      data-testid="selection-indicator"
+                                      class="pointer-events-none rounded-md bg-primary shadow" />
+            @for (var i = 0; i < _selectionLabels.Length; i++)
+            {
+                var index = i;
+                <button type="button" data-testid="selection-tab" data-tab-index="@index"
+                        data-active="@(_selected == index ? "" : null)"
+                        @onclick="() => SelectTab(index)"
+                        class="relative z-10 rounded-md px-4 py-1.5 text-sm font-medium transition-colors data-[active]:text-primary-foreground">
+                    @_selectionLabels[index]
+                </button>
+            }
+        </div>
+    </section>
+
+    @* --- M3: sequence executor ---------------------------------------------- *@
+    <section class="space-y-3" data-testid="sequence-section">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Sequence · imperative timeline (play / pause / seek)</h2>
+        <p class="text-sm text-muted-foreground">
+            A <code class="font-mono">MotionSequence</code> composed in C#: four bars rise on a snappy spring, each
+            overlapping the previous by 100ms (<code class="font-mono">at: "-100"</code>). The at-offsets resolve to
+            absolute start times and springs bake to <code class="font-mono">linear()</code> in C#; JS plays one WAAPI
+            animation per segment on a shared clock, so seek is a single scrub.
+        </p>
+        <div @ref="_sequenceRoot" data-testid="sequence-stage" class="flex h-28 items-end gap-3 rounded-lg border border-border bg-muted/30 p-3">
+            @for (var i = 1; i <= 4; i++)
+            {
+                <div data-seq="@i" data-testid="seq-bar" class="h-full w-12 rounded-md bg-primary"></div>
+            }
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <button type="button" data-testid="seq-play" @onclick="SequencePlay"
+                    class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Play
+            </button>
+            <button type="button" data-testid="seq-pause" @onclick="SequencePause"
+                    class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Pause
+            </button>
+            <button type="button" data-testid="seq-seek-end" @onclick="SequenceSeekEnd"
+                    class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Seek to end
+            </button>
+            <button type="button" data-testid="seq-reset" @onclick="SequenceReset"
+                    class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Reset
+            </button>
+            <span class="font-mono text-xs text-muted-foreground">duration: <span data-testid="seq-duration">@_sequenceDuration</span>ms</span>
+        </div>
+    </section>
+
+    @* --- M3: page transition (same-document, experimental) ------------------- *@
+    <section class="space-y-3" data-testid="page-transition-section">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Page transition · same-document (experimental)</h2>
+        <p class="text-sm text-muted-foreground">
+            <code class="font-mono">NaviusPageTransition</code> registers a NavigationManager location-changing handler and
+            snapshots the change through <code class="font-mono">document.startViewTransition</code>. Same-document only;
+            with no support or under reduced motion it falls back to instant. This demo navigates a query string
+            (<code class="font-mono">?view=</code>) so it stays isolated to this route.
+        </p>
+        <div class="flex flex-wrap items-center gap-3">
+            <button type="button" data-testid="pt-link-a" @onclick='() => Nav.NavigateTo("motion?view=a")'
+                    class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                View A
+            </button>
+            <button type="button" data-testid="pt-link-b" @onclick='() => Nav.NavigateTo("motion?view=b")'
+                    class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                View B
+            </button>
+            <span class="font-mono text-xs text-muted-foreground">view: <span data-testid="pt-current">@(View ?? "a")</span></span>
+        </div>
+        <NaviusPageTransition>
+            <div data-testid="pt-region" style="view-transition-name: navius-pt-demo"
+                 class="rounded-lg border border-border bg-card p-6 text-card-foreground shadow">
+                @if (View == "b")
+                {
+                    <div data-testid="pt-view-b" class="space-y-1">
+                        <p class="text-lg font-semibold">View B</p>
+                        <p class="text-sm text-muted-foreground">The second screen. Navigating here cross-fades from View A.</p>
+                    </div>
+                }
+                else
+                {
+                    <div data-testid="pt-view-a" class="space-y-1">
+                        <p class="text-lg font-semibold">View A</p>
+                        <p class="text-sm text-muted-foreground">The first screen. Navigating to View B cross-fades this region.</p>
+                    </div>
+                }
+            </div>
+        </NaviusPageTransition>
+    </section>
+
+    @* --- M3: in-view reveal + stagger --------------------------------------- *@
+    <div style="height: 30vh" aria-hidden="true"></div>
+    <section class="space-y-3" data-testid="in-view-section">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">In-view reveal · scroll + stagger (CSS tier)</h2>
+        <p class="text-sm text-muted-foreground">
+            These cards start hidden and reveal on scroll into view: an IntersectionObserver sets
+            <code class="font-mono">data-in-view</code>, the generated <code class="font-mono">.motion-in-view-*</code> classes
+            transition them in on the compositor, and a stagger fans <code class="font-mono">--navius-motion-delay</code> across
+            them so they arrive in sequence.
+        </p>
+        <div @ref="_revealGroup" data-testid="reveal-group" class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            @for (var i = 0; i < 6; i++)
+            {
+                <div data-testid="reveal-item" data-reveal-index="@i"
+                     class="motion-in-view-fade-up grid h-24 place-items-center rounded-lg border border-border bg-card text-sm text-card-foreground shadow">
+                    Card @(i + 1)
+                </div>
+            }
+        </div>
+    </section>
+
     <p class="font-mono text-xs text-muted-foreground">
         view source · <code>playground/Navius.Playground/Pages/Motion.razor</code>
     </p>
@@ -289,6 +414,50 @@
     private readonly List<int> _items = new() { 1, 2, 3, 4, 5 };
     private int _nextId = 6;
 
+    // M3: selection indicator across a row of buttons (the component self-wires).
+    private ElementReference _selectionRow;
+    private int _selected;
+    private readonly string[] _selectionLabels = { "Overview", "Activity", "Settings", "Members" };
+
+    // M3: imperative sequence (four rising bars) with play/pause/seek.
+    private ElementReference _sequenceRoot;
+    private MotionSequenceHandle? _sequence;
+    private int _sequenceDuration;
+    private static readonly MotionFrame[] _rise =
+    {
+        new(Opacity: 0, Transform: "translateY(40px)"),
+        new(Opacity: 1, Transform: "translateY(0px)"),
+    };
+
+    // M3: in-view reveal with a stagger.
+    private ElementReference _revealGroup;
+    private InViewMotion? _reveal;
+
+    // M3: page-transition demo view (?view=a|b), same-document via NaviusPageTransition.
+    [SupplyParameterFromQuery] public string? View { get; set; }
+
+    private void SelectTab(int index) => _selected = index;
+
+    private async Task SequencePlay()
+    {
+        if (_sequence is not null) await _sequence.PlayAsync();
+    }
+
+    private async Task SequencePause()
+    {
+        if (_sequence is not null) await _sequence.PauseAsync();
+    }
+
+    private async Task SequenceSeekEnd()
+    {
+        if (_sequence is not null) await _sequence.SeekAsync(_sequence.DurationMs);
+    }
+
+    private async Task SequenceReset()
+    {
+        if (_sequence is not null) await _sequence.StopAsync();
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -302,7 +471,22 @@
             _pulse = await _interop.CreateMicroAsync(_pulseEl, MotionPrograms.Micro(MicroPresets.Pulse));
             await _pulse.PlayAsync();   // the live-status dot breathes until stopped
             _pulsing = true;
-            StateHasChanged();          // reflect the running state in the toggle label
+
+            // Sequence: four bars rising, each overlapping the previous by 100ms; the
+            // at-offsets and spring are compiled to absolute times + linear() in C#.
+            var sequence = new MotionSequence()
+                .To("[data-seq='1']", _rise, Spring.Snappy)
+                .To("[data-seq='2']", _rise, Spring.Snappy, at: "-100")
+                .To("[data-seq='3']", _rise, Spring.Snappy, at: "-100")
+                .To("[data-seq='4']", _rise, Spring.Snappy, at: "-100");
+            _sequence = await _interop.RunSequenceAsync(sequence.Build(), _sequenceRoot);
+            _sequenceDuration = (int)_sequence.DurationMs;
+
+            // In-view reveal group with a left-to-right stagger.
+            _reveal = await _interop.CreateInViewAsync(
+                _revealGroup, new InViewOptions(Amount: 0, Stagger: StaggerOptions.Of(80, StaggerFrom.First)));
+
+            StateHasChanged();          // reflect the running state + sequence duration
         }
 
         if (_runtimeEnterFlip)
@@ -454,6 +638,16 @@
         {
             await _pulse.DisposeAsync();
             _pulse = null;
+        }
+        if (_sequence is not null)
+        {
+            await _sequence.DisposeAsync();
+            _sequence = null;
+        }
+        if (_reveal is not null)
+        {
+            await _reveal.DisposeAsync();
+            _reveal = null;
         }
         if (_interop is not null)
         {

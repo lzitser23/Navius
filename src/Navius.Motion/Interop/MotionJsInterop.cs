@@ -112,6 +112,126 @@ public sealed class MotionJsInterop : IAsyncDisposable
         return new AutoAnimateMotion(handle);
     }
 
+    /// <summary>
+    /// Observe <paramref name="element"/> and set <c>data-in-view</c> on it while it
+    /// intersects the viewport (IntersectionObserver v1), so the generated
+    /// <c>.motion-in-view-*</c> classes reveal it on scroll with zero per-frame JS. With
+    /// <see cref="InViewOptions.Stagger"/> the same intersection fans the attribute out
+    /// to the direct children (their delay var set up front) for a staggered group.
+    /// </summary>
+    public async Task<InViewMotion> CreateInViewAsync(ElementReference element, InViewOptions options)
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>("createInView", element, options, null);
+        return new InViewMotion(handle);
+    }
+
+    /// <summary>
+    /// Overload that additionally reports coarse <c>OnInView(bool)</c> edges to
+    /// <paramref name="callback"/> (enter/leave), for driving C# state off the reveal.
+    /// </summary>
+    public async Task<InViewMotion> CreateInViewAsync<T>(
+        ElementReference element, InViewOptions options, DotNetObjectReference<T> callback) where T : class
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>("createInView", element, options, callback);
+        return new InViewMotion(handle);
+    }
+
+    /// <summary>
+    /// Set <c>--navius-motion-delay</c> on each direct element child of
+    /// <paramref name="container"/> from a stagger schedule, without any in-view coupling
+    /// (for groups revealed by other means). The var composes with the enter / in-view
+    /// classes that already read it.
+    /// </summary>
+    public async Task<StaggerMotion> CreateStaggerAsync(ElementReference container, StaggerOptions options)
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>("createStagger", container, options);
+        return new StaggerMotion(handle);
+    }
+
+    /// <summary>
+    /// Attach a spring-animated selection marker that moves <paramref name="indicator"/>
+    /// to the active element within <paramref name="container"/>. Position rides a
+    /// compositor transform; size animates so a pill/underline tracks items of differing
+    /// size. Call <see cref="SelectionIndicatorMotion.UpdateAsync"/> after the active
+    /// element changes. Build <paramref name="options"/> with
+    /// <see cref="MotionPrograms.SelectionIndicator"/>.
+    /// </summary>
+    public async Task<SelectionIndicatorMotion> CreateSelectionIndicatorAsync(
+        ElementReference container, ElementReference indicator, SelectionIndicatorOptions options)
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createSelectionIndicator", container, indicator, options);
+        return new SelectionIndicatorMotion(handle);
+    }
+
+    /// <summary>
+    /// Play a compiled <see cref="MotionProgram"/> (build one with
+    /// <see cref="MotionSequence"/>). Selector targets resolve against the whole document.
+    /// The returned handle drives the whole timeline (play/pause/seek/stop) and awaits its
+    /// completion.
+    /// </summary>
+    public Task<MotionSequenceHandle> RunSequenceAsync(MotionProgram program)
+        => RunSequenceCoreAsync(program, root: null);
+
+    /// <summary>
+    /// Overload that scopes selector targets to <paramref name="root"/> (its
+    /// <c>querySelector</c>), so several sequences on one page never collide.
+    /// </summary>
+    public Task<MotionSequenceHandle> RunSequenceAsync(MotionProgram program, ElementReference root)
+        => RunSequenceCoreAsync(program, root);
+
+    private async Task<MotionSequenceHandle> RunSequenceCoreAsync(MotionProgram program, ElementReference? root)
+    {
+        var module = await _module.Value;
+        var handle = root is ElementReference scope
+            ? await module.InvokeAsync<IJSObjectReference>("runProgram", program, scope)
+            : await module.InvokeAsync<IJSObjectReference>("runProgram", program, null);
+        return new MotionSequenceHandle(handle, program.TotalMs);
+    }
+
+    /// <summary>
+    /// Begin a same-document View Transition, resolving once the browser has captured the
+    /// OLD snapshot (so the caller can then perform the Blazor navigation without racing
+    /// the capture). Returns <c>false</c> under reduced motion or where the API is
+    /// unsupported: the caller then navigates instantly. Pair with
+    /// <see cref="FinishViewTransitionAsync"/> after the new page has rendered.
+    /// </summary>
+    public async Task<bool> StartViewTransitionAsync(string reduceMotion = "user")
+    {
+        var module = await _module.Value;
+        return await module.InvokeAsync<bool>("startViewTransition", new { reduceMotion });
+    }
+
+    /// <summary>Resolve the pending transition so the browser captures the new state and cross-fades.</summary>
+    public async Task FinishViewTransitionAsync()
+    {
+        var module = await _module.Value;
+        try
+        {
+            await module.InvokeVoidAsync("finishViewTransition");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>Await <paramref name="frames"/> animation frames (let a fresh render lay out before snapshotting).</summary>
+    public async Task WaitFramesAsync(int frames)
+    {
+        var module = await _module.Value;
+        try
+        {
+            await module.InvokeVoidAsync("nextFrames", frames);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (!_module.IsValueCreated)
@@ -315,6 +435,227 @@ public sealed class AutoAnimateMotion : IAsyncDisposable
         }
     }
 }
+
+/// <summary>
+/// A live in-view observer. When created with <see cref="InViewOptions.Stagger"/>,
+/// <see cref="RefreshAsync"/> re-reads the child list (call after the children change).
+/// Dispose to disconnect it (the element keeps its last state).
+/// </summary>
+public sealed class InViewMotion : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal InViewMotion(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>
+    /// Recompute the per-child stagger delays after the group's children change. New
+    /// children pick up the delay var, and if the group is already in view, data-in-view
+    /// too. A no-op when the observer was created without a stagger.
+    /// </summary>
+    public async Task RefreshAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("refresh");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>A stagger binding on a container. <see cref="RefreshAsync"/> re-reads the child list.</summary>
+public sealed class StaggerMotion : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal StaggerMotion(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>Recompute and re-apply the per-child delay vars (call after the children change).</summary>
+    public async Task RefreshAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("refresh");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// A live selection-indicator binding. <see cref="UpdateAsync"/> animates the marker to
+/// the current active element; dispose to disconnect the resize observer.
+/// </summary>
+public sealed class SelectionIndicatorMotion : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal SelectionIndicatorMotion(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>Animate the marker to the active element (call after the active element changes).</summary>
+    public async Task UpdateAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("update");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// A handle to a running <see cref="MotionProgram"/>: drive the whole timeline with
+/// <see cref="PlayAsync"/> / <see cref="PauseAsync"/> / <see cref="SeekAsync"/> /
+/// <see cref="StopAsync"/> and await its completion with <see cref="WaitForFinishAsync"/>.
+/// <see cref="DurationMs"/> is the resolved total length. Dispose to cancel every segment.
+/// </summary>
+public sealed class MotionSequenceHandle : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal MotionSequenceHandle(IJSObjectReference handle, double totalMs)
+    {
+        _handle = handle;
+        DurationMs = totalMs;
+    }
+
+    /// <summary>The resolved total timeline length in milliseconds.</summary>
+    public double DurationMs { get; }
+
+    /// <summary>Play (or resume) the whole timeline from the current position.</summary>
+    public Task PlayAsync() => InvokeAsync("play");
+
+    /// <summary>Pause every segment at the current position.</summary>
+    public Task PauseAsync() => InvokeAsync("pause");
+
+    /// <summary>Stop and rewind the whole timeline to the start.</summary>
+    public Task StopAsync() => InvokeAsync("stop");
+
+    /// <summary>Scrub the whole timeline to <paramref name="ms"/> (clamped to [0, duration]).</summary>
+    public async Task SeekAsync(double ms)
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("seek", ms);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>Await the timeline completing (resolves when every segment has finished playing).</summary>
+    public async Task WaitForFinishAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("finished");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task InvokeAsync(string method)
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync(method);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// Options for <see cref="MotionJsInterop.CreateInViewAsync(ElementReference, InViewOptions)"/>
+/// (serialized to camelCase). <see cref="Amount"/> is the visibility threshold: 0 fires
+/// as soon as any pixel is visible, 1 only when fully visible. <see cref="Margin"/> is a
+/// CSS rootMargin. <see cref="Once"/> keeps <c>data-in-view</c> after the first entry.
+/// A non-null <see cref="Stagger"/> also fans the reveal out to the direct children.
+/// </summary>
+public sealed record InViewOptions(
+    double Amount = 0,
+    string Margin = "0px",
+    bool Once = false,
+    StaggerOptions? Stagger = null);
+
+/// <summary>
+/// A stagger schedule (serialized to camelCase): <see cref="Step"/> is the per-child
+/// step in milliseconds, <see cref="From"/> the anchor token (<c>first</c>, <c>last</c>
+/// or <c>center</c>). Build from a <see cref="StaggerFrom"/> with <see cref="Of"/>.
+/// </summary>
+public sealed record StaggerOptions(double Step = 50, string From = "first")
+{
+    /// <summary>Build from a typed anchor.</summary>
+    public static StaggerOptions Of(double step, StaggerFrom from) => new(step, from.ToToken());
+}
+
+/// <summary>
+/// Options for <see cref="MotionJsInterop.CreateSelectionIndicatorAsync"/> (serialized to
+/// camelCase). <see cref="ActiveSelector"/> finds the active item within the container;
+/// <see cref="Axis"/> is <c>x</c>, <c>y</c> or <c>both</c>; <see cref="Easing"/> is the
+/// baked spring the marker moves with. Build with
+/// <see cref="MotionPrograms.SelectionIndicator"/>.
+/// </summary>
+public sealed record SelectionIndicatorOptions(
+    string ActiveSelector = "[data-active]",
+    string Axis = "both",
+    double DurationMs = 200,
+    string Easing = "ease",
+    string ReduceMotion = "user");
 
 /// <summary>
 /// One WAAPI keyframe restricted to the compositor-friendly properties the presets

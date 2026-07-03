@@ -25,6 +25,42 @@ public class MotionApiTests
     }
 
     [Fact]
+    public void InView_splat_emits_the_in_view_class_and_optional_delay()
+    {
+        var attributes = Motion.InView(Preset.SlideUp, delayMs: 120);
+        Assert.Equal("motion-in-view-slide-up", attributes["class"]);
+        Assert.Equal("--navius-motion-delay: 120ms", attributes["style"]);
+
+        var noDelay = Motion.InView(Preset.Fade);
+        Assert.Equal("motion-in-view-fade", noDelay["class"]);
+        Assert.False(noDelay.ContainsKey("style"));
+    }
+
+    [Fact]
+    public void Every_preset_exposes_a_distinct_in_view_class()
+    {
+        foreach (var preset in MotionPresets.All)
+        {
+            Assert.Equal("motion-in-view-" + preset.Name, preset.InViewClass);
+        }
+    }
+
+    [Fact]
+    public void SelectionIndicator_options_bake_the_spring()
+    {
+        var baked = LinearEasingBaker.Bake(Spring.Bouncy);
+        var options = MotionPrograms.SelectionIndicator(Spring.Bouncy, activeSelector: "[data-selected]", axis: "x");
+
+        Assert.Equal("[data-selected]", options.ActiveSelector);
+        Assert.Equal("x", options.Axis);
+        Assert.Equal(baked.DurationMilliseconds, options.DurationMs);
+        Assert.Equal(baked.Easing, options.Easing);
+
+        // Default spring is snappy.
+        Assert.Equal(LinearEasingBaker.Bake(Spring.Snappy).Easing, MotionPrograms.SelectionIndicator().Easing);
+    }
+
+    [Fact]
     public void Press_and_hover_splats_format_invariantly()
     {
         var original = CultureInfo.CurrentCulture;

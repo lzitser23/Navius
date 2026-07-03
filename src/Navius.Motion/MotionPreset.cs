@@ -18,6 +18,9 @@ public sealed record MotionPreset(
 
     /// <summary>The CSS class for the insert-only tier (uses @starting-style, no state attributes needed).</summary>
     public string EnterClass => "motion-enter-" + Name;
+
+    /// <summary>The CSS class for the scroll-reveal tier (starts hidden, transitions in on [data-in-view]).</summary>
+    public string InViewClass => "motion-in-view-" + Name;
 }
 
 /// <summary>

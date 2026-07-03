@@ -80,6 +80,18 @@ public static class MotionPrograms
         return new AutoAnimateOptions(durationMs ?? 250, easing ?? "ease-in-out", reduceMotion);
     }
 
+    /// <summary>
+    /// Build <see cref="SelectionIndicatorOptions"/> from a spring (default: snappy): the
+    /// spring bakes to a <c>linear()</c> easing and its settle duration, so the marker
+    /// moves with the same C#-solved physics as the rest of the engine.
+    /// </summary>
+    public static SelectionIndicatorOptions SelectionIndicator(
+        Spring? spring = null, string activeSelector = "[data-active]", string axis = "both", string reduceMotion = "user")
+    {
+        var baked = LinearEasingBaker.Bake(spring ?? Spring.Snappy);
+        return new SelectionIndicatorOptions(activeSelector, axis, baked.DurationMilliseconds, baked.Easing, reduceMotion);
+    }
+
     private static MotionFrame ToFrame(MotionVisualState state)
         => new(state.Opacity, state.Transform ?? "none");
 
