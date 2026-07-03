@@ -1,0 +1,99 @@
+@namespace Navius.Primitives.Components.MessageScroller
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    The scroll container: a labelled, keyboard-focusable scroll region
+    (role="region", aria-label="Messages", tabindex="0"; override any of them via
+    the attribute seam). After first render it hands this element to the engine's
+    createMessageScroller, which owns the scroll hot path (anchored turns, follow,
+    prepend preservation, edge attributes) and reports the discrete state back here.
+    The consumer MUST give this element a vertical overflow and a bounded size,
+    e.g. class="h-full w-full overflow-y-auto".
+*@
+
+<div role="region"
+     aria-label="Messages"
+     tabindex="0"
+     @ref="_element"
+     data-navius-messagescroller-viewport
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private MessageScrollerContext Context { get; set; } = default!;
+
+    /// <summary>Keep the first visible row stable when older rows are prepended.</summary>
+    [Parameter] public bool PreserveScrollOnPrepend { get; set; } = true;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private NaviusJsInterop? _interop;
+    private DotNetObjectReference<NaviusMessageScrollerViewport>? _selfRef;
+    private Interop.MessageScroller? _scroller;
+    private bool _engaged;
+
+    protected override async Task OnParametersSetAsync() =>
+        await Context.SetPreserveScrollOnPrependInternalAsync(PreserveScrollOnPrepend);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _engaged)
+        {
+            return;
+        }
+
+        _engaged = true;
+        _selfRef = DotNetObjectReference.Create(this);
+        _interop = new NaviusJsInterop(JS);
+
+        // The whole subtree (content, items, spacer) is committed by the time this
+        // runs, so the engine can locate its parts from the viewport. Wrapped in a
+        // try/catch so a failed call degrades gracefully: native overflow still
+        // scrolls, only the managed behaviours are missing.
+        try
+        {
+            _scroller = await _interop.CreateMessageScrollerAsync(_element, _selfRef, Context.Options);
+            await Context.AttachEngineAsync(_scroller);
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    /// <summary>Invoked from the engine whenever the scrollable-edge state changes.</summary>
+    [JSInvokable]
+    public Task OnScrollableChange(bool start, bool end) =>
+        Context.SetScrollableInternalAsync(start, end);
+
+    /// <summary>Invoked from the engine while visibility tracking runs.</summary>
+    [JSInvokable]
+    public Task OnVisibilityChange(string? currentAnchorId, string[] visibleMessageIds) =>
+        Context.SetVisibilityInternalAsync(currentAnchorId, visibleMessageIds);
+
+    public async ValueTask DisposeAsync()
+    {
+        Context.DetachEngine();
+
+        if (_scroller is not null)
+        {
+            try
+            {
+                await _scroller.DisposeAsync();
+            }
+            catch (JSException) { }
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+
+        _selfRef?.Dispose();
+    }
+}

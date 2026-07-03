@@ -1571,3 +1571,527 @@ export function createSheetSwipe(content, dotNetRef, options) {
     },
   };
 }
+
+// --- Message scroller ----------------------------------------------------------
+// Conversation-transcript scroll manager (the shadcn MessageScroller role). The
+// guiding rule: never move the reader against their intent. `viewport` is the
+// scroll container; the engine locates the root frame via the
+// data-navius-messagescroller ancestor and the transcript container via the
+// data-navius-messagescroller-content descendant (whose direct children are the
+// data-navius-messagescroller-item rows, plus a trailing
+// data-navius-messagescroller-spacer element the engine sizes to make room for
+// anchored turns).
+//
+// Behaviours:
+//   - Anchored turns: when a row marked data-scroll-anchor="true" is appended
+//     while the reader is at the live edge, the viewport scrolls it near the top
+//     (scrollMargin + scrollPreviousItemPeek below the edge, so part of the
+//     previous item stays visible) and grows the spacer so the position is
+//     reachable while the reply streams in below.
+//   - Streamed-reply follow: with autoScroll enabled, the viewport sticks to the
+//     live edge only while the reader is already there. Wheel, touch, keyboard
+//     scrolling, scrollbar drags and explicit jumps release the follow; pressing
+//     the scroll button or calling scrollToEnd re-engages it.
+//   - Prepend preservation: when older rows are prepended, the first visible row
+//     (keyed on its stable data-message-id) keeps its on-screen position.
+//   - Edge state: data-scrollable="start"/"end"/"start end" is mirrored on the
+//     root and the viewport (scrollEdgeThreshold px from an edge still counts as
+//     being at it); data-autoscrolling is present while the engine is
+//     programmatically scrolling toward the latest message.
+//   - Visibility tracking (subscription-gated, costs nothing until enabled via
+//     setVisibilityTracking): reports the current anchor id (the last anchor row
+//     at or above the reading line) and the message ids intersecting the
+//     viewport, in document order.
+//
+// Calls back into .NET (all swallowed if the consumer hasn't declared them):
+//   OnScrollableChange(start, end)          - the scrollable edges changed
+//   OnVisibilityChange(currentAnchorId, ids) - only while visibility tracking runs
+//
+// Returns a handle: scrollToMessage(id, opts)/scrollToStart(opts)/scrollToEnd(opts)
+// (opts: { align, behavior, scrollMargin }), update(options),
+// setVisibilityTracking(enabled), destroy(). scrollToMessage queues its target
+// when called before any rows exist (client-resolved permalinks) and returns
+// false only for an id that is missing from a mounted transcript.
+export function createMessageScroller(viewport, dotNetRef, options) {
+  const opts = Object.assign(
+    {
+      autoScroll: false,
+      defaultScrollPosition: 'end',
+      scrollEdgeThreshold: 8,
+      scrollMargin: 0,
+      scrollPreviousItemPeek: 64,
+      preserveScrollOnPrepend: true,
+    },
+    options || {}
+  );
+
+  const root = viewport.closest('[data-navius-messagescroller]');
+  const content = viewport.querySelector('[data-navius-messagescroller-content]');
+
+  // No transcript container: an inert handle so callers don't need to null-check.
+  if (!content) {
+    return {
+      scrollToMessage() { return false; }, scrollToStart() { return false; },
+      scrollToEnd() { return false; }, update() {}, setVisibilityTracking() {}, destroy() {},
+    };
+  }
+
+  const spacer = content.querySelector(':scope > [data-navius-messagescroller-spacer]');
+  const ITEM_SELECTOR = ':scope > [data-navius-messagescroller-item]';
+
+  const notify = (method, ...args) =>
+    Promise.resolve(dotNetRef.invokeMethodAsync(method, ...args)).catch(() => {});
+
+  let itemList = [];
+  let following = false;
+  let initialApplied = false;
+  let pendingTarget = null; // { id, options } queued before any rows exist
+  let anchorEl = null; // the row the spacer keeps reachable near the top
+  let refEl = null; // reading-position reference (first visible row)
+  let refId = null;
+  let refOffset = 0;
+  let nearEnd = true; // pre-mutation "at the live edge" snapshot
+  let programmaticTarget = null;
+  let programmaticTimer = 0;
+  let autoscrollAttrTimer = 0;
+  let suppressUserScrollUntil = 0; // layout-induced scroll events are not intent
+  let lastSpacerHeight = 0;
+  let lastScrollableKey = null;
+  let trackVisibility = false;
+  let io = null;
+  let visibleSet = new Set();
+  let visibilityRaf = 0;
+  let lastVisibilityKey = '';
+  let roRaf = 0;
+
+  // The engine owns position preservation, so the browser's own scroll anchoring
+  // must not double-compensate.
+  const prevOverflowAnchor = viewport.style.overflowAnchor;
+  viewport.style.overflowAnchor = 'none';
+
+  const refreshItems = () => { itemList = Array.from(content.querySelectorAll(ITEM_SELECTOR)); };
+  const maxScroll = () => Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+  const atEnd = () => maxScroll() - viewport.scrollTop <= opts.scrollEdgeThreshold;
+  const clampTop = (t) => Math.max(0, Math.min(t, maxScroll()));
+  const messageId = (el) => el.getAttribute('data-message-id');
+  const isAnchor = (el) => el.getAttribute('data-scroll-anchor') === 'true';
+  const anchorMargin = () => opts.scrollMargin + opts.scrollPreviousItemPeek;
+  const suppress = (ms) => { suppressUserScrollUntil = performance.now() + ms; };
+
+  // An element's top edge in the viewport's scroll space (what scrollTop must be
+  // for the edge to sit at the visible top).
+  function scrollSpaceTop(el) {
+    const vRect = viewport.getBoundingClientRect();
+    return el.getBoundingClientRect().top - vRect.top - viewport.clientTop + viewport.scrollTop;
+  }
+
+  function targetFor(el, align, margin) {
+    const top = scrollSpaceTop(el);
+    const height = el.getBoundingClientRect().height;
+    const ch = viewport.clientHeight;
+    if (align === 'end') return clampTop(top + height - ch + margin);
+    if (align === 'center') return clampTop(top + height / 2 - ch / 2);
+    if (align === 'nearest') {
+      const cur = viewport.scrollTop;
+      if (top >= cur + margin && top + height <= cur + ch - margin) return cur; // already in view
+      return top < cur + margin ? clampTop(top - margin) : clampTop(top + height - ch + margin);
+    }
+    return clampTop(top - margin);
+  }
+
+  function normalizeScrollOptions(o) {
+    return {
+      align: o && o.align != null ? o.align : 'start',
+      behavior: o && o.behavior != null ? o.behavior : 'auto',
+      margin: o && o.scrollMargin != null ? o.scrollMargin : opts.scrollMargin,
+    };
+  }
+
+  function setAutoscrollingAttr(on) {
+    for (const el of [root, viewport]) {
+      if (!el) continue;
+      if (on) el.setAttribute('data-autoscrolling', '');
+      else el.removeAttribute('data-autoscrolling');
+    }
+  }
+
+  // toLatest scrolls carry the data-autoscrolling attribute (they move toward the
+  // newest message); the attribute lingers briefly so per-chunk follow jumps read
+  // as one continuous autoscroll.
+  function programmaticScroll(top, behavior, toLatest) {
+    const t = clampTop(top);
+    if (toLatest) {
+      setAutoscrollingAttr(true);
+      clearTimeout(autoscrollAttrTimer);
+      autoscrollAttrTimer = setTimeout(() => { if (programmaticTarget == null) setAutoscrollingAttr(false); }, 200);
+    }
+    if (Math.abs(viewport.scrollTop - t) < 0.5) { updateEdgeState(); return; }
+    programmaticTarget = t;
+    renewProgrammaticTimer();
+    suppress(80);
+    viewport.scrollTo({ top: t, behavior: behavior === 'smooth' ? 'smooth' : 'auto' });
+  }
+
+  function renewProgrammaticTimer() {
+    clearTimeout(programmaticTimer);
+    programmaticTimer = setTimeout(settleProgrammatic, 300);
+  }
+
+  function settleProgrammatic() {
+    programmaticTarget = null;
+    clearTimeout(programmaticTimer);
+    // Let data-autoscrolling linger briefly so per-chunk follow jumps read as one
+    // continuous autoscroll instead of flickering between chunks.
+    clearTimeout(autoscrollAttrTimer);
+    autoscrollAttrTimer = setTimeout(() => setAutoscrollingAttr(false), 120);
+    captureRef();
+    updateEdgeState();
+  }
+
+  function captureRef() {
+    if (!itemList.length) { refEl = null; refId = null; return; }
+    const vTop = viewport.getBoundingClientRect().top + viewport.clientTop;
+    // Binary search for the first row whose bottom edge is below the viewport top.
+    let lo = 0;
+    let hi = itemList.length - 1;
+    let found = itemList.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (itemList[mid].getBoundingClientRect().bottom > vTop) { found = mid; hi = mid - 1; }
+      else lo = mid + 1;
+    }
+    refEl = itemList[found];
+    refId = messageId(refEl);
+    refOffset = refEl.getBoundingClientRect().top - vTop;
+  }
+
+  function restoreRef() {
+    let el = refEl && refEl.isConnected ? refEl : null;
+    if (!el && refId != null) el = itemList.find((e) => messageId(e) === refId) || null;
+    if (!el) return;
+    const vTop = viewport.getBoundingClientRect().top + viewport.clientTop;
+    const delta = (el.getBoundingClientRect().top - vTop) - refOffset;
+    if (Math.abs(delta) < 0.5) return;
+    suppress(80);
+    viewport.scrollTop += delta;
+  }
+
+  function setSpacerHeight(h) {
+    if (!spacer || Math.abs(h - lastSpacerHeight) < 1) return;
+    lastSpacerHeight = h;
+    suppress(80);
+    spacer.style.flexShrink = '0';
+    spacer.style.height = h > 0 ? `${h}px` : '';
+  }
+
+  // Keep enough room below the current anchor row that its near-the-top position
+  // stays reachable; shrinks back to zero as the streamed reply fills the space.
+  function updateSpacer() {
+    if (!spacer) return;
+    let h = 0;
+    if (anchorEl && anchorEl.isConnected) {
+      const target = Math.max(0, scrollSpaceTop(anchorEl) - anchorMargin());
+      const spacerTop = scrollSpaceTop(spacer);
+      h = Math.max(0, target + viewport.clientHeight - spacerTop);
+    }
+    setSpacerHeight(h);
+  }
+
+  function updateEdgeState() {
+    const start = viewport.scrollTop > opts.scrollEdgeThreshold;
+    const end = maxScroll() - viewport.scrollTop > opts.scrollEdgeThreshold;
+    nearEnd = !end;
+    const value = start && end ? 'start end' : start ? 'start' : end ? 'end' : null;
+    for (const el of [root, viewport]) {
+      if (!el) continue;
+      if (value) el.setAttribute('data-scrollable', value);
+      else el.removeAttribute('data-scrollable');
+    }
+    const key = `${start}|${end}`;
+    if (key !== lastScrollableKey) {
+      lastScrollableKey = key;
+      notify('OnScrollableChange', start, end);
+    }
+  }
+
+  function positionAnchor(el, behavior) {
+    anchorEl = el;
+    updateSpacer();
+    // An anchored turn is a deliberate reading position, not the live edge, so
+    // the streamed reply grows into the screen below instead of being followed.
+    following = false;
+    programmaticScroll(targetFor(el, 'start', anchorMargin()), behavior, true);
+  }
+
+  function stickToEnd() {
+    programmaticScroll(maxScroll(), 'auto', true);
+  }
+
+  function applyInitialPosition() {
+    initialApplied = true;
+    if (pendingTarget) {
+      const el = itemList.find((e) => messageId(e) === pendingTarget.id);
+      if (el) {
+        const t = pendingTarget;
+        pendingTarget = null;
+        scrollToMessage(t.id, t.options);
+        return;
+      }
+      // Keep the target queued in case the row arrives with a later batch.
+    }
+    if (opts.defaultScrollPosition === 'start') { following = false; return; }
+    if (opts.defaultScrollPosition === 'last-anchor') {
+      const anchors = itemList.filter(isAnchor);
+      const el = anchors[anchors.length - 1];
+      if (el) {
+        // Clamping to maxScroll is the documented fallback: when the last turn
+        // fits in the viewport this lands at the end.
+        following = false;
+        suppress(80);
+        viewport.scrollTop = targetFor(el, 'start', anchorMargin());
+        return;
+      }
+    }
+    suppress(80);
+    viewport.scrollTop = maxScroll();
+    following = opts.autoScroll;
+  }
+
+  function resolvePendingTarget() {
+    if (!pendingTarget) return;
+    const el = itemList.find((e) => messageId(e) === pendingTarget.id);
+    if (!el) return;
+    const t = pendingTarget;
+    pendingTarget = null;
+    scrollToMessage(t.id, t.options);
+  }
+
+  // --- reader-intent listeners -------------------------------------------------
+  function onUserIntent() {
+    if (programmaticTarget != null) {
+      // The reader interrupts a programmatic scroll: stop where we are.
+      viewport.scrollTo({ top: viewport.scrollTop, behavior: 'auto' });
+      settleProgrammatic();
+    }
+    following = opts.autoScroll && atEnd();
+  }
+
+  const SCROLL_KEYS = [' ', 'PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown'];
+  const onWheel = () => onUserIntent();
+  const onTouchMove = () => onUserIntent();
+  const onKeyDown = (e) => { if (SCROLL_KEYS.includes(e.key)) onUserIntent(); };
+  // A pointerdown whose target is the viewport itself hits its own box (the
+  // scrollbar or padding), so a scrollbar drag counts as intent too.
+  const onPointerDown = (e) => { if (e.target === viewport) onUserIntent(); };
+
+  function onScroll() {
+    if (programmaticTarget != null) {
+      if (Math.abs(viewport.scrollTop - programmaticTarget) <= 1) settleProgrammatic();
+      else renewProgrammaticTimer();
+      updateEdgeState();
+    } else {
+      const intent = performance.now() >= suppressUserScrollUntil;
+      if (intent) following = opts.autoScroll && atEnd();
+      captureRef();
+      updateEdgeState();
+    }
+    if (trackVisibility) scheduleVisibility();
+  }
+
+  function onResize() {
+    updateSpacer();
+    if (following) stickToEnd();
+    else if (programmaticTarget == null) restoreRef();
+    captureRef();
+    updateEdgeState();
+    if (trackVisibility) scheduleVisibility();
+  }
+
+  const mo = new MutationObserver(() => {
+    const prevFirst = itemList[0] || null;
+    const prevLast = itemList[itemList.length - 1] || null;
+    const hadItems = itemList.length > 0;
+    const wasNearEnd = nearEnd;
+    refreshItems();
+    if (trackVisibility) observeAllItems();
+    if (!itemList.length) {
+      anchorEl = null;
+      setSpacerHeight(0);
+      refEl = null;
+      refId = null;
+      updateEdgeState();
+      return;
+    }
+
+    if (!initialApplied) {
+      applyInitialPosition();
+      captureRef();
+      updateEdgeState();
+      if (trackVisibility) scheduleVisibility();
+      return;
+    }
+
+    const prepended = hadItems && prevFirst ? itemList.indexOf(prevFirst) > 0 : false;
+    const lastIdx = prevLast ? itemList.indexOf(prevLast) : -1;
+    const appended = lastIdx >= 0 ? itemList.slice(lastIdx + 1) : (hadItems ? [] : itemList);
+
+    if (prepended && opts.preserveScrollOnPrepend) restoreRef();
+
+    const anchors = appended.filter(isAnchor);
+    if (anchors.length && (wasNearEnd || following)) {
+      // Only an at-the-live-edge reader gets moved to the new turn; anyone
+      // reading history keeps their place and the content arrives offscreen.
+      positionAnchor(anchors[anchors.length - 1], 'smooth');
+    } else if (following) {
+      stickToEnd();
+    }
+
+    resolvePendingTarget();
+    captureRef();
+    updateEdgeState();
+    if (trackVisibility) scheduleVisibility();
+  });
+  mo.observe(content, { childList: true });
+
+  let ro = null;
+  if (typeof ResizeObserver !== 'undefined') {
+    // rAF-coalesced like createPositioner: one pass per frame while streaming.
+    ro = new ResizeObserver(() => {
+      if (roRaf) return;
+      roRaf = requestAnimationFrame(() => { roRaf = 0; onResize(); });
+    });
+    ro.observe(content);
+    ro.observe(viewport);
+  }
+
+  // --- visibility tracking (lazy) ------------------------------------------------
+  function observeAllItems() {
+    if (!io) return;
+    io.disconnect();
+    visibleSet.clear();
+    for (const el of itemList) io.observe(el);
+  }
+
+  function scheduleVisibility() {
+    if (!trackVisibility || visibilityRaf) return;
+    visibilityRaf = requestAnimationFrame(reportVisibility);
+  }
+
+  function reportVisibility() {
+    visibilityRaf = 0;
+    if (!trackVisibility) return;
+    const ids = [];
+    for (const el of itemList) {
+      if (!visibleSet.has(el)) continue;
+      const id = messageId(el);
+      if (id != null) ids.push(id);
+    }
+    // The current anchor is the last anchor row at or above the reading line
+    // (one pixel past the anchored-turn resting position); it stays current
+    // after scrolling above the viewport.
+    const vTop = viewport.getBoundingClientRect().top + viewport.clientTop;
+    const line = anchorMargin() + 1;
+    let current = null;
+    for (const el of itemList) {
+      if (!isAnchor(el)) continue;
+      if (el.getBoundingClientRect().top - vTop <= line) current = messageId(el);
+      else break;
+    }
+    const key = `${current ?? ''}|${ids.join(',')}`;
+    if (key === lastVisibilityKey) return;
+    lastVisibilityKey = key;
+    notify('OnVisibilityChange', current, ids);
+  }
+
+  function setVisibilityTracking(enabled) {
+    if (trackVisibility === !!enabled) return;
+    trackVisibility = !!enabled;
+    if (trackVisibility) {
+      if (!io && typeof IntersectionObserver !== 'undefined') {
+        io = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) visibleSet.add(entry.target);
+            else visibleSet.delete(entry.target);
+          }
+          scheduleVisibility();
+        }, { root: viewport });
+      }
+      observeAllItems();
+      scheduleVisibility();
+    } else {
+      if (io) io.disconnect();
+      visibleSet.clear();
+      lastVisibilityKey = '';
+      if (visibilityRaf) { cancelAnimationFrame(visibilityRaf); visibilityRaf = 0; }
+    }
+  }
+
+  // --- imperative API --------------------------------------------------------------
+  function scrollToMessage(id, o) {
+    const el = itemList.find((e) => messageId(e) === id);
+    if (!el) {
+      if (!itemList.length) { pendingTarget = { id, options: o || null }; return true; }
+      return false;
+    }
+    const norm = normalizeScrollOptions(o);
+    following = false; // an explicit jump releases the follow
+    programmaticScroll(targetFor(el, norm.align, norm.margin), norm.behavior, false);
+    return true;
+  }
+
+  function scrollToStart(o) {
+    const norm = normalizeScrollOptions(o);
+    following = false;
+    programmaticScroll(0, norm.behavior, false);
+    return true;
+  }
+
+  function scrollToEnd(o) {
+    const norm = normalizeScrollOptions(o);
+    if (opts.autoScroll) following = true; // the explicit return to the live edge re-engages follow
+    programmaticScroll(maxScroll(), norm.behavior, true);
+    return true;
+  }
+
+  viewport.addEventListener('scroll', onScroll, { passive: true });
+  viewport.addEventListener('wheel', onWheel, { passive: true });
+  viewport.addEventListener('touchmove', onTouchMove, { passive: true });
+  viewport.addEventListener('keydown', onKeyDown);
+  viewport.addEventListener('pointerdown', onPointerDown);
+
+  refreshItems();
+  if (itemList.length) applyInitialPosition();
+  captureRef();
+  updateEdgeState();
+
+  return {
+    scrollToMessage,
+    scrollToStart,
+    scrollToEnd,
+    update(newOptions) {
+      Object.assign(opts, newOptions || {});
+      following = opts.autoScroll && atEnd();
+      updateSpacer();
+      updateEdgeState();
+    },
+    setVisibilityTracking,
+    destroy() {
+      mo.disconnect();
+      if (ro) ro.disconnect();
+      if (io) io.disconnect();
+      if (roRaf) cancelAnimationFrame(roRaf);
+      if (visibilityRaf) cancelAnimationFrame(visibilityRaf);
+      clearTimeout(programmaticTimer);
+      clearTimeout(autoscrollAttrTimer);
+      viewport.removeEventListener('scroll', onScroll);
+      viewport.removeEventListener('wheel', onWheel);
+      viewport.removeEventListener('touchmove', onTouchMove);
+      viewport.removeEventListener('keydown', onKeyDown);
+      viewport.removeEventListener('pointerdown', onPointerDown);
+      setAutoscrollingAttr(false);
+      for (const el of [root, viewport]) { if (el) el.removeAttribute('data-scrollable'); }
+      if (spacer) { spacer.style.height = ''; spacer.style.flexShrink = ''; }
+      viewport.style.overflowAnchor = prevOverflowAnchor;
+    },
+  };
+}

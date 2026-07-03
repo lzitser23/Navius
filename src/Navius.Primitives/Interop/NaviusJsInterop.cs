@@ -414,6 +414,21 @@ public sealed class NaviusJsInterop : IAsyncDisposable
         return new SheetSwipe(handle);
     }
 
+    /// <summary>
+    /// Conversation-transcript scroll manager rooted at <paramref name="viewport"/>:
+    /// anchored turns, streamed-reply follow, prepend scroll preservation, edge state
+    /// (<c>OnScrollableChange</c>) and lazy visibility tracking
+    /// (<c>OnVisibilityChange</c>) on <paramref name="callback"/>. For MessageScroller.
+    /// </summary>
+    public async Task<MessageScroller> CreateMessageScrollerAsync<T>(
+        ElementReference viewport, DotNetObjectReference<T> callback, MessageScrollerOptions options) where T : class
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createMessageScroller", viewport, callback, options);
+        return new MessageScroller(handle);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (!_module.IsValueCreated)
@@ -848,6 +863,99 @@ public sealed class SheetSwipe : IAsyncDisposable
     }
 }
 
+/// <summary>
+/// A live conversation-transcript scroll manager. Drive it with
+/// <see cref="ScrollToMessageAsync"/>/<see cref="ScrollToStartAsync"/>/
+/// <see cref="ScrollToEndAsync"/>, push option changes with <see cref="UpdateAsync"/>,
+/// gate visibility reporting with <see cref="SetVisibilityTrackingAsync"/>, and
+/// dispose to detach its observers and listeners.
+/// </summary>
+public sealed class MessageScroller : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal MessageScroller(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>
+    /// Scroll the row with <paramref name="messageId"/> into view. Queues the target
+    /// when called before any rows exist; returns false for an id missing from a
+    /// mounted transcript.
+    /// </summary>
+    public async Task<bool> ScrollToMessageAsync(string messageId, MessageScrollerScrollOptions? options = null)
+    {
+        try
+        {
+            return await _handle.InvokeAsync<bool>("scrollToMessage", messageId, options);
+        }
+        catch (JSDisconnectedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Scroll to the start of the transcript (releases any streamed-reply follow).</summary>
+    public async Task<bool> ScrollToStartAsync(MessageScrollerScrollOptions? options = null)
+    {
+        try
+        {
+            return await _handle.InvokeAsync<bool>("scrollToStart", options);
+        }
+        catch (JSDisconnectedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Scroll to the live edge (re-engages follow when autoScroll is enabled).</summary>
+    public async Task<bool> ScrollToEndAsync(MessageScrollerScrollOptions? options = null)
+    {
+        try
+        {
+            return await _handle.InvokeAsync<bool>("scrollToEnd", options);
+        }
+        catch (JSDisconnectedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Push changed provider options into the engine.</summary>
+    public async Task UpdateAsync(MessageScrollerOptions options)
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("update", options);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>Start or stop visibility tracking (it costs nothing while stopped).</summary>
+    public async Task SetVisibilityTrackingAsync(bool enabled)
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("setVisibilityTracking", enabled);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
 /// <summary>A plain bounding rectangle returned by <see cref="NaviusJsInterop.GetRectAsync"/>.</summary>
 public sealed record DomRect(
     double X,
@@ -938,3 +1046,30 @@ public sealed record CarouselOptions(
 public sealed record SheetSwipeOptions(
     string Side = "bottom",
     double DismissThreshold = 0.25);
+
+/// <summary>
+/// Options for <see cref="NaviusJsInterop.CreateMessageScrollerAsync"/> (serialized
+/// to camelCase). <see cref="DefaultScrollPosition"/> is one of
+/// <c>start</c>/<c>end</c>/<c>last-anchor</c>; <see cref="ScrollEdgeThreshold"/> is
+/// how many pixels from an edge still count as being at it;
+/// <see cref="ScrollPreviousItemPeek"/> is added to <see cref="ScrollMargin"/> when
+/// an appended anchor row is positioned so part of the previous item stays visible.
+/// </summary>
+public sealed record MessageScrollerOptions(
+    bool AutoScroll = false,
+    string DefaultScrollPosition = "end",
+    double ScrollEdgeThreshold = 8,
+    double ScrollMargin = 0,
+    double ScrollPreviousItemPeek = 64,
+    bool PreserveScrollOnPrepend = true);
+
+/// <summary>
+/// Per-call options for the <see cref="MessageScroller"/> scroll methods (serialized
+/// to camelCase). <see cref="Align"/> is one of
+/// <c>start</c>/<c>center</c>/<c>end</c>/<c>nearest</c>; a null
+/// <see cref="ScrollMargin"/> falls back to the provider's margin.
+/// </summary>
+public sealed record MessageScrollerScrollOptions(
+    string Align = "start",
+    string Behavior = "auto",
+    double? ScrollMargin = null);

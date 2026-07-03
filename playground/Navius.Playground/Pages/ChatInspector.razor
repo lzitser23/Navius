@@ -1,0 +1,66 @@
+@namespace Navius.Playground.Pages
+@using Navius.Primitives.Components.MessageScroller
+@using Navius.Primitives.Interop
+@inherits MessageScrollerPart
+
+@*
+    Lives inside the ZitsMessageScrollerProvider so it can read the shared state via the
+    cascaded MessageScrollerContext: it drives jump-to-message and reads the scrollable-edge
+    state and the (subscription-gated) visibility. Inherits MessageScrollerPart, so it
+    re-renders when the scrollable edges change; it also subscribes to visibility updates.
+*@
+
+<div class="flex flex-wrap items-center gap-3 text-xs" data-testid="chat-inspector">
+    <button type="button" data-testid="jump-first"
+            class="rounded-md border border-input bg-background px-2.5 py-1 font-medium hover:bg-accent"
+            @onclick="JumpFirstAsync">Jump to first</button>
+    <button type="button" data-testid="jump-last"
+            class="rounded-md border border-input bg-background px-2.5 py-1 font-medium hover:bg-accent"
+            @onclick="JumpLastAsync">Jump to latest</button>
+
+    <span class="font-mono text-muted-foreground">
+        scrollable:
+        <span data-testid="scrollable-start">@(Context.ScrollableStart ? "start" : "-")</span>
+        <span data-testid="scrollable-end">@(Context.ScrollableEnd ? "end" : "-")</span>
+    </span>
+    <span class="font-mono text-muted-foreground">
+        anchor: <span data-testid="current-anchor">@(Context.CurrentAnchorId ?? "none")</span>
+    </span>
+    <span class="font-mono text-muted-foreground">
+        visible: <span data-testid="visible-count">@Context.VisibleMessageIds.Count</span>
+    </span>
+</div>
+
+@code {
+    /// <summary>Stable id of the first seeded message (jump-to-message target).</summary>
+    [Parameter] public string? FirstId { get; set; }
+
+    /// <summary>Stable id of the newest message.</summary>
+    [Parameter] public string? LastId { get; set; }
+
+    private Func<Task>? _onVisibility;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _onVisibility = () => InvokeAsync(StateHasChanged);
+        await Context.SubscribeVisibilityAsync(_onVisibility);
+    }
+
+    private Task JumpFirstAsync() =>
+        FirstId is null ? Task.CompletedTask
+        : Context.ScrollToMessageAsync(FirstId, new MessageScrollerScrollOptions(Align: "start", Behavior: "auto"));
+
+    private Task JumpLastAsync() =>
+        LastId is null ? Task.CompletedTask
+        : Context.ScrollToMessageAsync(LastId, new MessageScrollerScrollOptions(Align: "end", Behavior: "auto"));
+
+    public override void Dispose()
+    {
+        if (_onVisibility is not null)
+        {
+            _ = Context.UnsubscribeVisibilityAsync(_onVisibility);
+        }
+
+        base.Dispose();
+    }
+}

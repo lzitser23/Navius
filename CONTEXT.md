@@ -47,7 +47,9 @@ CSS vars + `data-side`/`data-align`), dismissable layer, roving focus
 listeners, long-press, drag tracker (with commit), scroll-area observer + thumb drag
 (RTL-aware), toast interactions (swipe/pause/hotkey), carousel controller, sheet
 swipe-to-dismiss, NavigationMenu viewport mirror + indicator positioning,
-hidden-until-found (beforematch) observer, and small DOM readers.
+hidden-until-found (beforematch) observer, message scroller (anchored turns,
+streamed-reply follow, prepend scroll preservation, lazy visibility tracking),
+and small DOM readers.
 
 > ⚠️ **Validate engine JS as an ES module**, not a script: `node --input-type=module
 > --check < navius-interop.js`. Plain `node --check` parses loose-mode and misses

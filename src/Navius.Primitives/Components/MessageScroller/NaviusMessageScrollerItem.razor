@@ -1,0 +1,30 @@
+@namespace Navius.Primitives.Components.MessageScroller
+
+@*
+    One transcript row boundary: a message, a marker, a typing indicator, a
+    separator or a load-earlier row. MessageId (a stable id) lets the row
+    participate in jump-to-message, visibility tracking and prepend preservation;
+    ScrollAnchor marks it as a turn boundary that anchors newly appended turns
+    (role-independent: a user message, a system marker, a handoff event). Give the
+    row a stable @@key when rendering from a list so prepends keep existing DOM.
+*@
+
+<div data-navius-messagescroller-item
+     data-message-id="@MessageId"
+     data-scroll-anchor="@(ScrollAnchor ? "true" : "false")"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    /// <summary>Stable row id used by jump-to-message, visibility and prepend preservation.</summary>
+    [Parameter] public string? MessageId { get; set; }
+
+    /// <summary>Marks the row as a turn boundary that anchors newly appended turns.</summary>
+    [Parameter] public bool ScrollAnchor { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}
