@@ -67,5 +67,19 @@ public class MotionStylesheetTests
         Assert.Contains("@media (hover: hover)", css);
         Assert.Contains("@media (prefers-reduced-motion: reduce)", css);
         Assert.Contains("transition-property: opacity;", css);
+
+        // Micro pack: every preset emits a @keyframes block and a class.
+        foreach (var preset in MicroPresets.All)
+        {
+            Assert.Contains($"@keyframes {preset.KeyframesName} {{", css);
+            Assert.Contains($".{preset.Class} {{", css);
+        }
+        Assert.Contains("animation: navius-pulse 1600ms ease-in-out infinite;", css);
+        Assert.Contains("animation: navius-shake 450ms", css);
+
+        // The pulse opacity-only reduced variant plus the shimmer static fallback.
+        Assert.Contains("@keyframes navius-pulse-reduced {", css);
+        Assert.Contains("animation-name: navius-pulse-reduced;", css);
+        Assert.Contains(".motion-shimmer {\n    animation: none;", css.Replace("\r\n", "\n"));
     }
 }

@@ -133,6 +133,55 @@
         </div>
     </section>
 
+    <section class="space-y-3" data-testid="micro-section">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Micro pack · attention &amp; ambient</h2>
+        <div class="flex flex-wrap items-start gap-8">
+            @* Shake on a fake validation (runtime tier): submitting empty shakes the field once. *@
+            <div class="flex flex-col gap-2">
+                <div @ref="_shakeEl" data-testid="shake-field" class="flex flex-col gap-1">
+                    <label for="motion-email" class="text-xs font-medium text-muted-foreground">Email</label>
+                    <input id="motion-email" data-testid="shake-input" @bind="_email" @bind:event="oninput"
+                           placeholder="you@example.com"
+                           class="h-9 w-56 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                </div>
+                <button type="button" data-testid="shake-submit" @onclick="SubmitEmail"
+                        class="inline-flex h-9 w-56 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Submit
+                </button>
+                @if (_emailError)
+                {
+                    <p data-testid="shake-error" class="text-xs text-destructive">Email is required.</p>
+                }
+            </div>
+
+            @* Pulse live-status dot (runtime loop, start/stop). *@
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center gap-2">
+                    <span @ref="_pulseEl" data-testid="pulse-dot" class="inline-block h-3 w-3 rounded-full bg-primary"></span>
+                    <span class="text-sm">Live status</span>
+                </div>
+                <button type="button" data-testid="pulse-toggle" @onclick="TogglePulse"
+                        class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    @(_pulsing ? "Stop" : "Start")
+                </button>
+            </div>
+
+            @* Shimmer sweep (CSS tier): the motion-shimmer class merges with the surface styles. *@
+            <div class="flex flex-col gap-2">
+                <div data-testid="shimmer-block" class="motion-shimmer h-16 w-56 rounded-md bg-muted"></div>
+                <p class="text-xs text-muted-foreground">Skeleton shimmer</p>
+            </div>
+
+            @* Focus-glow hairline ring (CSS tier). *@
+            <div class="flex flex-col gap-2">
+                <div data-testid="focus-glow-el" class="motion-focus-glow grid h-16 w-40 place-items-center rounded-md border border-border bg-card text-sm text-card-foreground">
+                    Focus glow
+                </div>
+                <p class="text-xs text-muted-foreground">Hairline emphasis</p>
+            </div>
+        </div>
+    </section>
+
     <section class="space-y-3">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Enter wrapper · spring picker</h2>
         <div class="flex flex-wrap items-center gap-6">
@@ -183,6 +232,15 @@
     private MotionGesture? _press;
     private PresenceMotion? _runtime;
 
+    // Micro pack (runtime tier): a one-shot shake on a fake validation, a looping pulse.
+    private ElementReference _shakeEl;
+    private ElementReference _pulseEl;
+    private MotionMicro? _shake;
+    private MotionMicro? _pulse;
+    private string _email = "";
+    private bool _emailError;
+    private bool _pulsing;
+
     // Enter wrapper picker.
     private int _wrapperReplay;
     private Spring? _wrapperSpring;
@@ -196,6 +254,12 @@
             _press = await _interop.CreateGestureAsync(_pressEl, "press", MotionPrograms.Gesture());
             _runtime = await _interop.CreatePresenceMotionAsync(
                 _runtimeEl, MotionPrograms.Presence(MotionPresets.Zoom, enterSpring: Spring.Bouncy));
+
+            _shake = await _interop.CreateMicroAsync(_shakeEl, MotionPrograms.Micro(MicroPresets.Shake));
+            _pulse = await _interop.CreateMicroAsync(_pulseEl, MotionPrograms.Micro(MicroPresets.Pulse));
+            await _pulse.PlayAsync();   // the live-status dot breathes until stopped
+            _pulsing = true;
+            StateHasChanged();          // reflect the running state in the toggle label
         }
 
         if (_runtimeEnterFlip)
@@ -241,6 +305,41 @@
         StateHasChanged();
     }
 
+    private async Task SubmitEmail()
+    {
+        // Fake validation: an empty field is invalid and shakes once (runtime one-shot).
+        if (string.IsNullOrWhiteSpace(_email))
+        {
+            _emailError = true;
+            if (_shake is not null)
+            {
+                await _shake.PlayAsync();
+            }
+        }
+        else
+        {
+            _emailError = false;
+        }
+    }
+
+    private async Task TogglePulse()
+    {
+        if (_pulse is null)
+        {
+            return;
+        }
+        if (_pulsing)
+        {
+            await _pulse.StopAsync();
+            _pulsing = false;
+        }
+        else
+        {
+            await _pulse.PlayAsync();
+            _pulsing = true;
+        }
+    }
+
     private void ReplaySmooth() => ReplayWrapper(Spring.Smooth, "smooth");
     private void ReplaySnappy() => ReplayWrapper(Spring.Snappy, "snappy");
     private void ReplayBouncy() => ReplayWrapper(Spring.Bouncy, "bouncy");
@@ -263,6 +362,16 @@
         {
             await _runtime.DisposeAsync();
             _runtime = null;
+        }
+        if (_shake is not null)
+        {
+            await _shake.DisposeAsync();
+            _shake = null;
+        }
+        if (_pulse is not null)
+        {
+            await _pulse.DisposeAsync();
+            _pulse = null;
         }
         if (_interop is not null)
         {

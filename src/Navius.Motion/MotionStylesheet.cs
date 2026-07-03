@@ -44,6 +44,8 @@ public static class MotionStylesheet
         AppendPresenceClasses(sb, baked);
         AppendEnterClasses(sb, baked);
         AppendGestureClasses(sb);
+        AppendMicroKeyframes(sb);
+        AppendMicroClasses(sb);
         AppendReducedMotion(sb);
 
         return sb.ToString();
@@ -145,6 +147,79 @@ public static class MotionStylesheet
         sb.Append("}\n\n");
     }
 
+    private static void AppendMicroKeyframes(StringBuilder sb)
+    {
+        sb.Append("/* Micro pack (attention & ambient) keyframes. Authored once in\n");
+        sb.Append(" * Navius.Motion.MicroPresets; the same presets feed the WAAPI runtime via\n");
+        sb.Append(" * MotionPrograms.Micro, so both tiers animate identically. */\n");
+        foreach (var preset in MicroPresets.All)
+        {
+            AppendKeyframesBlock(sb, preset.KeyframesName, preset.Keyframes, opacityOnly: false);
+            if (preset.Reduce == MicroReduce.OpacityOnly)
+            {
+                AppendKeyframesBlock(sb, preset.ReducedKeyframesName, preset.Keyframes, opacityOnly: true);
+            }
+            sb.Append('\n');
+        }
+    }
+
+    private static void AppendKeyframesBlock(
+        StringBuilder sb, string name, IReadOnlyList<MicroFrame> frames, bool opacityOnly)
+    {
+        sb.Append("@keyframes ").Append(name).Append(" {\n");
+        foreach (var frame in frames)
+        {
+            sb.Append("  ").Append(FormatOffset(frame.Offset)).Append(" { ");
+            AppendFrameBody(sb, frame, opacityOnly);
+            sb.Append("}\n");
+        }
+        sb.Append("}\n");
+    }
+
+    private static void AppendFrameBody(StringBuilder sb, MicroFrame frame, bool opacityOnly)
+    {
+        if (!opacityOnly && frame.Transform is not null)
+        {
+            sb.Append("transform: ").Append(frame.Transform).Append("; ");
+        }
+        if (frame.Opacity is not null)
+        {
+            sb.Append("opacity: ").Append(frame.Opacity).Append("; ");
+        }
+        if (!opacityOnly && frame.BoxShadow is not null)
+        {
+            sb.Append("box-shadow: ").Append(frame.BoxShadow).Append("; ");
+        }
+        if (!opacityOnly && frame.BackgroundPosition is not null)
+        {
+            sb.Append("background-position: ").Append(frame.BackgroundPosition).Append("; ");
+        }
+    }
+
+    private static void AppendMicroClasses(StringBuilder sb)
+    {
+        sb.Append("/* Micro pack classes. Splat the matching Motion helper (Motion.Shake(),\n");
+        sb.Append(" * Motion.Pulse(), Motion.Shimmer(), Motion.FocusGlow()) or add the class. */\n");
+        foreach (var preset in MicroPresets.All)
+        {
+            sb.Append('.').Append(preset.Class).Append(" {\n");
+            if (preset.BaseStyle is not null)
+            {
+                foreach (var decl in preset.BaseStyle)
+                {
+                    sb.Append("  ").Append(ToCssProperty(decl.Property)).Append(": ").Append(decl.Value).Append(";\n");
+                }
+            }
+            sb.Append("  animation: ").Append(preset.KeyframesName).Append(' ')
+                .Append(FormatMilliseconds(preset.DurationMs)).Append(' ').Append(preset.Easing);
+            if (preset.Loop)
+            {
+                sb.Append(" infinite");
+            }
+            sb.Append(";\n}\n\n");
+        }
+    }
+
     private static void AppendReducedMotion(StringBuilder sb)
     {
         sb.Append("/* prefers-reduced-motion: collapse every transform animation to opacity only\n");
@@ -177,6 +252,19 @@ public static class MotionStylesheet
         sb.Append("  .motion-hover:hover {\n");
         sb.Append("    transform: none;\n");
         sb.Append("  }\n");
+
+        sb.Append("\n  /* Micro pack: transform-driven attention effects rest (shake,\n");
+        sb.Append("   * focus-glow, shimmer); pulse keeps only its opacity beat. Shimmer's\n");
+        sb.Append("   * documented fallback is a static placeholder: the sweep stops but the\n");
+        sb.Append("   * gradient surface remains. */\n");
+        foreach (var preset in MicroPresets.All)
+        {
+            sb.Append("  .").Append(preset.Class).Append(" {\n");
+            sb.Append(preset.Reduce == MicroReduce.OpacityOnly
+                ? "    animation-name: " + preset.ReducedKeyframesName + ";\n"
+                : "    animation: none;\n");
+            sb.Append("  }\n");
+        }
         sb.Append("}\n");
     }
 
@@ -188,6 +276,30 @@ public static class MotionStylesheet
         {
             sb.Append(indent).Append("transform: ").Append(state.Transform).Append(";\n");
         }
+    }
+
+    private static string FormatOffset(double offset)
+        => (offset * 100).ToString("0.####", CultureInfo.InvariantCulture) + "%";
+
+    private static string FormatMilliseconds(double milliseconds)
+        => milliseconds.ToString("0.####", CultureInfo.InvariantCulture) + "ms";
+
+    /// <summary>camelCase (WAAPI/IDL) to kebab-case (CSS): backgroundPosition -> background-position.</summary>
+    private static string ToCssProperty(string camelCase)
+    {
+        var sb = new StringBuilder(camelCase.Length + 4);
+        foreach (var c in camelCase)
+        {
+            if (char.IsUpper(c))
+            {
+                sb.Append('-').Append(char.ToLowerInvariant(c));
+            }
+            else
+            {
+                sb.Append(c);
+            }
+        }
+        return sb.ToString();
     }
 
     private static (string Duration, string Easing) VarsFor(Spring spring, Dictionary<string, BakedEasing> baked)

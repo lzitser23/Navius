@@ -133,3 +133,60 @@ test('enter wrapper: replays the enter with smooth, snappy and bouncy springs, s
     await expect.poll(() => transform(el)).toBe('none');
   }
 });
+
+// --- Micro pack (M1) ----------------------------------------------------------
+// The number of in-flight animations on an element (CSS + WAAPI both surface here).
+const animationCount = (el: Locator) => el.evaluate((n) => n.getAnimations().length);
+
+test('micro pack: shake plays once on a fake validation error, then settles at identity', async ({ page }) => {
+  const field = page.locator('[data-testid="shake-field"]');
+
+  // Submit with the field empty: the fake validation fires and the field shakes (runtime
+  // one-shot). The error message proves the handler ran.
+  await page.locator('[data-testid="shake-submit"]').click();
+  await expect(page.locator('[data-testid="shake-error"]')).toBeVisible();
+
+  // Catch the shake in flight: poll for an animation to appear on the field (it starts a
+  // beat after the interop round trip) rather than racing the ~450ms one-shot.
+  const ran = await field.evaluate(async (n) => {
+    const start = performance.now();
+    while (performance.now() - start < 2000) {
+      if (n.getAnimations().length > 0) return true;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    return false;
+  });
+  expect(ran).toBe(true);
+
+  // One-shot with fill:none returns the transform to identity and holds it there.
+  await expect.poll(() => transform(field)).toMatch(IDENTITY);
+});
+
+test('micro pack: the pulse dot loops (an infinite animation runs) and stops on toggle', async ({ page }) => {
+  const dot = page.locator('[data-testid="pulse-dot"]');
+
+  // Autoplayed on load: an animation is running and it iterates forever.
+  await expect.poll(() => animationCount(dot)).toBeGreaterThan(0);
+  const looping = await dot.evaluate((n) =>
+    n.getAnimations().some((a) => a.effect!.getComputedTiming().iterations === Infinity)
+  );
+  expect(looping).toBe(true);
+
+  // Stop it: the loop is cancelled and no animation remains.
+  await page.locator('[data-testid="pulse-toggle"]').click();
+  await expect.poll(() => animationCount(dot)).toBe(0);
+});
+
+test('micro pack: the shimmer sweeps (CSS tier) and its reduced-motion fallback is static', async ({ page }) => {
+  const block = page.locator('[data-testid="shimmer-block"]');
+
+  // The generated CSS class drives an infinite background-position sweep.
+  await expect.poll(() => animationCount(block)).toBeGreaterThan(0);
+  expect(await block.evaluate((n) => getComputedStyle(n).animationName)).toBe('navius-shimmer');
+
+  // Documented reduced-motion fallback: the sweep stops (animation: none) and the
+  // gradient surface rests statically, so no animation remains.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect.poll(() => block.evaluate((n) => getComputedStyle(n).animationName)).toBe('none');
+  await expect.poll(() => animationCount(block)).toBe(0);
+});

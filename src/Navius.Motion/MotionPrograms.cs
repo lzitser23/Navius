@@ -50,6 +50,28 @@ public static class MotionPrograms
         return new GestureOptions(baked.DurationMilliseconds, baked.Easing, pressScale, hoverLift);
     }
 
+    /// <summary>
+    /// Build the runtime program for a micro preset (shake, pulse, ...): the keyframes
+    /// cross the boundary as WAAPI frames, timed with the preset's own duration/easing
+    /// (these are attention/ambient animations, not springs). Loops materialize as
+    /// infinite iterations JS-side; the returned handle plays/stops them.
+    /// </summary>
+    public static MicroOptions Micro(MicroPreset preset)
+    {
+        var frames = preset.Keyframes.Select(ToMicroKeyframe).ToArray();
+        return new MicroOptions(frames, preset.DurationMs, preset.Easing, preset.Loop);
+    }
+
     private static MotionFrame ToFrame(MotionVisualState state)
         => new(state.Opacity, state.Transform ?? "none");
+
+    private static IReadOnlyDictionary<string, object> ToMicroKeyframe(MicroFrame frame)
+    {
+        var dict = new Dictionary<string, object> { ["offset"] = frame.Offset };
+        if (frame.Transform is not null) dict["transform"] = frame.Transform;
+        if (frame.Opacity is not null) dict["opacity"] = frame.Opacity;
+        if (frame.BoxShadow is not null) dict["boxShadow"] = frame.BoxShadow;
+        if (frame.BackgroundPosition is not null) dict["backgroundPosition"] = frame.BackgroundPosition;
+        return dict;
+    }
 }

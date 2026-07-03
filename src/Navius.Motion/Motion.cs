@@ -56,6 +56,22 @@ public static class Motion
             ["style"] = "--navius-motion-hover-lift: " + Format(lift),
         };
 
+    /// <summary>Validation-error horizontal shake (micro pack, one-shot). Re-add the class to replay, or use the runtime tier.</summary>
+    public static IReadOnlyDictionary<string, object> Shake()
+        => new Dictionary<string, object> { ["class"] = MicroPresets.Shake.Class };
+
+    /// <summary>Live-status opacity/scale pulse (micro pack, looped).</summary>
+    public static IReadOnlyDictionary<string, object> Pulse()
+        => new Dictionary<string, object> { ["class"] = MicroPresets.Pulse.Class };
+
+    /// <summary>Surface/text shimmer sweep (micro pack, looped, reduced-motion safe).</summary>
+    public static IReadOnlyDictionary<string, object> Shimmer()
+        => new Dictionary<string, object> { ["class"] = MicroPresets.Shimmer.Class };
+
+    /// <summary>Hairline focus emphasis ring, pulsed (micro pack, looped, one-ink).</summary>
+    public static IReadOnlyDictionary<string, object> FocusGlow()
+        => new Dictionary<string, object> { ["class"] = MicroPresets.FocusGlow.Class };
+
     private static string Format(double value)
         => value.ToString("0.####", CultureInfo.InvariantCulture);
 }

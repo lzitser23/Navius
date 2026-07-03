@@ -17,7 +17,7 @@
 //   node --input-type=module --check < src/Navius.Motion/wwwroot/navius-motion.js
 
 // --- Reduced motion ----------------------------------------------------------
-// The guard collapses transform animations to opacity-only (the
+// The guard collapses every non-opacity keyframe property to opacity-only (the
 // tailwindcss-motion behaviour). Every factory takes a reduceMotion option:
 // 'user' honours the OS setting, 'always' forces reduction, 'never' opts out.
 
@@ -47,9 +47,17 @@ function sanitizeFrame(frame) {
 }
 
 function collapseToOpacity(frames) {
+  // Keep only opacity plus the WAAPI control keys (the same set hasAnimatableProps
+  // ignores); strip every other animatable property (transform, box-shadow,
+  // background-position, ...) so any preset collapses to an opacity-only beat under
+  // reduced motion, matching the CSS tier's `animation: none` for non-opacity presets.
   return frames.map((frame) => {
-    const clean = Object.assign({}, frame);
-    delete clean.transform;
+    const clean = {};
+    for (const key of Object.keys(frame)) {
+      if (key === 'opacity' || key === 'offset' || key === 'easing' || key === 'composite') {
+        clean[key] = frame[key];
+      }
+    }
     return clean;
   });
 }
@@ -529,6 +537,56 @@ export function createGesture(element, kind, dotNetRef, options) {
         element.removeEventListener('pointerleave', onPointerLeave);
       }
       cancelAll();
+    },
+  };
+}
+
+// --- Micro animations ---------------------------------------------------------
+// Attention/ambient keyframe presets (shake, pulse, ...) played JS-side so they can
+// be triggered on demand and, for loops, started/stopped programmatically. Keyframes
+// and timing are authored once in C# (Navius.Motion.MicroPresets) and cross the
+// boundary as a serialized program, exactly like the presence/gesture tiers. options:
+// { keyframes: [{ offset, transform, opacity, ... }], durationMs, easing, loop,
+// reduceMotion }. Under reduced motion every non-opacity keyframe property is stripped
+// (collapse to opacity-only) via the shared guard, so a preset left with nothing
+// animatable (e.g. shake, or a box-shadow/background-position sweep) simply does not
+// play. Returns a handle; C# calls play()/stop()/destroy().
+
+export function createMicro(element, options) {
+  const opts = Object.assign(
+    { keyframes: [], durationMs: 400, easing: 'ease-in-out', loop: false, reduceMotion: 'user' },
+    options || {}
+  );
+
+  let current = null;
+
+  function stop() {
+    if (current) {
+      current.cancel();
+      current = null;
+    }
+  }
+
+  function play() {
+    stop();
+    let frames = (opts.keyframes || []).map(sanitizeFrame);
+    if (shouldReduceMotion(opts.reduceMotion)) frames = collapseToOpacity(frames);
+    if (!hasAnimatableProps(frames)) return;
+    const animation = element.animate(frames, {
+      duration: opts.durationMs,
+      easing: opts.easing,
+      iterations: opts.loop ? Infinity : 1,
+      fill: 'none',
+    });
+    animation.finished.catch(() => {});
+    current = animation;
+  }
+
+  return {
+    play,
+    stop,
+    destroy() {
+      stop();
     },
   };
 }

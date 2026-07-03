@@ -79,6 +79,21 @@ public sealed class MotionJsInterop : IAsyncDisposable
         return new MotionGesture(handle);
     }
 
+    /// <summary>
+    /// Bind a micro-interaction (shake, pulse, ...) to an element, built from a preset
+    /// with <see cref="MotionPrograms.Micro"/>. The returned handle plays the animation
+    /// on demand (<see cref="MotionMicro.PlayAsync"/>) and, for loops, stops it
+    /// (<see cref="MotionMicro.StopAsync"/>); nothing runs until you play it.
+    /// </summary>
+    public async Task<MotionMicro> CreateMicroAsync(
+        ElementReference element, MicroOptions options)
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createMicro", element, options);
+        return new MotionMicro(handle);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (!_module.IsValueCreated)
@@ -187,6 +202,54 @@ public sealed class MotionGesture : IAsyncDisposable
 }
 
 /// <summary>
+/// A micro-interaction binding (shake, pulse, ...). <see cref="PlayAsync"/> starts (or
+/// restarts) the animation; <see cref="StopAsync"/> cancels a running loop. Dispose to
+/// stop it and release the JS handle.
+/// </summary>
+public sealed class MotionMicro : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal MotionMicro(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>Play the animation once (one-shot presets) or start the loop (looping presets).</summary>
+    public async Task PlayAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("play");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>Stop the animation (the element returns to its natural style).</summary>
+    public async Task StopAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("stop");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
 /// One WAAPI keyframe restricted to the compositor-friendly properties the presets
 /// animate (serialized to camelCase; null members are dropped JS-side).
 /// </summary>
@@ -265,3 +328,19 @@ public sealed record GestureOptions(
 public sealed record RetargetOptions(
     double Target,
     SpringParams? Spring = null);
+
+/// <summary>
+/// Options for <see cref="MotionJsInterop.CreateMicroAsync"/> (serialized to camelCase).
+/// <see cref="Keyframes"/> are WAAPI keyframe objects (each an offset plus its animated
+/// properties); <see cref="Loop"/> plays them with infinite iterations. Build from a
+/// preset with <see cref="MotionPrograms.Micro"/>. Under reduced motion every non-opacity
+/// keyframe property is stripped (collapse to opacity-only), so a preset with nothing
+/// animatable left (e.g. a transform-only, box-shadow, or background-position preset) does
+/// not play.
+/// </summary>
+public sealed record MicroOptions(
+    IReadOnlyList<IReadOnlyDictionary<string, object>> Keyframes,
+    double DurationMs,
+    string Easing = "ease-in-out",
+    bool Loop = false,
+    string ReduceMotion = "user");
