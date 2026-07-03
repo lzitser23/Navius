@@ -2390,8 +2390,19 @@ export function createSortable(container, options, dotNetRef) {
     finish(true);
   }
   function onPointerCancel() { finish(false); }
+  const scrollKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', ' ']);
   function onKeyDown(e) {
-    if (e.key === 'Escape' && dragging) { e.preventDefault(); finish(false); }
+    if (e.key === 'Escape' && dragging) { e.preventDefault(); finish(false); return; }
+    // Suppress the page scroll for the reducer's own keys synchronously (no Blazor render lag)
+    // while a sortable row itself is the focus target, leaving Tab / Enter / typing untouched.
+    if (
+      scrollKeys.has(e.key) &&
+      e.target instanceof Element &&
+      e.target.matches('[data-navius-sortable-item]') &&
+      container.contains(e.target)
+    ) {
+      e.preventDefault();
+    }
   }
 
   container.addEventListener('pointerdown', onPointerDown);

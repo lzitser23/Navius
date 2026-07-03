@@ -1,0 +1,113 @@
+@page "/sort"
+@using Navius.Primitives.Components.Sortable
+@using Navius.Motion
+@using Zits.Ui
+
+@*
+    Sortable playground (/sort). Exercises the headless brain compound (pointer drag via the
+    engine + APG grab-and-move keyboard in C#), the handle-scoped variant, the styled helm
+    wrappers, and the AutoAnimate pairing. The order string under each list is the single source
+    of truth (bound), so the e2e spec can assert reorder by reading it.
+*@
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-12">
+    <h1 class="text-2xl font-semibold tracking-tight">Navius Sortable</h1>
+
+    <section class="space-y-3" data-testid="brain-vertical">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Brain: vertical (pointer + keyboard)</h2>
+        <p class="text-sm text-muted-foreground">Drag a row, or focus one and press Space to grab, arrows to move, Space to drop, Escape to cancel.</p>
+        <NaviusSortable @bind-Values="_brain"
+                        Orientation="SortableOrientation.Vertical"
+                        OnReorder="OnBrainReorder"
+                        class="flex w-72 flex-col gap-2">
+            @foreach (var k in _brain)
+            {
+                <NaviusSortableItem @key="k" Value="@k"
+                                    class="@ItemCss">
+                    <span class="text-muted-foreground/60" aria-hidden="true">::</span>
+                    @k
+                </NaviusSortableItem>
+            }
+        </NaviusSortable>
+        <p class="text-xs text-muted-foreground">Order: <span data-testid="brain-order">@string.Join(",", _brain)</span></p>
+        <p class="text-xs text-muted-foreground">Last reorder: <span data-testid="brain-reorder">@_brainReorder</span></p>
+    </section>
+
+    <section class="space-y-3" data-testid="brain-handle">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Brain: handle only</h2>
+        <p class="text-sm text-muted-foreground">Only the grip starts a pointer drag; keyboard still reorders the whole row.</p>
+        <NaviusSortable @bind-Values="_handle"
+                        Orientation="SortableOrientation.Vertical"
+                        class="flex w-72 flex-col gap-2">
+            @foreach (var k in _handle)
+            {
+                <NaviusSortableItem @key="k" Value="@k"
+                                    class="@ItemCss">
+                    <NaviusSortableItemHandle class="cursor-grab select-none text-muted-foreground/70" style="touch-action:none">
+                        <span aria-hidden="true">::</span>
+                    </NaviusSortableItemHandle>
+                    @k
+                </NaviusSortableItem>
+            }
+        </NaviusSortable>
+        <p class="text-xs text-muted-foreground">Order: <span data-testid="handle-order">@string.Join(",", _handle)</span></p>
+    </section>
+
+    <section class="space-y-3" data-testid="helm-styled">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Helm: styled (ZitsSortable)</h2>
+        <ZitsSortable @bind-Values="_helm" class="w-72">
+            @foreach (var k in _helm)
+            {
+                <ZitsSortableItem @key="k" Value="@k">
+                    <ZitsSortableItemHandle style="touch-action:none" />
+                    <span>@k</span>
+                </ZitsSortableItem>
+            }
+        </ZitsSortable>
+        <p class="text-xs text-muted-foreground">Order: <span data-testid="helm-order">@string.Join(",", _helm)</span></p>
+    </section>
+
+    <section class="space-y-3" data-testid="anim-flip">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Paired with AutoAnimate (keyboard-reorder FLIP)</h2>
+        <p class="text-sm text-muted-foreground">
+            The items are AutoAnimate's direct children, so a keyboard reorder (Space, arrows, Space)
+            FLIPs into place. AutoAnimate owns a non-scrolling list here, so its scroll guardrail does not apply.
+        </p>
+        @*
+            Honest caveat: with AutoAnimate between the sortable container and the items, the items are
+            grandchildren of the drag container, so the engine's pointer path (which keys on direct
+            children) is inert on this variant, so it is the keyboard reorder that composes with the FLIP.
+        *@
+        <NaviusSortable @bind-Values="_anim" class="block w-72">
+            <NaviusAutoAnimate class="flex flex-col gap-2">
+                @foreach (var k in _anim)
+                {
+                    <NaviusSortableItem @key="k" Value="@k" class="@ItemCss">
+                        @k
+                    </NaviusSortableItem>
+                }
+            </NaviusAutoAnimate>
+        </NaviusSortable>
+        <p class="text-xs text-muted-foreground">Order: <span data-testid="anim-order">@string.Join(",", _anim)</span></p>
+    </section>
+</div>
+
+@code {
+    private IReadOnlyList<string> _brain = new List<string> { "Research", "Design", "Build", "Ship" };
+    private IReadOnlyList<string> _handle = new List<string> { "Draft", "Review", "Merge" };
+    private IReadOnlyList<string> _helm = new List<string> { "Backlog", "Doing", "Done" };
+    private IReadOnlyList<string> _anim = new List<string> { "One", "Two", "Three", "Four" };
+
+    private string _brainReorder = "none";
+
+    private const string ItemCss =
+        "flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm text-card-foreground shadow-sm outline-none " +
+        "cursor-grab select-none transition-[box-shadow,opacity] " +
+        "data-[dragging]:opacity-60 data-[dragging]:shadow-md " +
+        "data-[drop-target]:ring-2 data-[drop-target]:ring-primary " +
+        "data-[keyboard-grabbed]:ring-2 data-[keyboard-grabbed]:ring-primary " +
+        "focus-visible:ring-2 focus-visible:ring-ring";
+
+    private void OnBrainReorder(SortableReorderEventArgs e) =>
+        _brainReorder = $"{e.OldIndex} -> {e.NewIndex}";
+}

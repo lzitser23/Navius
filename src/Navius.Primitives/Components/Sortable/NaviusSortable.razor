@@ -1,0 +1,440 @@
+@namespace Navius.Primitives.Components.Sortable
+@inherits ComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@using Microsoft.AspNetCore.Components.Web
+@using Navius.Primitives.Interop
+
+@*
+    Headless drag-to-reorder built on the engine's createSortable (pointer/touch) plus an
+    APG "grab and move" keyboard model implemented here in C#. The root owns the ordered key
+    list (a List<string>), commits every reorder by re-rendering into the new order, and always
+    raises ValuesChanged (bind with @bind-Values) plus OnReorder(old,new). The consumer iterates
+    the same key list to render one NaviusSortableItem per key.
+
+    Two sources of reorder funnel to one collection: (1) the engine emits per-container indices
+    via OnDragStart/OnDragOver/OnDrop/OnCancel and paints data-dragging/data-drop-target on the
+    item DOM itself, which C# never renders (passthrough) so a commit re-render can't fight it;
+    (2) the keyboard reducer (Space grabs, arrows move live, Space drops, Escape restores) mutates
+    the same list and announces each transition through a visually hidden aria-live region.
+
+    Cross-list Group transfer is NOT supported: the engine reports indices relative to a single
+    container only, so it is deliberately omitted (see report) rather than faked.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div @ref="_container"
+         role="list"
+         data-navius-sortable
+         data-orientation="@OrientationValue"
+         data-disabled="@(Disabled ? "" : null)"
+         data-dragging="@(_active ? "" : null)"
+         aria-disabled="@(Disabled ? "true" : null)"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+<div role="status"
+     aria-live="polite"
+     data-navius-sortable-status
+     style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0">
+    @_live
+</div>
+
+@code {
+    /// <summary>The ordered item keys. Bind with <c>@bind-Values</c>; the consumer iterates this list to render items.</summary>
+    [Parameter] public IReadOnlyList<string>? Values { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<string>> ValuesChanged { get; set; }
+
+    /// <summary>Uncontrolled initial order (seeds the internal list when <see cref="Values"/> is not supplied).</summary>
+    [Parameter] public IReadOnlyList<string>? DefaultValues { get; set; }
+
+    /// <summary>The reorder axis (drives the engine's midpoint math). Default vertical.</summary>
+    [Parameter] public SortableOrientation Orientation { get; set; } = SortableOrientation.Vertical;
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Fired once per committed reorder with the old and new index (both pointer and keyboard).</summary>
+    [Parameter] public EventCallback<SortableReorderEventArgs> OnReorder { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private SortableContext _context = default!;
+    private ElementReference _container;
+    private NaviusJsInterop? _interop;
+    private Sortable? _sortable;
+    private DotNetObjectReference<NaviusSortable>? _selfRef;
+    private bool _sortableFailed;
+    private bool _disposed;
+
+    private List<string> _keys = new();
+    private bool _valuesSet;
+    private bool _initialized;
+    private bool _active;
+    private string _live = string.Empty;
+
+    // Original order + start index captured at keyboard grab, so Escape restores exactly.
+    private List<string> _grabOriginal = new();
+    private int _grabOriginalIndex = -1;
+
+    private string OrientationValue => Orientation switch
+    {
+        SortableOrientation.Horizontal => "horizontal",
+        SortableOrientation.Grid => "grid",
+        _ => "vertical",
+    };
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<IReadOnlyList<string>?>(nameof(Values), out _))
+        {
+            _valuesSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _context = new SortableContext(HandleItemKeyDownAsync);
+        _keys = new List<string>((_valuesSet ? Values : DefaultValues) ?? Array.Empty<string>());
+        _initialized = true;
+        // Seed roving tabindex on the first item so Tab can reach the list.
+        _context.ActiveKey = _keys.Count > 0 ? _keys[0] : null;
+        SyncContext();
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Adopt an external order change (controlled). We never mutate the caller's list.
+        if (_initialized && _valuesSet && !SameOrder(Values, _keys))
+        {
+            _keys = new List<string>(Values ?? Array.Empty<string>());
+            if (_context.GrabbedKey is not null && _context.IndexOf(_context.GrabbedKey) < 0)
+            {
+                _context.GrabbedKey = null;
+                _active = false;
+            }
+        }
+
+        // Keep roving tabindex valid: fall back to the first item if the active key vanished.
+        if (_context.ActiveKey is null || _context.IndexOf(_context.ActiveKey) < 0)
+        {
+            _context.ActiveKey = _keys.Count > 0 ? _keys[0] : null;
+        }
+
+        SyncContext();
+    }
+
+    private void SyncContext()
+    {
+        _context.Keys = _keys;
+        _context.Disabled = Disabled;
+        _context.Orientation = Orientation;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        // Keep the pointer engine in sync with Disabled: destroy it while disabled, (re)create
+        // it once enabled. This makes Disabled reactive on the pointer path, not just at mount.
+        if (Disabled)
+        {
+            if (_sortable is not null)
+            {
+                await DestroySortableAsync();
+            }
+
+            return;
+        }
+
+        // Enabled: create the engine once; never spin on a hard module-load failure.
+        if (_sortable is not null || _sortableFailed)
+        {
+            return;
+        }
+
+        try
+        {
+            _interop ??= new NaviusJsInterop(JS);
+            _selfRef ??= DotNetObjectReference.Create(this);
+            var handle = _context.HasHandle ? "[data-navius-sortable-handle]" : null;
+            _sortable = await _interop.CreateSortableAsync(
+                _container, new SortableOptions(OrientationValue, handle), _selfRef);
+        }
+        catch (JSException)
+        {
+            // Engine export unavailable (prerender edge): keyboard reordering still works.
+            _sortableFailed = true;
+        }
+    }
+
+    private async Task DestroySortableAsync()
+    {
+        var sortable = _sortable;
+        _sortable = null;
+
+        if (sortable is not null)
+        {
+            await sortable.DisposeAsync();
+        }
+
+        if (_active)
+        {
+            _active = false;
+            StateHasChanged();
+        }
+    }
+
+    // ---- Pointer path (engine callbacks) ----
+
+    [JSInvokable]
+    public Task OnDragStart(int fromIndex)
+    {
+        if (Disabled)
+        {
+            return Task.CompletedTask;
+        }
+
+        _active = true;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnDragOver(int fromIndex, int toIndex)
+    {
+        // The engine paints data-drop-target on the item DOM; nothing to commit until drop.
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public async Task OnDrop(int fromIndex, int toIndex)
+    {
+        _active = false;
+
+        if (Disabled || fromIndex < 0 || fromIndex >= _keys.Count)
+        {
+            StateHasChanged();
+            return;
+        }
+
+        var list = new List<string>(_keys);
+        var moved = list[fromIndex];
+        list.RemoveAt(fromIndex);
+        var to = Math.Clamp(toIndex, 0, list.Count);
+        list.Insert(to, moved);
+
+        await ApplyOrderAsync(list);
+        Announce($"Moved {_context.LabelFor(moved)} to position {to + 1} of {list.Count}.");
+        _context.RaiseChanged();
+        StateHasChanged();
+
+        if (to != fromIndex)
+        {
+            await OnReorder.InvokeAsync(new SortableReorderEventArgs(fromIndex, to));
+        }
+    }
+
+    [JSInvokable]
+    public Task OnCancel()
+    {
+        _active = false;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    // ---- Keyboard path (APG grab and move) ----
+
+    private async Task HandleItemKeyDownAsync(string key, KeyboardEventArgs e)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        var index = _context.IndexOf(key);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var count = _keys.Count;
+        var grabbing = _context.GrabbedKey is not null;
+        var isNext = e.Key is "ArrowDown" or "ArrowRight";
+        var isPrev = e.Key is "ArrowUp" or "ArrowLeft";
+        var isEnd = e.Key == "End";
+        var isHome = e.Key == "Home";
+        var isCommit = e.Key is " " or "Enter";
+
+        if (!grabbing)
+        {
+            if (isCommit)
+            {
+                _grabOriginal = new List<string>(_keys);
+                _grabOriginalIndex = index;
+                _context.GrabbedKey = key;
+                _context.ActiveKey = key;
+                _active = true;
+                Announce($"Grabbed {_context.LabelFor(key)}. Position {index + 1} of {count}. Use the arrow keys to move, space to drop, escape to cancel.");
+                _context.RaiseChanged();
+                StateHasChanged();
+            }
+            else if (isNext || isPrev || isHome || isEnd)
+            {
+                var target = isHome ? FirstEnabled() : isEnd ? LastEnabled() : isNext ? NextEnabled(index, +1) : NextEnabled(index, -1);
+                if (target >= 0 && target != index)
+                {
+                    _context.ActiveKey = _keys[target];
+                    _context.RequestFocus(_keys[target]);
+                    _context.RaiseChanged();
+                    StateHasChanged();
+                }
+            }
+
+            return;
+        }
+
+        if (isCommit)
+        {
+            var from = _grabOriginalIndex;
+            var to = index;
+            _context.GrabbedKey = null;
+            _active = false;
+            Announce($"Dropped {_context.LabelFor(key)}. Position {to + 1} of {count}.");
+            _context.RaiseChanged();
+            StateHasChanged();
+
+            if (to != from)
+            {
+                await OnReorder.InvokeAsync(new SortableReorderEventArgs(from, to));
+            }
+        }
+        else if (e.Key == "Escape")
+        {
+            _context.GrabbedKey = null;
+            _active = false;
+            await ApplyOrderAsync(new List<string>(_grabOriginal));
+            _context.ActiveKey = key;
+            _context.RequestFocus(key);
+            Announce($"Reorder cancelled. {_context.LabelFor(key)} returned to position {_grabOriginalIndex + 1} of {count}.");
+            _context.RaiseChanged();
+            StateHasChanged();
+        }
+        else if (isNext || isPrev || isHome || isEnd)
+        {
+            var target = isHome ? FirstEnabled() : isEnd ? LastEnabled() : isNext ? NextEnabled(index, +1) : NextEnabled(index, -1);
+            if (target >= 0 && target != index)
+            {
+                var list = new List<string>(_keys);
+                list.RemoveAt(index);
+                list.Insert(target, key);
+                await ApplyOrderAsync(list);
+                _context.ActiveKey = key;
+                _context.RequestFocus(key);
+                Announce($"Moved {_context.LabelFor(key)} to position {target + 1} of {count}.");
+                _context.RaiseChanged();
+                StateHasChanged();
+            }
+        }
+    }
+
+    // Roving navigation skips per-item-disabled rows so focus is never stranded on one
+    // (a disabled row is tabindex=-1, so landing on it would leave nothing tabbable).
+    private int NextEnabled(int from, int delta)
+    {
+        var i = from;
+        while (true)
+        {
+            i += delta;
+            if (i < 0 || i >= _keys.Count)
+            {
+                return -1;
+            }
+
+            if (!_context.IsKeyDisabled(_keys[i]))
+            {
+                return i;
+            }
+        }
+    }
+
+    private int FirstEnabled()
+    {
+        for (var i = 0; i < _keys.Count; i++)
+        {
+            if (!_context.IsKeyDisabled(_keys[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private int LastEnabled()
+    {
+        for (var i = _keys.Count - 1; i >= 0; i--)
+        {
+            if (!_context.IsKeyDisabled(_keys[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    // Apply a new order to the internal mirror + notify (no OnReorder; callers own that).
+    private async Task ApplyOrderAsync(List<string> list)
+    {
+        _keys = list;
+        _context.Keys = _keys;
+        await ValuesChanged.InvokeAsync(list);
+    }
+
+    private void Announce(string message) => _live = message;
+
+    private static bool SameOrder(IReadOnlyList<string>? a, IReadOnlyList<string> b)
+    {
+        if (a is null || a.Count != b.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < b.Count; i++)
+        {
+            if (a[i] != b[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+
+        if (_sortable is not null)
+        {
+            await _sortable.DisposeAsync();
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+
+        _selfRef?.Dispose();
+    }
+}

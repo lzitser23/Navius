@@ -1,0 +1,120 @@
+@page "/tree"
+@using Navius.Primitives.Components.Tree
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-12">
+    <div class="space-y-2">
+        <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Navius · TreeView (WAI-APG)</p>
+        <h1 class="text-2xl font-semibold tracking-tight">TreeView</h1>
+        <p class="max-w-2xl text-sm text-muted-foreground">
+            role=tree with roving tabindex. Arrow keys move between visible nodes; Right expands
+            a collapsed parent then steps into it, Left collapses then steps out to the parent;
+            Home/End jump to the first/last node; printable keys type-ahead; <kbd class="font-mono">*</kbd>
+            expands every sibling. Everything below is the headless brain; the classes are the skin.
+        </p>
+    </div>
+
+    @* ---- Single-select (styled helm) ------------------------------------ *@
+    <section class="space-y-3" data-testid="tree">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Single-select</h2>
+        <div class="max-w-xs rounded-md border border-border p-2">
+            <ZitsTree TValue="string"
+                      Label="Groceries"
+                      DefaultExpandedValues="@(new[] { "fruits" })"
+                      OnSelectionChange="OnSingleSelect">
+                <ZitsTreeItem Value="fruits" Label="Fruits">
+                    <ZitsTreeItem Value="apple" Label="Apple" />
+                    <ZitsTreeItem Value="apricot" Label="Apricot" />
+                    <ZitsTreeItem Value="banana" Label="Banana" />
+                </ZitsTreeItem>
+                <ZitsTreeItem Value="vegetables" Label="Vegetables">
+                    <ZitsTreeItem Value="carrot" Label="Carrot" />
+                    <ZitsTreeItem Value="potato" Label="Potato" />
+                </ZitsTreeItem>
+                <ZitsTreeItem Value="grains" Label="Grains">
+                    <ZitsTreeItem Value="rice" Label="Rice" />
+                    <ZitsTreeItem Value="wheat" Label="Wheat" Disabled="true" />
+                </ZitsTreeItem>
+            </ZitsTree>
+        </div>
+        <p class="text-sm text-muted-foreground">Selected: <span data-single-selected>@(_singleSelected ?? "none")</span></p>
+    </section>
+
+    @* ---- Multi-select (styled helm, controlled) ------------------------- *@
+    <section class="space-y-3" data-testid="tree-multi">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Multi-select (Space toggles, Shift+Arrow extends)</h2>
+        <div class="max-w-xs rounded-md border border-border p-2">
+            <ZitsTree TValue="string"
+                      SelectionMode="multiple"
+                      Label="Groceries (multi)"
+                      @bind-SelectedValues="_multiSelected"
+                      @bind-ExpandedValues="_multiExpanded">
+                <ZitsTreeItem Value="fruits" Label="Fruits">
+                    <ZitsTreeItem Value="apple" Label="Apple" />
+                    <ZitsTreeItem Value="apricot" Label="Apricot" />
+                    <ZitsTreeItem Value="banana" Label="Banana" />
+                </ZitsTreeItem>
+                <ZitsTreeItem Value="vegetables" Label="Vegetables">
+                    <ZitsTreeItem Value="carrot" Label="Carrot" />
+                    <ZitsTreeItem Value="potato" Label="Potato" />
+                </ZitsTreeItem>
+            </ZitsTree>
+        </div>
+        <p class="text-sm text-muted-foreground">Selected: <span data-multi-selected>@(_multiSelected.Count == 0 ? "none" : string.Join(", ", _multiSelected))</span></p>
+    </section>
+
+    @* ---- Data-driven (headless brain, Items + ItemTemplate) ------------- *@
+    <section class="space-y-3" data-testid="tree-data">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Data-driven (Items + ItemTemplate)</h2>
+        <div class="max-w-xs rounded-md border border-border p-2 text-sm">
+            <NaviusTree TValue="string"
+                        Items="_nodes"
+                        Label="File tree"
+                        DefaultExpandedValues="@(new[] { "src" })"
+                        class="block [&_[role=group]]:pl-4">
+                <ItemTemplate Context="node">
+                    <NaviusTreeItemContent class="flex items-center gap-1 rounded-sm px-1 py-1 cursor-pointer hover:bg-accent data-[selected]:bg-accent data-[selected]:font-medium">
+                        <NaviusTreeItemIndicator class="inline-flex size-4 items-center justify-center text-muted-foreground transition-transform data-[expanded]:rotate-90 data-[leaf]:invisible">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                        </NaviusTreeItemIndicator>
+                        <NaviusTreeItemTrigger class="flex-1">@node.Label</NaviusTreeItemTrigger>
+                    </NaviusTreeItemContent>
+                </ItemTemplate>
+            </NaviusTree>
+        </div>
+    </section>
+</div>
+
+@code {
+    private string? _singleSelected;
+
+    private IReadOnlyList<string> _multiSelected = Array.Empty<string>();
+    private IReadOnlyCollection<string> _multiExpanded = new[] { "fruits" };
+
+    private void OnSingleSelect(IReadOnlyList<string> selected)
+        => _singleSelected = selected.Count > 0 ? selected[0] : null;
+
+    private readonly IReadOnlyList<TreeNode<string>> _nodes = new List<TreeNode<string>>
+    {
+        new()
+        {
+            Value = "src",
+            Label = "src",
+            Children = new List<TreeNode<string>>
+            {
+                new()
+                {
+                    Value = "components",
+                    Label = "components",
+                    Children = new List<TreeNode<string>>
+                    {
+                        new() { Value = "button", Label = "Button.razor" },
+                        new() { Value = "input", Label = "Input.razor" },
+                    },
+                },
+                new() { Value = "utils", Label = "utils.ts" },
+            },
+        },
+        new() { Value = "package", Label = "package.json" },
+        new() { Value = "readme", Label = "README.md" },
+    };
+}

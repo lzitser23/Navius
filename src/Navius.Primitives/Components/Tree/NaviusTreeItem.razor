@@ -1,0 +1,135 @@
+@namespace Navius.Primitives.Components.Tree
+@inherits TreePart
+
+@*
+    role="treeitem". The focusable, roving-tabindex node (keydown bubbles to the role="tree"
+    root, which owns the keyboard model). Emits aria-level / aria-setsize / aria-posinset,
+    aria-expanded (parents only; leaves must NOT have it), aria-selected (when selection is
+    enabled) and the data-* styling hooks (data-expanded / data-selected / data-disabled /
+    data-level / data-leaf / data-focused). Registers itself with the context in mount order
+    (= document order) so visible-order navigation, setsize/posinset and roving focus work.
+
+    Reads its parent value + level from the cascade and re-cascades its own value/level so
+    nested NaviusTreeItems inside its NaviusTreeGroup wire up automatically. A child
+    NaviusTreeGroup marks this node expandable, which is what gives it aria-expanded.
+*@
+
+<CascadingValue Value="_itemContext" IsFixed="true">
+    <CascadingValue Value="Value" Name="NaviusTreeParentValue" IsFixed="true">
+        <CascadingValue Value="Level" Name="NaviusTreeLevel" IsFixed="true">
+            <div @ref="_element"
+                 id="@Tree.ItemId(Value)"
+                 role="treeitem"
+                 aria-level="@Level"
+                 aria-setsize="@Tree.SetSize(ParentValue)"
+                 aria-posinset="@Tree.PosInSet(Value, ParentValue)"
+                 aria-expanded="@AriaExpanded"
+                 aria-selected="@AriaSelected"
+                 aria-disabled="@(IsDisabled ? "true" : null)"
+                 tabindex="@TabIndex"
+                 data-expanded="@(Expandable && IsExpanded ? "" : null)"
+                 data-selected="@(Tree.SelectionEnabled && IsSelected ? "" : null)"
+                 data-disabled="@(IsDisabled ? "" : null)"
+                 data-focused="@(_itemContext.IsActive ? "" : null)"
+                 data-level="@Level"
+                 data-leaf="@(Expandable ? null : "")"
+                 data-navius-tree-item
+                 @onfocus="OnFocusAsync"
+                 @attributes="Attributes">
+                @ChildContent
+            </div>
+        </CascadingValue>
+    </CascadingValue>
+</CascadingValue>
+
+@code {
+    /// <summary>The node's unique identity (used for selection + expansion state).</summary>
+    [Parameter] public object Value { get; set; } = default!;
+
+    /// <summary>Disables this node: it cannot be selected and is skipped by keyboard navigation.</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Overrides the text type-ahead matches against (defaults to the node's rendered value).</summary>
+    [Parameter] public string? TextValue { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    [CascadingParameter(Name = "NaviusTreeParentValue")]
+    private object? ParentValue { get; set; }
+
+    [CascadingParameter(Name = "NaviusTreeLevel")]
+    private int ParentLevel { get; set; }
+
+    private ElementReference _element;
+    private TreeItemContext _itemContext = default!;
+    private object _registeredValue = default!;
+
+    private int Level => ParentLevel + 1;
+
+    private bool Expandable => _itemContext.Expandable;
+    private bool IsExpanded => Tree.IsExpanded(Value);
+    private bool IsSelected => Tree.IsSelected(Value);
+    private bool IsDisabled => Tree.IsItemDisabled(Disabled);
+
+    // Parents expose aria-expanded; leaves must not carry it at all.
+    private string? AriaExpanded => Expandable ? (IsExpanded ? "true" : "false") : null;
+
+    private string? AriaSelected => Tree.SelectionEnabled ? (IsSelected ? "true" : "false") : null;
+
+    private string TabIndex =>
+        Tree.IsActiveDescendant ? "-1" : (Tree.IsTabbable(Value) ? "0" : "-1");
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized(); // TreePart subscribes to Tree.Changed
+        BuildContext();
+        Register();
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Rebuild + re-register if the node's identity changed (rare; keeps state coherent).
+        if (!Equals(_registeredValue, Value))
+        {
+            Tree.Unregister(_registeredValue);
+            BuildContext();
+            Register();
+        }
+    }
+
+    private Task OnFocusAsync() => IsDisabled ? Task.CompletedTask : Tree.SetActiveFromFocusAsync(Value);
+
+    private void BuildContext()
+    {
+        _itemContext = new TreeItemContext(
+            Tree,
+            Value,
+            Level,
+            () => Disabled,
+            () => InvokeAsync(StateHasChanged));
+    }
+
+    private void Register()
+    {
+        _registeredValue = Value;
+        Tree.Register(new TreeItemReg
+        {
+            Value = Value,
+            Parent = ParentValue,
+            El = () => _element,
+            Disabled = () => Disabled,
+            Level = () => Level,
+            Expandable = () => _itemContext.Expandable,
+            Label = () => TextValue ?? Value.ToString() ?? "",
+        });
+    }
+
+    public override void Dispose()
+    {
+        base.Dispose();
+        Tree.Unregister(_registeredValue);
+    }
+}

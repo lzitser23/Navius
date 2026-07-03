@@ -1,0 +1,136 @@
+@page "/charts"
+@using Zits.Ui
+
+@*
+    Charts showcase: the four new helm chart types (Pie/Donut, Radar, RadialBar,
+    Scatter) rendered on the Navius brain over the existing hand-rolled SVG + ChartMath
+    architecture. Each section carries a stable data-demo hook so the e2e spec can
+    assert slice/point counts, hover tooltips, and the injected --color-<key> vars.
+*@
+<div class="min-h-screen bg-background text-foreground p-10 space-y-12" data-charts-showcase>
+    <header class="space-y-1">
+        <h1 class="text-2xl font-semibold tracking-tight">Charts</h1>
+        <p class="text-sm text-muted-foreground">Pie · Donut · Radar · RadialBar · Scatter: hand-rolled inline SVG, no charting runtime.</p>
+    </header>
+
+    @* -------------------------------------------------------------------- Pie *@
+    <section class="space-y-3" data-demo="pie">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Pie</h2>
+        <div class="w-full max-w-md">
+            <ZitsChartContainer Config="_browserConfig">
+                <ZitsPieChart Data="_browserData" DataKey="visitors" />
+            </ZitsChartContainer>
+            <ZitsChartLegend />
+        </div>
+    </section>
+
+    @* ------------------------------------------------------------------ Donut *@
+    <section class="space-y-3" data-demo="donut">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Donut (InnerRadius + center total)</h2>
+        <div class="w-full max-w-md">
+            <ZitsChartContainer Config="_browserConfig">
+                <ZitsPieChart Data="_browserData" DataKey="visitors" InnerRadius="24" OuterRadius="42">
+                    <CenterContent>
+                        <div data-center>
+                            <div class="text-2xl font-bold leading-none">@_browserTotal</div>
+                            <div class="text-xs text-muted-foreground">Visitors</div>
+                        </div>
+                    </CenterContent>
+                </ZitsPieChart>
+            </ZitsChartContainer>
+            <ZitsChartLegend />
+        </div>
+    </section>
+
+    @* ------------------------------------------------------------------ Radar *@
+    <section class="space-y-3" data-demo="radar">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Radar (2 series · 6 axes)</h2>
+        <div class="w-full max-w-md">
+            <ZitsChartContainer Config="_radarConfig">
+                <ZitsRadarChart Data="_radarData" />
+            </ZitsChartContainer>
+            <ZitsChartLegend />
+        </div>
+    </section>
+
+    @* -------------------------------------------------------------- RadialBar *@
+    <section class="space-y-3" data-demo="radial">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">RadialBar (rounded caps)</h2>
+        <div class="w-full max-w-md">
+            <ZitsChartContainer Config="_browserConfig">
+                <ZitsRadialBarChart Data="_browserData" DataKey="visitors" CornerRadius="2" />
+            </ZitsChartContainer>
+            <ZitsChartLegend />
+        </div>
+    </section>
+
+    @* ---------------------------------------------------------------- Scatter *@
+    <section class="space-y-3" data-demo="scatter">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Scatter (2 series · x/y)</h2>
+        <div class="w-full max-w-md">
+            <ZitsChartContainer Config="_scatterConfig">
+                <ZitsScatterChart Data="_scatterData" XKey="x" YKey="y" />
+            </ZitsChartContainer>
+            <ZitsChartLegend />
+        </div>
+    </section>
+</div>
+
+@code {
+    // Browser share: drives Pie, Donut and RadialBar. Keys are the ChartConfig keys
+    // (the slice/ring colours via var(--color-<key>)); the config maps them to labels.
+    private static readonly ChartConfig _browserConfig = new()
+    {
+        ["chrome"] = new ChartSeries("Chrome", "#e76f51"),
+        ["safari"] = new ChartSeries("Safari", "#f4a261"),
+        ["firefox"] = new ChartSeries("Firefox", "#e9c46a"),
+        ["edge"] = new ChartSeries("Edge", "#2a9d8f"),
+        ["other"] = new ChartSeries("Other", "#264653"),
+    };
+
+    private static readonly ChartDataPoint[] _browserData =
+    {
+        new("chrome", ("visitors", 275)),
+        new("safari", ("visitors", 200)),
+        new("firefox", ("visitors", 187)),
+        new("edge", ("visitors", 173)),
+        new("other", ("visitors", 90)),
+    };
+
+    private static readonly int _browserTotal =
+        (int)_browserData.Sum(d => d.Values["visitors"]);
+
+    // Desktop vs mobile across six months: drives Radar (categories are the Labels).
+    private static readonly ChartConfig _radarConfig = new()
+    {
+        ["desktop"] = new ChartSeries("Desktop", "#e76f51"),
+        ["mobile"] = new ChartSeries("Mobile", "#2a9d8f"),
+    };
+
+    private static readonly ChartDataPoint[] _radarData =
+    {
+        new("January", ("desktop", 186), ("mobile", 80)),
+        new("February", ("desktop", 305), ("mobile", 200)),
+        new("March", ("desktop", 237), ("mobile", 120)),
+        new("April", ("desktop", 273), ("mobile", 190)),
+        new("May", ("desktop", 209), ("mobile", 130)),
+        new("June", ("desktop", 264), ("mobile", 140)),
+    };
+
+    // Two point clouds: drives Scatter (each point's Label is its series colour key).
+    private static readonly ChartConfig _scatterConfig = new()
+    {
+        ["groupA"] = new ChartSeries("Group A", "#e76f51"),
+        ["groupB"] = new ChartSeries("Group B", "#2a9d8f"),
+    };
+
+    private static readonly ChartDataPoint[] _scatterData =
+    {
+        new("groupA", ("x", 10), ("y", 20)),
+        new("groupA", ("x", 25), ("y", 35)),
+        new("groupA", ("x", 40), ("y", 28)),
+        new("groupB", ("x", 18), ("y", 48)),
+        new("groupB", ("x", 33), ("y", 15)),
+        new("groupB", ("x", 52), ("y", 40)),
+    };
+}

@@ -1,0 +1,28 @@
+@namespace Navius.Primitives.Components.Tree
+@typeparam TValue
+
+@*
+    Internal recursion for the data-driven render mode. For each TreeNode it renders a
+    NaviusTreeItem (wiring value / disabled / type-ahead label) whose row content is the
+    consumer's ItemTemplate, and (for nodes with children) a NaviusTreeGroup that recurses.
+    The tree's aria-level / setsize / posinset wiring falls out of NaviusTreeItem itself.
+*@
+
+@foreach (var node in Nodes)
+{
+    <NaviusTreeItem Value="node.Value!" Disabled="node.Disabled" TextValue="@node.Label" @key="node.Value!">
+        @ItemTemplate(node)
+        @if (node.HasChildren)
+        {
+            <NaviusTreeGroup>
+                <NaviusTreeItems TValue="TValue" Nodes="node.Children!" ItemTemplate="ItemTemplate" />
+            </NaviusTreeGroup>
+        }
+    </NaviusTreeItem>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<TreeNode<TValue>> Nodes { get; set; } = Array.Empty<TreeNode<TValue>>();
+
+    [Parameter] public RenderFragment<TreeNode<TValue>> ItemTemplate { get; set; } = default!;
+}

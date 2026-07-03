@@ -1,0 +1,27 @@
+@namespace Navius.Primitives.Components.Tree
+@inherits TreePart
+
+@*
+    The label-row wrapper inside a NaviusTreeItem (holds the indicator + trigger + any adornments).
+    Presentational only; the treeitem owns role/focus/keyboard, and this carries the data-* styling
+    hooks (data-level for indent, data-expanded / data-selected / data-disabled) so the styled
+    layer can lay the row out without reaching back into the item.
+*@
+
+<div data-navius-tree-item-content
+     data-level="@Item.Level"
+     data-expanded="@(Item.Expandable && Item.IsExpanded ? "" : null)"
+     data-selected="@(Tree.SelectionEnabled && Item.IsSelected ? "" : null)"
+     data-disabled="@(Item.IsDisabled ? "" : null)"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private TreeItemContext Item { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}
