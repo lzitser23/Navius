@@ -590,3 +590,396 @@ export function createMicro(element, options) {
     },
   };
 }
+
+// --- Auto-animate (FLIP on mutation) -----------------------------------------
+// One MutationObserver on a list container: every add / remove / reorder of its direct
+// element children animates. A faithful port of @formkit/auto-animate's core algorithm
+// (childList diff -> FLIP remain, scale/opacity add, absolute-positioned exit), adapted
+// to our conventions:
+//   - Per-INSTANCE caches (the reference keys module-global WeakMaps by element; scoping
+//     them to the factory closure makes destroy() trivial and matches our idiom).
+//   - Scoped to ONE container's direct element children (the component's contract), so
+//     the reference's per-element target-parent (__aa_tgt) collapses to `parent`.
+//   - Removed nodes' siblings are stashed from the MutationRecord (previousSibling /
+//     nextSibling capture the pre-removal position exactly) so the node can be
+//     re-inserted for its exit animation.
+//   - OUR differentiator: `easing` accepts a baked linear() spring (springs on the FLIP
+//     remain), the same C#-baked curves as the rest of the engine.
+//   - Reduced motion deviates from the reference (which disables entirely): mutations
+//     apply instantly with zero transform animation, but add/remove keep their opacity
+//     fade via the shared collapseToOpacity guard (consistent with our other tiers).
+// SKIPPED: the plugin system (raw KeyframeEffect returns) and the __aa_new revival flag
+// (a framework node-reuse case Blazor's keyed diff does not produce; exit clones are
+// always detached, so no orphans regardless).
+//
+// options: { durationMs (250), easing ('ease-in-out', or a baked linear()), reduceMotion }.
+// Returns { enable, disable, destroy }.
+
+export function createAutoAnimate(parent, options) {
+  const opts = Object.assign(
+    { durationMs: 250, easing: 'ease-in-out', reduceMotion: 'user' },
+    options || {}
+  );
+
+  const coords = new WeakMap();        // element -> {top,left,width,height}: the FLIP "First"
+  const animations = new WeakMap();    // element -> in-flight Animation (cancelled on retrigger)
+  const siblings = new WeakMap();      // element -> [prev, next] stashed before removal
+  const intersections = new WeakMap(); // element -> IntersectionObserver (position freshness)
+  const childResizes = new WeakMap();  // element -> ResizeObserver (position freshness)
+  const debounces = new WeakMap();     // element -> child-resize debounce timeout
+  const pendingDelete = new WeakSet(); // elements mid-exit: the engine owns their lifecycle
+  const engineTouched = new WeakSet(); // nodes the engine itself inserts/detaches (ignored)
+
+  let tracked = [];                    // current in-flow children we FLIP
+  let isEnabled = true;
+  let pollId = null;
+  let rootResize = null;
+  let rootResizeDebounce = null;
+
+  const hasIO = typeof IntersectionObserver === 'function';
+  const hasRO = typeof ResizeObserver === 'function';
+  const reduce = () => shouldReduceMotion(opts.reduceMotion);
+
+  // A child is safe to (re)measure only when nothing is transforming it: an in-flight
+  // FLIP would poison getBoundingClientRect with the animation's translate.
+  function idle(el) {
+    return el.isConnected && !pendingDelete.has(el) && !animations.has(el);
+  }
+
+  function measure(el) {
+    const rect = el.getBoundingClientRect();
+    return { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
+  }
+
+  // Direct element children currently in normal flow (parent.children is element-only,
+  // so Blazor's comment-node markers are filtered for free). Exit clones are excluded.
+  function liveChildren() {
+    const out = [];
+    for (const n of parent.children) if (!pendingDelete.has(n)) out.push(n);
+    return out;
+  }
+
+  function cancelAnim(el) {
+    const a = animations.get(el);
+    if (a) {
+      animations.delete(el);
+      a.cancel();
+    }
+  }
+
+  // Play a FLIP/add tween. fill:'none' so the element reverts to its natural style at
+  // rest (the last keyframe already equals that style, so there is no snap).
+  function play(el, frames, timing) {
+    const anim = el.animate(frames.map(sanitizeFrame), Object.assign({ fill: 'none' }, timing));
+    anim.finished.catch(() => {});
+    animations.set(el, anim);
+    anim.finished.then(
+      () => {
+        if (animations.get(el) === anim) {
+          animations.delete(el);
+          refreshCoords(el); // re-baseline First once the element is at rest again
+        }
+      },
+      () => {}
+    );
+    return anim;
+  }
+
+  // getTransitionSizes: content-box compensation so width/height keyframes animate the
+  // box the browser will settle at. Inert for border-box children (the common case).
+  function transitionSizes(el, from, to) {
+    let wFrom = from.width, wTo = to.width, hFrom = from.height, hTo = to.height;
+    const style = getComputedStyle(el);
+    if (style.boxSizing === 'content-box') {
+      const num = (v) => parseFloat(v) || 0;
+      const padX = num(style.paddingLeft) + num(style.paddingRight) + num(style.borderLeftWidth) + num(style.borderRightWidth);
+      const padY = num(style.paddingTop) + num(style.paddingBottom) + num(style.borderTopWidth) + num(style.borderBottomWidth);
+      wFrom -= padX; wTo -= padX; hFrom -= padY; hTo -= padY;
+    }
+    return [Math.round(wFrom), Math.round(wTo), Math.round(hFrom), Math.round(hTo)];
+  }
+
+  // FLIP a surviving child from its cached First to its fresh Last.
+  function remain(el) {
+    const oldCoords = coords.get(el);
+    cancelAnim(el);              // revert any in-flight FLIP (fill:none) before measuring
+    const newCoords = measure(el);
+    coords.set(el, newCoords);   // this Last becomes the next mutation's First
+    if (!oldCoords) return;
+    const dx = oldCoords.left - newCoords.left;
+    const dy = oldCoords.top - newCoords.top;
+    const [wFrom, wTo, hFrom, hTo] = transitionSizes(el, oldCoords, newCoords);
+    // Anchored on an axis (delta 0, e.g. a bottom/right-anchored list) needs no offset
+    // correction on it; a 0 translate on that axis does exactly that.
+    if (dx === 0 && dy === 0 && wFrom === wTo && hFrom === hTo) return;
+    const start = { transform: `translate(${dx}px, ${dy}px)` };
+    const end = { transform: 'translate(0px, 0px)' };
+    if (wFrom !== wTo) { start.width = `${wFrom}px`; end.width = `${wTo}px`; }
+    if (hFrom !== hTo) { start.height = `${hFrom}px`; end.height = `${hTo}px`; }
+    let frames = [start, end];
+    if (reduce()) frames = collapseToOpacity(frames); // strips transform/size -> instant
+    if (!hasAnimatableProps(frames)) return;          // reduced motion: applied instantly
+    play(el, frames, { duration: opts.durationMs, easing: opts.easing });
+  }
+
+  // Enter: opacity + scale(.98) -> 1 at 1.5x the base duration, ease-in (reference).
+  function add(el) {
+    coords.set(el, measure(el));
+    observeChild(el);
+    observePosition(el);
+    let frames = [
+      { transform: 'scale(0.98)', opacity: 0 },
+      { transform: 'scale(0.98)', opacity: 0, offset: 0.5 },
+      { transform: 'scale(1)', opacity: 1 },
+    ];
+    if (reduce()) frames = collapseToOpacity(frames); // keeps the opacity fade
+    if (!hasAnimatableProps(frames)) return;
+    play(el, frames, { duration: opts.durationMs * 1.5, easing: 'ease-in' });
+  }
+
+  // Re-insert a removed node where it was, so it can animate out in place.
+  function reinsert(el) {
+    engineTouched.add(el); // the resulting childList record is the engine's, not the app's
+    const pair = siblings.get(el);
+    const prev = pair && pair[0];
+    const next = pair && pair[1];
+    if (next && next.parentNode === parent) parent.insertBefore(el, next);
+    else if (prev && prev.parentNode === parent) prev.after(el);
+    else parent.appendChild(el);
+  }
+
+  // Pin an exiting node at its old spot, out of flow, relative to the container.
+  function positionAbsolute(el, old) {
+    const parentRect = parent.getBoundingClientRect();
+    const style = getComputedStyle(parent);
+    const borderTop = parseFloat(style.borderTopWidth) || 0;
+    const borderLeft = parseFloat(style.borderLeftWidth) || 0;
+    Object.assign(el.style, {
+      position: 'absolute',
+      top: `${old.top - parentRect.top - borderTop + parent.scrollTop}px`,
+      left: `${old.left - parentRect.left - borderLeft + parent.scrollLeft}px`,
+      width: `${old.width}px`,
+      height: `${old.height}px`,
+      margin: '0',
+      boxSizing: 'border-box',
+      pointerEvents: 'none',
+      zIndex: '1',
+    });
+  }
+
+  // Counter-scroll so removing an item near the bottom of a SCROLLABLE container does not
+  // jump the remaining content. Conservative and inert for non-scrolling containers (our
+  // demo lists); not exercised by the suite.
+  //
+  // GUARDRAIL: this writes parent.scrollTop directly. Do NOT enable AutoAnimate on a
+  // container whose scrollTop is owned by another engine (e.g. a MessageScroller / chat
+  // viewport that drives its own stick-to-bottom via scrollTop / scrollIntoView). Two
+  // writers on one element fight and produce scroll jitter. AutoAnimate must own the
+  // scroll position of any scrollable container it animates, or that container must be
+  // non-scrolling. In Navius these never co-locate (AutoAnimate ships a non-scrolling
+  // list; MessageScroller lives in a separate assembly), which is why the hazard is
+  // avoided by construction rather than guarded at runtime.
+  function adjustScroll(height) {
+    if (parent.scrollHeight <= parent.clientHeight) return;
+    const distanceToBottom = parent.scrollHeight - parent.scrollTop - parent.clientHeight;
+    if (distanceToBottom < 1) parent.scrollTop = Math.max(0, parent.scrollTop - height);
+  }
+
+  function detach(el) {
+    if (!pendingDelete.has(el)) return; // already gone
+    pendingDelete.delete(el);
+    animations.delete(el);
+    siblings.delete(el);
+    teardownObservers(el);
+    el.remove(); // engineTouched still holds el, so this removal record is ignored
+  }
+
+  // Exit: re-insert, pin absolute at the old coords, scale/opacity out, then detach. The
+  // finish handler runs on cancel too, so a cancelled exit still detaches -> no orphans.
+  function remove(el) {
+    const old = coords.get(el);
+    if (!old) return;
+    pendingDelete.add(el);
+    reinsert(el);
+    positionAbsolute(el, old);
+    coords.delete(el);
+    let frames = [
+      { transform: 'scale(1)', opacity: 1 },
+      { transform: 'scale(0.98)', opacity: 0 },
+    ];
+    if (reduce()) frames = collapseToOpacity(frames); // keeps the opacity fade
+    if (!hasAnimatableProps(frames)) { detach(el); return; }
+    adjustScroll(old.height);
+    const anim = el.animate(frames.map(sanitizeFrame), {
+      duration: opts.durationMs,
+      easing: 'ease-out',
+      fill: 'both',
+    });
+    anim.finished.catch(() => {});
+    animations.set(el, anim);
+    anim.finished.then(() => detach(el), () => detach(el));
+  }
+
+  // --- Position freshness (coords stay accurate between mutations) ---
+  // Only ever refreshes coords for idle children (never mid-animation), so it cannot
+  // poison a running FLIP; a no-op while animating, it re-arms the observers at rest.
+
+  function refreshCoords(el) {
+    if (idle(el)) coords.set(el, measure(el));
+    if (el.isConnected && !pendingDelete.has(el)) observePosition(el);
+  }
+
+  // Per-element IntersectionObserver whose rootMargin is the negative of the element's
+  // own viewport box: it fires the moment the element moves (scroll / layout shift).
+  function observePosition(el) {
+    const existing = intersections.get(el);
+    if (existing) existing.disconnect();
+    if (!hasIO || typeof window === 'undefined') return;
+    const rect = el.getBoundingClientRect();
+    const w = window.innerWidth, h = window.innerHeight;
+    const margin =
+      `${-Math.floor(rect.top)}px ${-Math.floor(w - rect.right)}px ` +
+      `${-Math.floor(h - rect.bottom)}px ${-Math.floor(rect.left)}px`;
+    let first = true;
+    const io = new IntersectionObserver(
+      () => {
+        if (first) { first = false; return; } // the synchronous initial fire
+        if (!idle(el)) return;                 // ignore transform-induced moves mid-FLIP
+        refreshCoords(el);
+      },
+      { root: null, threshold: 1, rootMargin: margin }
+    );
+    io.observe(el);
+    intersections.set(el, io);
+  }
+
+  // Per-child ResizeObserver, debounced by the animation duration (reference cadence).
+  function observeChild(el) {
+    if (!hasRO || childResizes.has(el)) return;
+    const ro = new ResizeObserver(() => {
+      clearTimeout(debounces.get(el));
+      debounces.set(el, setTimeout(() => refreshCoords(el), opts.durationMs));
+    });
+    ro.observe(el);
+    childResizes.set(el, ro);
+  }
+
+  function teardownObservers(el) {
+    const io = intersections.get(el);
+    if (io) { io.disconnect(); intersections.delete(el); }
+    const ro = childResizes.get(el);
+    if (ro) { ro.disconnect(); childResizes.delete(el); }
+    clearTimeout(debounces.get(el));
+    debounces.delete(el);
+  }
+
+  // --- Mutation handling ---
+
+  const observer = new MutationObserver((records) => {
+    if (!isEnabled) return;
+    let touched = 0;
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node.nodeType === 1 && !engineTouched.has(node)) touched++;
+      }
+      for (const node of record.removedNodes) {
+        if (node.nodeType !== 1 || engineTouched.has(node)) continue;
+        // The record preserves the pre-removal siblings: the "stash before removal".
+        siblings.set(node, [record.previousSibling, record.nextSibling]);
+        touched++;
+      }
+    }
+    if (touched === 0) return; // comment/text-only, or engine-driven: nothing to do
+    reconcile();
+  });
+
+  function reconcile() {
+    const live = liveChildren();
+    const liveSet = new Set(live);
+    const removed = tracked.filter((el) => !liveSet.has(el) && coords.has(el) && !pendingDelete.has(el));
+    const added = live.filter((el) => !coords.has(el));
+    const survivors = live.filter((el) => coords.has(el));
+
+    for (const el of survivors) remain(el); // FLIP everything that shifted, not just moved nodes
+    for (const el of added) add(el);
+    for (const el of removed) remove(el);
+
+    tracked = live;
+  }
+
+  // --- Lifecycle ---
+
+  function syncTracked() {
+    const live = liveChildren();
+    for (const el of live) {
+      if (!coords.has(el)) {
+        coords.set(el, measure(el)); // baseline: existing children do not animate on init
+        observeChild(el);
+        observePosition(el);
+      }
+    }
+    tracked = live;
+  }
+
+  function startPoll() {
+    stopPoll();
+    // A slow, jittered poll catches scrolls the IntersectionObserver missed (reference:
+    // ~2000ms staggered). One instance interval refreshes all idle children.
+    const period = 2000 + Math.floor(Math.random() * 500);
+    pollId = setInterval(() => {
+      for (const el of tracked) refreshCoords(el);
+    }, period);
+  }
+
+  function stopPoll() {
+    if (pollId !== null) { clearInterval(pollId); pollId = null; }
+  }
+
+  function detachExitClones() {
+    for (const node of Array.from(parent.children)) {
+      if (pendingDelete.has(node)) cancelAnim(node); // cancel -> finish handler detaches
+    }
+  }
+
+  function enable() {
+    if (isEnabled) return;
+    isEnabled = true;
+    syncTracked();
+    startPoll();
+  }
+
+  function disable() {
+    if (!isEnabled) return;
+    isEnabled = false;
+    for (const el of tracked) cancelAnim(el);
+    detachExitClones();
+    stopPoll();
+  }
+
+  function destroy() {
+    isEnabled = false;
+    observer.disconnect();
+    stopPoll();
+    if (rootResize) { rootResize.disconnect(); rootResize = null; }
+    clearTimeout(rootResizeDebounce);
+    for (const el of tracked) { cancelAnim(el); teardownObservers(el); }
+    detachExitClones();
+  }
+
+  // The reference forces position:relative so exit clones anchor to the container.
+  if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+  syncTracked();
+  observer.observe(parent, { childList: true });
+  startPoll();
+  if (hasRO) {
+    rootResize = new ResizeObserver(() => {
+      clearTimeout(rootResizeDebounce);
+      rootResizeDebounce = setTimeout(() => {
+        for (const el of tracked) refreshCoords(el);
+      }, 100);
+    });
+    rootResize.observe(parent);
+  }
+
+  return { enable, disable, destroy };
+}

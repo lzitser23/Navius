@@ -1,0 +1,97 @@
+@namespace Navius.Motion
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@*
+    Auto-animate container: renders a single element (ADR-0003 limits, no asChild) and
+    turns it into a FLIP-on-mutation list, so every add / remove / reorder of its direct
+    children animates. Splat @attributes to supply the class/layout. Enabled is two-way
+    bindable; Duration/Easing time the FLIP, or pass a Spring to animate it on a baked
+    linear() spring. All physics are solved and baked in C#; JS only executes.
+
+    Guardrail: if the container scrolls, AutoAnimate owns its scrollTop (it counter-scrolls
+    on bottom removals). Do not wrap a container whose scroll position is driven by another
+    engine (e.g. a chat viewport that sticks to bottom), or the two writers will fight.
+*@
+
+<div @ref="_element" data-navius-auto-animate @attributes="Attributes">@ChildContent</div>
+
+@code {
+    private ElementReference _element;
+    private MotionJsInterop? _interop;
+    private AutoAnimateMotion? _handle;
+    private bool _lastEnabled = true;
+
+    /// <summary>Whether mutations animate. When false they apply instantly. Two-way bindable.</summary>
+    [Parameter] public bool Enabled { get; set; } = true;
+
+    /// <summary>Fired when <see cref="Enabled"/> changes, for <c>@bind-Enabled</c>.</summary>
+    [Parameter] public EventCallback<bool> EnabledChanged { get; set; }
+
+    /// <summary>FLIP duration in milliseconds. Ignored when <see cref="Spring"/> is set (unless combined). Defaults to 250.</summary>
+    [Parameter] public double? Duration { get; set; }
+
+    /// <summary>FLIP easing (a CSS easing keyword or a baked <c>linear()</c> string). Defaults to <c>ease-in-out</c>.</summary>
+    [Parameter] public string? Easing { get; set; }
+
+    /// <summary>Spring for the FLIP: baked to a <c>linear()</c> easing and settle duration. Overrides the defaults.</summary>
+    [Parameter] public Spring? Spring { get; set; }
+
+    /// <summary>Reduced-motion mode: <c>user</c> (OS setting), <c>always</c>, or <c>never</c>.</summary>
+    [Parameter] public string ReduceMotion { get; set; } = "user";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Splatted onto the rendered container element.</summary>
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (firstRender)
+            {
+                _interop ??= new MotionJsInterop(JS);
+                _handle = await _interop.CreateAutoAnimateAsync(
+                    _element, MotionPrograms.AutoAnimate(Spring, Duration, Easing, ReduceMotion));
+                _lastEnabled = true;
+                if (!Enabled)
+                {
+                    await _handle.DisableAsync();
+                    _lastEnabled = false;
+                }
+            }
+            else if (_handle is not null && Enabled != _lastEnabled)
+            {
+                _lastEnabled = Enabled;
+                if (Enabled)
+                {
+                    await _handle.EnableAsync();
+                }
+                else
+                {
+                    await _handle.DisableAsync();
+                }
+            }
+        }
+        catch (JSException)
+        {
+            // Engine unavailable (no module, prerender edge): degrade to no animation.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_handle is not null)
+        {
+            await _handle.DisposeAsync();
+            _handle = null;
+        }
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+            _interop = null;
+        }
+        GC.SuppressFinalize(this);
+    }
+}

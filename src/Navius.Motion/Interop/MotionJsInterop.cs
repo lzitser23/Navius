@@ -94,6 +94,24 @@ public sealed class MotionJsInterop : IAsyncDisposable
         return new MotionMicro(handle);
     }
 
+    /// <summary>
+    /// Turn <paramref name="parent"/> into an auto-animating list container: one
+    /// MutationObserver FLIPs every add, remove and reorder of its direct element
+    /// children. The returned handle toggles it on and off
+    /// (<see cref="AutoAnimateMotion.EnableAsync"/> / <see cref="AutoAnimateMotion.DisableAsync"/>);
+    /// dispose it to disconnect the observer and detach any in-flight exit clones. Build
+    /// options (springs bake to a <c>linear()</c> easing) with
+    /// <see cref="MotionPrograms.AutoAnimate"/>.
+    /// </summary>
+    public async Task<AutoAnimateMotion> CreateAutoAnimateAsync(
+        ElementReference parent, AutoAnimateOptions options)
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createAutoAnimate", parent, options);
+        return new AutoAnimateMotion(handle);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (!_module.IsValueCreated)
@@ -250,6 +268,55 @@ public sealed class MotionMicro : IAsyncDisposable
 }
 
 /// <summary>
+/// A live auto-animate binding on a list container. <see cref="EnableAsync"/> /
+/// <see cref="DisableAsync"/> toggle the FLIP-on-mutation behaviour without tearing it
+/// down; while disabled, mutations apply instantly. Dispose to disconnect the observer,
+/// stop the position pollers and detach any in-flight exit clones (no orphaned nodes).
+/// </summary>
+public sealed class AutoAnimateMotion : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal AutoAnimateMotion(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>Resume animating mutations (re-baselines the current children first).</summary>
+    public async Task EnableAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("enable");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>Stop animating mutations (they apply instantly until re-enabled).</summary>
+    public async Task DisableAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("disable");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
 /// One WAAPI keyframe restricted to the compositor-friendly properties the presets
 /// animate (serialized to camelCase; null members are dropped JS-side).
 /// </summary>
@@ -343,4 +410,18 @@ public sealed record MicroOptions(
     double DurationMs,
     string Easing = "ease-in-out",
     bool Loop = false,
+    string ReduceMotion = "user");
+
+/// <summary>
+/// Options for <see cref="MotionJsInterop.CreateAutoAnimateAsync"/> (serialized to
+/// camelCase). <see cref="DurationMs"/> and <see cref="Easing"/> time the FLIP remain
+/// (adds run at 1.5x, removes at 1x, both eased per the reference). <see cref="Easing"/>
+/// accepts a baked <c>linear()</c> spring string, which is how a spring animates the
+/// FLIP. Defaults match @formkit/auto-animate (250ms, ease-in-out). Under reduced motion
+/// transform animation is skipped (instant) while add/remove keep their opacity fade.
+/// Build with <see cref="MotionPrograms.AutoAnimate"/>.
+/// </summary>
+public sealed record AutoAnimateOptions(
+    double DurationMs = 250,
+    string Easing = "ease-in-out",
     string ReduceMotion = "user");

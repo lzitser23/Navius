@@ -62,6 +62,24 @@ public static class MotionPrograms
         return new MicroOptions(frames, preset.DurationMs, preset.Easing, preset.Loop);
     }
 
+    /// <summary>
+    /// Build <see cref="AutoAnimateOptions"/> for a FLIP-on-mutation container. A
+    /// <paramref name="spring"/> bakes to a <c>linear()</c> easing and its settle
+    /// duration (our differentiator: springs on the FLIP); <paramref name="durationMs"/>
+    /// and <paramref name="easing"/> override either independently. With no arguments the
+    /// @formkit/auto-animate defaults (250ms, ease-in-out) apply.
+    /// </summary>
+    public static AutoAnimateOptions AutoAnimate(
+        Spring? spring = null, double? durationMs = null, string? easing = null, string reduceMotion = "user")
+    {
+        if (spring is Spring resolved)
+        {
+            var baked = LinearEasingBaker.Bake(resolved);
+            return new AutoAnimateOptions(durationMs ?? baked.DurationMilliseconds, easing ?? baked.Easing, reduceMotion);
+        }
+        return new AutoAnimateOptions(durationMs ?? 250, easing ?? "ease-in-out", reduceMotion);
+    }
+
     private static MotionFrame ToFrame(MotionVisualState state)
         => new(state.Opacity, state.Transform ?? "none");
 

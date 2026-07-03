@@ -209,6 +209,45 @@
         </div>
     </section>
 
+    <section class="space-y-3" data-testid="auto-animate-section">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Auto-animate · FLIP on mutation (runtime tier)</h2>
+        <p class="text-sm text-muted-foreground">
+            One attribute on the list container. Every add, remove and reorder of its children animates: survivors
+            FLIP on a C#-baked <code class="font-mono">linear()</code> spring, new items scale and fade in, removed
+            items pin absolute and fade out before detaching.
+        </p>
+        <div class="flex flex-wrap items-center gap-3">
+            <button type="button" data-testid="auto-animate-add" @onclick="AddItem"
+                    class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Add
+            </button>
+            <button type="button" data-testid="auto-animate-remove" @onclick="RemoveItem"
+                    class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Remove first
+            </button>
+            <button type="button" data-testid="auto-animate-shuffle" @onclick="ShuffleItems"
+                    class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Shuffle
+            </button>
+            <button type="button" data-testid="auto-animate-storm" @onclick="StormItems"
+                    class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Storm
+            </button>
+            <span class="font-mono text-xs text-muted-foreground">order: <span data-testid="auto-animate-order">@string.Join(",", _items)</span></span>
+        </div>
+
+        <NaviusAutoAnimate Spring="Spring.Default" data-testid="auto-animate-list"
+                           class="flex w-64 flex-col gap-2 rounded-lg border border-border bg-muted/30 p-2">
+            @foreach (var item in _items)
+            {
+                <div @key="item" data-testid="auto-animate-item" data-item="@item"
+                     class="flex h-10 items-center rounded-md border border-border bg-card px-3 text-sm text-card-foreground shadow-sm">
+                    Item @item
+                </div>
+            }
+        </NaviusAutoAnimate>
+    </section>
+
     <p class="font-mono text-xs text-muted-foreground">
         view source · <code>playground/Navius.Playground/Pages/Motion.razor</code>
     </p>
@@ -245,6 +284,10 @@
     private int _wrapperReplay;
     private Spring? _wrapperSpring;
     private string _wrapperSpringName = "default";
+
+    // Auto-animate list (FLIP on mutation). @key drives real DOM moves on reorder.
+    private readonly List<int> _items = new() { 1, 2, 3, 4, 5 };
+    private int _nextId = 6;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -349,6 +392,45 @@
         _wrapperSpring = spring;
         _wrapperSpringName = name;
         _wrapperReplay++;   // @key change remounts NaviusMotion, replaying the enter
+    }
+
+    private void AddItem() => _items.Insert(0, _nextId++);
+
+    private void RemoveItem()
+    {
+        if (_items.Count > 0)
+        {
+            _items.RemoveAt(0);
+        }
+    }
+
+    private void ShuffleItems() => _items.Reverse();
+
+    private async Task StormItems()
+    {
+        // Slam add / remove / reorder faster than the FLIP settles, to stress the
+        // retrigger-cancel path and the exit-clone lifecycle under overlap. Deterministic.
+        for (var i = 0; i < 12; i++)
+        {
+            switch (i % 3)
+            {
+                case 0:
+                    _items.Insert(0, _nextId++);
+                    break;
+                case 1:
+                    if (_items.Count > 1)
+                    {
+                        _items.RemoveAt(_items.Count - 1);
+                    }
+                    break;
+                default:
+                    _items.Reverse();
+                    break;
+            }
+            StateHasChanged();
+            await Task.Delay(30);
+        }
+        StateHasChanged();
     }
 
     public async ValueTask DisposeAsync()

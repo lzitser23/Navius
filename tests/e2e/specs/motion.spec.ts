@@ -190,3 +190,145 @@ test('micro pack: the shimmer sweeps (CSS tier) and its reduced-motion fallback 
   await expect.poll(() => block.evaluate((n) => getComputedStyle(n).animationName)).toBe('none');
   await expect.poll(() => animationCount(block)).toBe(0);
 });
+
+// --- Auto-animate (M2) --------------------------------------------------------
+// The FLIP-on-mutation container on /motion: a NaviusAutoAnimate list with add / remove
+// first / shuffle (reverse) / storm buttons and a comma-joined order readout of the C#
+// state. The container FLIPs on a baked Spring.Default linear() run (~0.5s window), so
+// mid-flight reads are catchable. Item ids are monotonic and never reused, so a removed
+// item's exit clone can never collide with a live item.
+const items = (page: import('@playwright/test').Page) =>
+  page.locator('[data-testid="auto-animate-list"] > [data-testid="auto-animate-item"]');
+
+// True once a frame shows any list item carrying a non-identity translate (a live FLIP).
+async function sawLiveTranslate(page: import('@playwright/test').Page, windowMs: number): Promise<boolean> {
+  return page.evaluate(async (ms) => {
+    const nodes = () => Array.from(document.querySelectorAll('[data-testid="auto-animate-item"]'));
+    const start = performance.now();
+    while (performance.now() - start < ms) {
+      for (const n of nodes()) {
+        const t = getComputedStyle(n).transform;
+        const m = t && t !== 'none' ? t.match(/matrix\(([^)]+)\)/) : null;
+        if (m) {
+          const p = m[1].split(',').map((v) => parseFloat(v));
+          if (Math.abs(p[4]) > 0.5 || Math.abs(p[5]) > 0.5) return true;
+        }
+      }
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    return false;
+  }, windowMs);
+}
+
+// The in-flow DOM order must equal the C# state (the order readout): proves the exit
+// clones never corrupt Blazor's reconciliation of the container's children.
+async function expectDomMatchesState(page: import('@playwright/test').Page) {
+  const readout = ((await page.locator('[data-testid="auto-animate-order"]').textContent()) ?? '').trim();
+  const dom = await items(page).evaluateAll((ns) =>
+    ns.map((n) => n.getAttribute('data-item')).join(',')
+  );
+  expect(dom).toBe(readout);
+}
+
+test('auto-animate: a reorder FLIPs, a moved item carries a live translate mid-flight, then settles', async ({ page }) => {
+  await expect(items(page)).toHaveCount(5);
+
+  await page.locator('[data-testid="auto-animate-shuffle"]').click();
+
+  // Reverse moves every item: at least one shows a live translate on the compositor.
+  expect(await sawLiveTranslate(page, 3000)).toBe(true);
+
+  // Every item settles back to identity (FLIP fills none, resting transform is none).
+  await expect
+    .poll(() =>
+      items(page).evaluateAll((ns) =>
+        ns.every((n) => {
+          const t = getComputedStyle(n).transform;
+          return t === 'none' || t === 'matrix(1, 0, 0, 1, 0, 0)';
+        })
+      )
+    )
+    .toBe(true);
+  await expectDomMatchesState(page);
+});
+
+test('auto-animate: a removed item pins position:absolute and animates out, then detaches (no orphan)', async ({ page }) => {
+  const id = await items(page).first().getAttribute('data-item');
+  const exiting = page.locator(`[data-testid="auto-animate-item"][data-item="${id}"]`);
+
+  await page.locator('[data-testid="auto-animate-remove"]').click();
+
+  // Still present mid-exit: pinned out of flow (position:absolute) with a running animation.
+  await expect.poll(() => exiting.evaluate((n) => getComputedStyle(n).position)).toBe('absolute');
+  expect(await exiting.evaluate((n) => n.getAnimations().length)).toBeGreaterThan(0);
+
+  // The exit finishes and the node detaches: nothing left behind.
+  await expect(exiting).toHaveCount(0);
+  await expect(items(page)).toHaveCount(4);
+});
+
+test('auto-animate: an added item scales and fades in, then settles visible', async ({ page }) => {
+  const before = await items(page).count();
+
+  await page.locator('[data-testid="auto-animate-add"]').click();
+  const added = items(page).first(); // prepended
+
+  // Caught mid-enter: the new node is below full opacity (fading/scaling in) at some frame.
+  const faded = await added.evaluate(async (n) => {
+    const start = performance.now();
+    while (performance.now() - start < 2000) {
+      if (parseFloat(getComputedStyle(n).opacity) < 1) return true;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    return false;
+  });
+  expect(faded).toBe(true);
+
+  await expect.poll(() => opacity(added)).toBe(1);
+  await expect(items(page)).toHaveCount(before + 1);
+});
+
+test('auto-animate (reduced motion): a reorder applies instantly with no transform animation', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(items(page)).toHaveCount(5);
+  const orderBefore = await page.locator('[data-testid="auto-animate-order"]').textContent();
+
+  await page.locator('[data-testid="auto-animate-shuffle"]').click();
+
+  // The guard strips the FLIP transform: no live translate ever appears on any item.
+  expect(await sawLiveTranslate(page, 800)).toBe(false);
+
+  // The reorder still happened (layout applied instantly), and the DOM matches state.
+  const orderAfter = await page.locator('[data-testid="auto-animate-order"]').textContent();
+  expect(orderAfter).not.toBe(orderBefore);
+  await expectDomMatchesState(page);
+});
+
+test('auto-animate: a rapid mutation storm settles at the correct layout with no orphaned absolute nodes', async ({ page }) => {
+  await page.locator('[data-testid="auto-animate-storm"]').click();
+
+  const list = page.locator('[data-testid="auto-animate-list"]');
+
+  // Settle: no animations running in the subtree and no absolutely-positioned exit clones.
+  await expect
+    .poll(
+      () =>
+        list.evaluate((el) => {
+          const running = el.getAnimations({ subtree: true }).length;
+          const orphans = Array.from(el.children).filter(
+            (c) => getComputedStyle(c).position === 'absolute'
+          ).length;
+          return running === 0 && orphans === 0;
+        }),
+      { timeout: 15_000 }
+    )
+    .toBe(true);
+
+  const orphans = await list.evaluate(
+    (el) => Array.from(el.children).filter((c) => getComputedStyle(c).position === 'absolute').length
+  );
+  expect(orphans).toBe(0);
+
+  // No reconciliation corruption: the surviving DOM children equal the C# state exactly.
+  await expectDomMatchesState(page);
+});
