@@ -1,0 +1,274 @@
+@page "/motion"
+@namespace Navius.Playground.Pages
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@*
+    Navius.Motion (M0-b): the presence + gesture engine wired onto real primitives.
+    Two tiers are on show. The CSS tier is the generated navius-motion.css: presence
+    classes (motion-pop / motion-fade / motion-slide-up) ride the discrete state
+    attributes every Navius popup already emits, so exits cooperate with the presence
+    machine's deferred unmount with zero JavaScript. The runtime tier is the WAAPI
+    executor reached through MotionJsInterop: CreatePresenceMotionAsync for an overlay
+    animated by a C#-baked spring, and CreateGestureAsync for the press micro-interaction.
+    Overlays that animate their transform are centred with the independent `translate`
+    property so the animated `transform` stays free.
+*@
+
+<style>
+    /* Runtime-tier overlay is keep-mounted; hide it while closed (the WAAPI exit holds
+       the hidden state once it has run at least once, this covers the first paint). */
+    [data-motion-runtime][data-closed] { opacity: 0; pointer-events: none; }
+</style>
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-10" data-motion-page>
+    <header class="space-y-1">
+        <h1 class="text-2xl font-semibold tracking-tight">Motion</h1>
+        <p class="text-sm text-muted-foreground">
+            Springs solved and baked in C#, executed on the compositor. Presence presets on real
+            primitives (CSS tier), a WAAPI overlay and a press gesture (runtime tier), and a declarative
+            enter wrapper with a spring picker.
+        </p>
+    </header>
+
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Presence · CSS tier on real primitives</h2>
+        <div class="flex flex-wrap items-center gap-3">
+            <NaviusDialog @bind-Open="_dialogOpen">
+                <NaviusDialogTrigger data-testid="motion-dialog-trigger"
+                                     class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Open dialog (pop)
+                </NaviusDialogTrigger>
+
+                <NaviusDialogBackdrop class="motion-fade fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+
+                <NaviusDialogPopup data-testid="motion-dialog-popup"
+                                   class="motion-pop fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md rounded-xl border border-border bg-card p-6 text-card-foreground shadow-2xl focus:outline-none"
+                                   style="translate: -50% -50%">
+                    <NaviusDialogTitle class="text-lg font-semibold leading-none tracking-tight">Pop preset.</NaviusDialogTitle>
+                    <NaviusDialogDescription class="mt-2 text-sm text-muted-foreground">
+                        Fades and scales from 0.9 with the bouncy spring on enter, snappy on exit. The presence
+                        machine keeps this node mounted through the exit transition, then unmounts it.
+                    </NaviusDialogDescription>
+                    <div class="mt-6 flex justify-end">
+                        <NaviusDialogClose data-testid="motion-dialog-close"
+                                           class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                            Close
+                        </NaviusDialogClose>
+                    </div>
+                </NaviusDialogPopup>
+            </NaviusDialog>
+
+            <button type="button" data-testid="dialog-stress" @onclick="RapidToggleDialog"
+                    class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Rapid toggle
+            </button>
+
+            <NaviusMenu>
+                <NaviusMenuTrigger data-testid="motion-menu-trigger"
+                                   class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Open menu (fade)
+                </NaviusMenuTrigger>
+                <NaviusMenuPositioner Side="bottom" Align="start">
+                    <NaviusMenuPopup data-testid="motion-menu-popup"
+                                     class="motion-fade z-50 min-w-[12rem] rounded-md border border-border bg-card p-1 text-card-foreground shadow-lg outline-none">
+                        <NaviusMenuItem class="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">Profile</NaviusMenuItem>
+                        <NaviusMenuItem class="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">Billing</NaviusMenuItem>
+                        <NaviusMenuItem class="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground">Settings</NaviusMenuItem>
+                    </NaviusMenuPopup>
+                </NaviusMenuPositioner>
+            </NaviusMenu>
+
+            <NaviusTooltip OpenDelay="120">
+                <NaviusTooltipTrigger data-testid="motion-tooltip-trigger"
+                                      class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Hover me (slide)
+                </NaviusTooltipTrigger>
+                <NaviusTooltipPositioner Side="top">
+                    <NaviusTooltipPopup data-testid="motion-tooltip-popup"
+                                        class="motion-slide-up z-50 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background shadow-md">
+                        Fades and slides up 24px in.
+                    </NaviusTooltipPopup>
+                </NaviusTooltipPositioner>
+            </NaviusTooltip>
+        </div>
+    </section>
+
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Presence · runtime tier (WAAPI, bouncy spring)</h2>
+        <button type="button" data-testid="runtime-toggle" @onclick="ToggleRuntime"
+                class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            Toggle runtime overlay
+        </button>
+        <div @ref="_runtimeEl" data-testid="runtime-popup" data-motion-runtime
+             data-open="@(_runtimeOpen ? "" : null)"
+             data-closed="@(_runtimeOpen ? null : "")"
+             data-starting-style="@(_runtimeEntering ? "" : null)"
+             data-ending-style="@(_runtimeExiting ? "" : null)"
+             class="fixed left-1/2 top-1/2 z-50 w-72 rounded-xl border border-border bg-card p-6 text-sm text-card-foreground shadow-2xl"
+             style="translate: -50% -50%">
+            <p class="font-medium">Runtime tier</p>
+            <p class="mt-1 text-muted-foreground">
+                Enter is a bouncy spring baked to a linear() run in C# and executed with the Web Animations
+                API. Interruptions hand over from the live computed transform.
+            </p>
+        </div>
+    </section>
+
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Gestures</h2>
+        <div class="flex flex-wrap items-center gap-6">
+            <button type="button" data-testid="press-button" @ref="_pressEl"
+                    class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Press me (scale)
+            </button>
+
+            @* CSS tier: Motion.Hover splats the motion-hover class + the lift CSS var.
+               Fully qualified because this page's own type is also named Motion. *@
+            <div @attributes="global::Navius.Motion.Motion.Hover(6)" data-testid="hover-card">
+                <div class="w-56 cursor-default rounded-xl border border-border bg-card p-6 text-sm text-card-foreground shadow">
+                    Hover to lift
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Enter wrapper · spring picker</h2>
+        <div class="flex flex-wrap items-center gap-6">
+            <div class="flex flex-col gap-2">
+                <NaviusMotion @key="_wrapperReplay" Preset="Preset.SlideUp" Spring="_wrapperSpring"
+                              data-testid="wrapper-el"
+                              class="block w-64 rounded-xl border border-border bg-card p-6 text-sm text-card-foreground shadow">
+                    Enters with the <strong>@_wrapperSpringName</strong> spring.
+                </NaviusMotion>
+            </div>
+            <div class="flex flex-col gap-2">
+                <button type="button" data-testid="wrapper-smooth" @onclick="ReplaySmooth"
+                        class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Smooth
+                </button>
+                <button type="button" data-testid="wrapper-snappy" @onclick="ReplaySnappy"
+                        class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Snappy
+                </button>
+                <button type="button" data-testid="wrapper-bouncy" @onclick="ReplayBouncy"
+                        class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Bouncy
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <p class="font-mono text-xs text-muted-foreground">
+        view source · <code>playground/Navius.Playground/Pages/Motion.razor</code>
+    </p>
+</div>
+
+@code {
+    // Dialog: controlled so the stress button can slam its open state.
+    private bool _dialogOpen;
+
+    // Runtime-tier overlay state (keep-mounted; we drive the discrete presence attributes
+    // ourselves so CreatePresenceMotionAsync's observer runs enter/exit).
+    private ElementReference _runtimeEl;
+    private bool _runtimeOpen;
+    private bool _runtimeEntering;
+    private bool _runtimeExiting;
+    private bool _runtimeEnterFlip;
+
+    // Gestures + runtime presence live on the JS side through one interop instance.
+    private ElementReference _pressEl;
+    private MotionJsInterop? _interop;
+    private MotionGesture? _press;
+    private PresenceMotion? _runtime;
+
+    // Enter wrapper picker.
+    private int _wrapperReplay;
+    private Spring? _wrapperSpring;
+    private string _wrapperSpringName = "default";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _interop = new MotionJsInterop(JS);
+            _press = await _interop.CreateGestureAsync(_pressEl, "press", MotionPrograms.Gesture());
+            _runtime = await _interop.CreatePresenceMotionAsync(
+                _runtimeEl, MotionPrograms.Presence(MotionPresets.Zoom, enterSpring: Spring.Bouncy));
+        }
+
+        if (_runtimeEnterFlip)
+        {
+            // Drop data-starting-style one render after opening. The enter animation is
+            // already running (started on the attribute's add), so the observer's remove
+            // branch skips it; clearing the attribute lets the next open re-trigger.
+            _runtimeEnterFlip = false;
+            _runtimeEntering = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleRuntime()
+    {
+        if (_runtimeOpen)
+        {
+            _runtimeOpen = false;
+            _runtimeExiting = true;      // add data-ending-style -> exit plays
+            _runtimeEntering = false;
+        }
+        else
+        {
+            _runtimeOpen = true;
+            _runtimeExiting = false;     // clear data-ending-style from the prior close
+            _runtimeEntering = true;     // add data-starting-style -> enter plays
+            _runtimeEnterFlip = true;
+        }
+    }
+
+    private async Task RapidToggleDialog()
+    {
+        // Slam the controlled open state open/closed repeatedly, faster than the enter
+        // (740ms) and exit (270ms) transitions, to drive the presence machine's
+        // re-open-mid-exit path and the CSS transition-interruption hotspot. End OPEN.
+        for (var i = 0; i < 6; i++)
+        {
+            _dialogOpen = !_dialogOpen;
+            StateHasChanged();
+            await Task.Delay(40);
+        }
+        _dialogOpen = true;
+        StateHasChanged();
+    }
+
+    private void ReplaySmooth() => ReplayWrapper(Spring.Smooth, "smooth");
+    private void ReplaySnappy() => ReplayWrapper(Spring.Snappy, "snappy");
+    private void ReplayBouncy() => ReplayWrapper(Spring.Bouncy, "bouncy");
+
+    private void ReplayWrapper(Spring spring, string name)
+    {
+        _wrapperSpring = spring;
+        _wrapperSpringName = name;
+        _wrapperReplay++;   // @key change remounts NaviusMotion, replaying the enter
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_press is not null)
+        {
+            await _press.DisposeAsync();
+            _press = null;
+        }
+        if (_runtime is not null)
+        {
+            await _runtime.DisposeAsync();
+            _runtime = null;
+        }
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+            _interop = null;
+        }
+        GC.SuppressFinalize(this);
+    }
+}
