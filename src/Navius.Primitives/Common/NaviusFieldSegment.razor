@@ -1,0 +1,70 @@
+@namespace Navius.Primitives.Common
+@inherits ComponentBase
+
+@*
+    One editable segment of a segmented date/time field, rendered as an APG spinbutton
+    (role="spinbutton", tabindex=0). Owns its ElementReference so the root can move DOM
+    focus (roving/auto-advance) with no JS. All value/keyboard logic lives in the root via
+    SegmentFieldContext.HandleKeyAsync; this part only presents aria-value*/labels and the
+    discrete data-navius-<part>-segment / data-segment / data-placeholder attributes. Not
+    a hand-placed public part: the root iterates the culture-derived layout and emits it.
+*@
+
+<span @ref="_el"
+      role="spinbutton"
+      tabindex="@(Ctx.Disabled ? null : "0")"
+      aria-label="@SegmentFieldContext.AriaLabel(Segment)"
+      aria-valuenow="@Ctx.AriaValueNow(Segment)"
+      aria-valuemin="@(Segment.Kind == NaviusSegmentKind.DayPeriod ? null : Segment.Min.ToString())"
+      aria-valuemax="@(Segment.Kind == NaviusSegmentKind.DayPeriod ? null : Segment.Max.ToString())"
+      aria-valuetext="@Ctx.AriaValueText(Segment)"
+      aria-disabled="@(Ctx.Disabled ? "true" : null)"
+      aria-readonly="@(Ctx.ReadOnly ? "true" : null)"
+      data-segment="@SegmentFieldContext.SegmentName(Segment.Kind)"
+      data-placeholder="@(Segment.Filled ? null : "")"
+      data-disabled="@(Ctx.Disabled ? "" : null)"
+      data-readonly="@(Ctx.ReadOnly ? "" : null)"
+      @onkeydown="OnKeyDownAsync"
+      @attributes="_hook">@Ctx.Display(Segment)</span>
+
+@code {
+    [CascadingParameter] public SegmentFieldContext Ctx { get; set; } = default!;
+
+    /// <summary>The segment model this part renders (from the root's layout).</summary>
+    [Parameter] public DateTimeSegment Segment { get; set; } = default!;
+
+    /// <summary>
+    /// One-shot: when true after a render, this segment pulls DOM focus. The root computes
+    /// it at render time (FocusRequested + FocusIndex) and passes it down as a parameter so
+    /// it is captured in this batch's render, immune to the root clearing the flag first in
+    /// its own OnAfterRender. Mirrors NaviusTimePickerOption / ZitsCalendarDay.
+    /// </summary>
+    [Parameter] public bool Focus { get; set; }
+
+    private ElementReference _el;
+    private Dictionary<string, object> _hook = new();
+
+    protected override void OnParametersSet() =>
+        _hook = new Dictionary<string, object> { [$"data-navius-{Ctx.PartName}-segment"] = "" };
+
+    private Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Ctx.Disabled || Ctx.ReadOnly)
+        {
+            return Task.CompletedTask;
+        }
+
+        return Ctx.HandleKeyAsync(Segment.Order, e);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Focus was captured as a parameter during this render, so the root clearing its
+        // one-shot flag in OnAfterRender (which runs before this) cannot defeat it.
+        if (Focus)
+        {
+            try { await _el.FocusAsync(); }
+            catch { /* element gone / not focusable, ignore */ }
+        }
+    }
+}

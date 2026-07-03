@@ -1,0 +1,60 @@
+@namespace Navius.Primitives.Components.TimePicker
+@inherits ComponentBase
+
+@*
+    One option inside a TimePicker column listbox (role="option"). Owns its ElementReference
+    so the column can move DOM focus during roving keyboard navigation with no JS. The column
+    computes selected/highlighted/disabled and passes them in; this is a thin, focus-aware
+    button, not a hand-placed public part.
+*@
+
+<button @ref="_el"
+        type="button"
+        role="option"
+        aria-selected="@(Selected ? "true" : "false")"
+        aria-disabled="@(Disabled ? "true" : null)"
+        tabindex="@(IsFocusTarget ? "0" : "-1")"
+        data-navius-time-picker-option
+        data-value="@Value"
+        data-selected="@(Selected ? "" : null)"
+        data-highlighted="@(Highlighted ? "" : null)"
+        data-disabled="@(Disabled ? "" : null)"
+        class="@Class"
+        @onclick="OnClick">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>The numeric unit value this option carries (for data-value + typeahead).</summary>
+    [Parameter] public int Value { get; set; }
+
+    [Parameter] public bool Selected { get; set; }
+
+    /// <summary>The roving-active option (data-highlighted).</summary>
+    [Parameter] public bool Highlighted { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>True for the single roving-tabindex option (tabindex 0).</summary>
+    [Parameter] public bool IsFocusTarget { get; set; }
+
+    /// <summary>One-shot: when true after a render, this option pulls DOM focus.</summary>
+    [Parameter] public bool Focus { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private ElementReference _el;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Focus)
+        {
+            try { await _el.FocusAsync(); }
+            catch { /* element gone / not focusable, ignore */ }
+        }
+    }
+}

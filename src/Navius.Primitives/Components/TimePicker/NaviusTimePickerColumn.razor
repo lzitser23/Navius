@@ -1,0 +1,211 @@
+@namespace Navius.Primitives.Components.TimePicker
+@inherits ComponentBase
+@using System.Globalization
+@using Navius.Primitives.Common
+@implements IDisposable
+
+@*
+    One scrollable listbox column for a single unit (role="listbox"). Auto-generates its
+    options for the unit (hours/minutes/seconds/AM-PM), keeps a roving tabindex, and commits
+    the chosen unit through the shared context. Enter/Space commit via the option button's
+    native activation; Arrow/Home/End rove; typing a digit jumps to the matching value.
+*@
+
+<div role="listbox"
+     aria-label="@Label"
+     data-navius-time-picker-column
+     data-unit="@Unit"
+     class="@Class"
+     @onkeydown="OnKeyDown">
+    @{
+        var options = Options();
+        var selected = SelectedIndex(options);
+    }
+    @for (var i = 0; i < options.Count; i++)
+    {
+        var idx = i;
+        var opt = options[i];
+        <NaviusTimePickerOption Value="opt.Value"
+                                Selected="idx == selected"
+                                Highlighted="idx == _active"
+                                IsFocusTarget="idx == _active"
+                                Focus="_focusRequested && idx == _active"
+                                Class="@OptionClass"
+                                OnClick="() => SelectAsync(opt.Value)">
+            @opt.Label
+        </NaviusTimePickerOption>
+    }
+</div>
+
+@code {
+    [CascadingParameter] public TimePickerContext Ctx { get; set; } = default!;
+
+    /// <summary>Which unit this column edits: <c>hour</c>, <c>minute</c>, <c>second</c> or <c>dayPeriod</c>.</summary>
+    [Parameter] public string Unit { get; set; } = "hour";
+
+    /// <summary>Class applied to the listbox container.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Class applied to each option button.</summary>
+    [Parameter] public string? OptionClass { get; set; }
+
+    private int _active;
+    private bool _navigated;
+    private bool _focusRequested;
+    private string _typeBuffer = "";
+    private Func<Task>? _onChange;
+
+    private NaviusSegmentKind Kind => Unit switch
+    {
+        "minute" => NaviusSegmentKind.Minute,
+        "second" => NaviusSegmentKind.Second,
+        "dayPeriod" => NaviusSegmentKind.DayPeriod,
+        _ => NaviusSegmentKind.Hour,
+    };
+
+    private string Label => Unit switch
+    {
+        "minute" => "Minutes",
+        "second" => "Seconds",
+        "dayPeriod" => "AM/PM",
+        _ => "Hours",
+    };
+
+    protected override void OnInitialized()
+    {
+        _onChange = () => InvokeAsync(StateHasChanged);
+        Ctx.Changed += _onChange;
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Keep the roving tabindex on the selected option until the user navigates.
+        if (!_navigated)
+        {
+            var sel = SelectedIndex(Options());
+            _active = sel >= 0 ? sel : 0;
+        }
+    }
+
+    private List<(int Value, string Label)> Options()
+    {
+        var list = new List<(int, string)>();
+        switch (Kind)
+        {
+            case NaviusSegmentKind.Hour:
+                if (Ctx.HourCycle == 12)
+                {
+                    for (var h = 1; h <= 12; h++) list.Add((h, h.ToString("D2", CultureInfo.InvariantCulture)));
+                }
+                else
+                {
+                    for (var h = 0; h <= 23; h++) list.Add((h, h.ToString("D2", CultureInfo.InvariantCulture)));
+                }
+
+                break;
+            case NaviusSegmentKind.Minute:
+                for (var m = 0; m <= 59; m += Math.Max(1, Ctx.MinuteStep)) list.Add((m, m.ToString("D2", CultureInfo.InvariantCulture)));
+                break;
+            case NaviusSegmentKind.Second:
+                for (var s = 0; s <= 59; s += Math.Max(1, Ctx.SecondStep)) list.Add((s, s.ToString("D2", CultureInfo.InvariantCulture)));
+                break;
+            case NaviusSegmentKind.DayPeriod:
+                list.Add((0, "AM"));
+                list.Add((1, "PM"));
+                break;
+        }
+
+        return list;
+    }
+
+    private int SelectedIndex(List<(int Value, string Label)> options)
+    {
+        if (Ctx.UnitValue(Kind) is not { } v)
+        {
+            return -1;
+        }
+
+        return options.FindIndex(o => o.Value == v);
+    }
+
+    private Task SelectAsync(int value)
+    {
+        _navigated = false;
+        return Ctx.SetUnitAsync(Kind, value);
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        var options = Options();
+        var count = options.Count;
+        if (count == 0)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                _active = Math.Min(_active + 1, count - 1);
+                Rove();
+                break;
+            case "ArrowUp":
+                _active = Math.Max(_active - 1, 0);
+                Rove();
+                break;
+            case "Home":
+                _active = 0;
+                Rove();
+                break;
+            case "End":
+                _active = count - 1;
+                Rove();
+                break;
+            default:
+                if (e.Key.Length == 1 && char.IsDigit(e.Key[0]))
+                {
+                    Typeahead(e.Key, options);
+                }
+
+                break;
+        }
+    }
+
+    private void Typeahead(string digit, List<(int Value, string Label)> options)
+    {
+        var buffer = _typeBuffer + digit;
+        var match = options.FindIndex(o => o.Value.ToString(CultureInfo.InvariantCulture).StartsWith(buffer, StringComparison.Ordinal));
+        if (match < 0)
+        {
+            buffer = digit;
+            match = options.FindIndex(o => o.Value.ToString(CultureInfo.InvariantCulture).StartsWith(buffer, StringComparison.Ordinal));
+        }
+
+        _typeBuffer = buffer;
+        if (match >= 0)
+        {
+            _active = match;
+            Rove();
+        }
+    }
+
+    private void Rove()
+    {
+        _navigated = true;
+        _focusRequested = true;
+        StateHasChanged();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _focusRequested = false;
+    }
+
+    public void Dispose()
+    {
+        if (_onChange is not null)
+        {
+            Ctx.Changed -= _onChange;
+        }
+    }
+}

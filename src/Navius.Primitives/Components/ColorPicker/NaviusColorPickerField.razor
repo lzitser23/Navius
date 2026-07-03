@@ -1,0 +1,47 @@
+@namespace Navius.Primitives.Components.ColorPicker
+@inherits ColorPickerPart
+
+@*
+    A hex/color text field. Commits on change (Enter/blur): the value is parsed
+    (hex / rgb / hsl accepted) and, on success, drives the whole model; on failure
+    it flips data-invalid + aria-invalid without disturbing the color. Reflects the
+    live color as hex when edited elsewhere (area/hue/swatch).
+*@
+
+<input type="text"
+       @key="_rev"
+       value="@Context.HexValue"
+       aria-label="@AriaLabel"
+       aria-invalid="@(_invalid ? "true" : null)"
+       disabled="@Context.Disabled"
+       readonly="@Context.ReadOnly"
+       spellcheck="false"
+       autocomplete="off"
+       data-navius-color-picker-field
+       data-invalid="@(_invalid ? "" : null)"
+       @onchange="OnChangeAsync"
+       @attributes="Attributes" />
+
+@code {
+    [Parameter] public string? AriaLabel { get; set; } = "Hex color";
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool _invalid;
+
+    // Bumped on every commit to force the input to re-key. value="@Context.HexValue" is
+    // one-way, so Blazor's value-diff will not patch the DOM when the model is unchanged
+    // (invalid input, or a valid-but-equivalent hex like "#f00" for #FF0000). Re-keying
+    // recreates the element with the normalized model hex, reverting/normalizing the text.
+    private int _rev;
+
+    private async Task OnChangeAsync(ChangeEventArgs e)
+    {
+        var text = e.Value?.ToString() ?? string.Empty;
+        var ok = await Context.SetFromStringAsync(text);
+        _invalid = !ok;
+        _rev++;
+        StateHasChanged();
+    }
+}

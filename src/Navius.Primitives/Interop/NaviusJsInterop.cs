@@ -429,6 +429,71 @@ public sealed class NaviusJsInterop : IAsyncDisposable
         return new MessageScroller(handle);
     }
 
+    /// <summary>
+    /// Pointer-capture tracker over <paramref name="element"/> that streams a
+    /// normalized <c>{ x, y }</c> pair (each 0..1, x mirrored under RTL) to
+    /// <c>OnFraction2D</c> on <paramref name="callback"/> during a drag and
+    /// <c>OnCommit2D</c> on release. The 2D sibling of the slider drag tracker; C#
+    /// owns the channel mapping. For the ColorPicker area thumb.
+    /// </summary>
+    public async Task<PointerTracker2D> CreatePointerTracker2DAsync<T>(
+        ElementReference element, DotNetObjectReference<T> callback) where T : class
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createPointerTracker2D", element, callback);
+        return new PointerTracker2D(handle);
+    }
+
+    /// <summary>
+    /// Wire drag/drop on <paramref name="element"/> to relay dropped files into the
+    /// real hidden <paramref name="inputElement"/> (<c>&lt;input type="file"&gt;</c>)
+    /// and dispatch a change event so Blazor's <c>InputFile</c> sees them, toggling
+    /// <c>data-dragging</c> on the element and reporting it via
+    /// <c>OnDraggingChange</c> on <paramref name="callback"/>. The handle's
+    /// <see cref="FileDropzone.ClickToOpenAsync"/> opens the native file dialog. For FileUpload.
+    /// </summary>
+    public async Task<FileDropzone> CreateFileDropzoneAsync<T>(
+        ElementReference element, ElementReference inputElement, DotNetObjectReference<T> callback) where T : class
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createFileDropzone", element, inputElement, callback);
+        return new FileDropzone(handle);
+    }
+
+    /// <summary>
+    /// Atomic read/write over a text <paramref name="input"/>'s value + selection for
+    /// the caret-stable masking pipeline: <see cref="MaskedSelection.GetStateAsync"/>
+    /// snapshots value + selection bounds, <see cref="MaskedSelection.SetStateAsync"/>
+    /// writes value + <c>setSelectionRange</c> in one call. No callback. For
+    /// MaskedInput / CurrencyInput.
+    /// </summary>
+    public async Task<MaskedSelection> CreateMaskedSelectionAsync(ElementReference input)
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createMaskedSelection", input);
+        return new MaskedSelection(handle);
+    }
+
+    /// <summary>
+    /// Pointer-driven drag-to-reorder over the direct children of
+    /// <paramref name="container"/>. Emits <c>OnDragStart</c>/<c>OnDragOver</c>/
+    /// <c>OnDrop</c>/<c>OnCancel</c> on <paramref name="callback"/> with list indices
+    /// and paints <c>data-dragging</c>/<c>data-drop-target</c> hooks; C# owns the
+    /// collection and commits the reorder on re-render (Escape cancels). Keyboard
+    /// reordering stays in C#. For Sortable.
+    /// </summary>
+    public async Task<Sortable> CreateSortableAsync<T>(
+        ElementReference container, SortableOptions options, DotNetObjectReference<T> callback) where T : class
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createSortable", container, options, callback);
+        return new Sortable(handle);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (!_module.IsValueCreated)
@@ -956,6 +1021,136 @@ public sealed class MessageScroller : IAsyncDisposable
     }
 }
 
+/// <summary>
+/// A live 2D pointer tracker (ColorPicker area thumb). Streams <c>OnFraction2D</c>
+/// during a drag and <c>OnCommit2D</c> on release to the callback it was created
+/// with. Dispose to detach its pointer handlers.
+/// </summary>
+public sealed class PointerTracker2D : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal PointerTracker2D(IJSObjectReference handle) => _handle = handle;
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// A live file dropzone (FileUpload). Relays dropped files into the hidden native
+/// input; <see cref="ClickToOpenAsync"/> opens the native file dialog. Dispose to
+/// detach its drag/drop handlers.
+/// </summary>
+public sealed class FileDropzone : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal FileDropzone(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>Forward a Trigger/Dropzone activation to the hidden input's <c>click()</c> (opens the OS file dialog).</summary>
+    public async Task ClickToOpenAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("clickToOpen");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// Atomic value + selection access over a text input for the caret-stable masking
+/// pipeline. <see cref="GetStateAsync"/> snapshots the live value and selection;
+/// <see cref="SetStateAsync"/> writes value + <c>setSelectionRange</c> in one call.
+/// Dispose to release the JS handle (there are no listeners to detach).
+/// </summary>
+public sealed class MaskedSelection : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal MaskedSelection(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>Read the input's live value and selection bounds.</summary>
+    public async Task<MaskedSelectionState> GetStateAsync()
+        => await _handle.InvokeAsync<MaskedSelectionState>("getState");
+
+    /// <summary>
+    /// Write <paramref name="value"/> and set the selection to
+    /// [<paramref name="selectionStart"/>, <paramref name="selectionEnd"/>] in one
+    /// synchronous call. Pass equal bounds for a collapsed caret.
+    /// </summary>
+    public async Task SetStateAsync(string value, int selectionStart, int selectionEnd)
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("setState", value, selectionStart, selectionEnd);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// A live pointer-driven sortable (drag-to-reorder). Emits <c>OnDragStart</c>/
+/// <c>OnDragOver</c>/<c>OnDrop</c>/<c>OnCancel</c> to the callback it was created
+/// with; C# owns the collection and commits reorders on re-render. Dispose to
+/// detach its pointer + Escape handlers.
+/// </summary>
+public sealed class Sortable : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal Sortable(IJSObjectReference handle) => _handle = handle;
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
 /// <summary>A plain bounding rectangle returned by <see cref="NaviusJsInterop.GetRectAsync"/>.</summary>
 public sealed record DomRect(
     double X,
@@ -1073,3 +1268,33 @@ public sealed record MessageScrollerScrollOptions(
     string Align = "start",
     string Behavior = "auto",
     double? ScrollMargin = null);
+
+/// <summary>
+/// The normalized 2D pointer fraction streamed by <c>createPointerTracker2D</c> to
+/// <c>OnFraction2D</c>/<c>OnCommit2D</c>. Both fields are 0..1; <see cref="X"/> is
+/// mirrored under RTL, <see cref="Y"/> grows downward (top edge = 0). Use this as
+/// the <c>[JSInvokable]</c> parameter type on the consuming component.
+/// </summary>
+public sealed record PointerFraction2D(
+    double X,
+    double Y);
+
+/// <summary>
+/// The value + selection snapshot returned by <see cref="MaskedSelection.GetStateAsync"/>
+/// (deserialized from the engine's camelCase <c>{ value, selectionStart, selectionEnd }</c>).
+/// </summary>
+public sealed record MaskedSelectionState(
+    string Value,
+    int SelectionStart,
+    int SelectionEnd);
+
+/// <summary>
+/// Options for <see cref="NaviusJsInterop.CreateSortableAsync"/> (serialized to
+/// camelCase). <see cref="Axis"/> is one of <c>vertical</c>/<c>horizontal</c>/
+/// <c>grid</c> and selects how the target index is computed from item midpoints; a
+/// non-null <see cref="Handle"/> is a CSS selector that must contain the press
+/// target for a drag to start (otherwise the whole item is the drag handle).
+/// </summary>
+public sealed record SortableOptions(
+    string Axis = "vertical",
+    string? Handle = null);

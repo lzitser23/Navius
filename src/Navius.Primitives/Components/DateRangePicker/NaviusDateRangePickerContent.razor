@@ -1,0 +1,29 @@
+@namespace Navius.Primitives.Components.DateRangePicker
+@inherits ComponentBase
+
+@*
+    Portals + anchors the popup (reusing the Popover engine's Portal > Positioner > Popup) and
+    hosts the range calendar content. The Popup is role="dialog" and gets the discrete
+    data-navius-date-range-picker-popup test hook.
+*@
+
+<NaviusPopoverPortal>
+    <NaviusPopoverPositioner Side="@Side" Align="@Align" SideOffset="SideOffset">
+        <NaviusPopoverPopup data-navius-date-range-picker-popup @attributes="Attributes">
+            @ChildContent
+        </NaviusPopoverPopup>
+    </NaviusPopoverPositioner>
+</NaviusPopoverPortal>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public string Side { get; set; } = "bottom";
+
+    [Parameter] public string Align { get; set; } = "start";
+
+    [Parameter] public double SideOffset { get; set; } = 4;
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

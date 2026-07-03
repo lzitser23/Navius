@@ -1,0 +1,143 @@
+@namespace Navius.Primitives.Components.Rating
+@inherits RatingPart
+
+@*
+    One visual star, exposed as a role=radio (WAI-ARIA APG radio pattern). Roving
+    tabindex: the star holding the current value is tabindex=0 (or the first star
+    when unrated), all others -1. Its native button click selects the star (this
+    is how Space/Enter activate the focused star); the root owns arrow/Home/End
+    navigation. data-state (full/half/empty) is computed from the effective value
+    (hover preview when present, else the committed value) so the whole row
+    repaints on hover. With AllowHalf, two aria-hidden pointer half-zones overlay
+    the star (left = N-0.5, right = N) for fractional selection; they need a
+    positioned star (the helm sets position:relative). Emits discrete
+    data-checked / data-highlighted / data-readonly / data-disabled hooks.
+*@
+
+<button @ref="_element"
+        type="button"
+        role="radio"
+        aria-checked="@(IsChecked ? "true" : "false")"
+        aria-label="@Context.LabelFor(AriaValue)"
+        aria-readonly="@(Context.ReadOnly ? "true" : null)"
+        tabindex="@TabIndex"
+        disabled="@Context.Disabled"
+        data-navius-rating-item
+        data-index="@Index"
+        data-value="@Fmt(FullValue)"
+        data-state="@State"
+        data-checked="@(IsChecked ? "" : null)"
+        data-unchecked="@(IsChecked ? null : "")"
+        data-highlighted="@(Highlighted ? "" : null)"
+        data-readonly="@(Context.ReadOnly ? "" : null)"
+        data-disabled="@(Context.Disabled ? "" : null)"
+        @onclick="() => SelectAsync(FullValue)"
+        @onpointerenter="@(() => Context.AllowHalf ? Task.CompletedTask : Context.SetHoverAsync(FullValue))"
+        @attributes="Attributes">
+    @ChildContent
+    @if (Context.AllowHalf && !Context.Disabled)
+    {
+        <span data-navius-rating-item-half="start"
+              aria-hidden="true"
+              style="position:absolute;left:0;top:0;height:100%;width:50%;cursor:pointer"
+              @onpointerenter="() => Context.SetHoverAsync(HalfValue)"
+              @onclick:stopPropagation
+              @onclick="() => SelectAsync(HalfValue)"></span>
+        <span data-navius-rating-item-half="end"
+              aria-hidden="true"
+              style="position:absolute;left:50%;top:0;height:100%;width:50%;cursor:pointer"
+              @onpointerenter="() => Context.SetHoverAsync(FullValue)"
+              @onclick:stopPropagation
+              @onclick="() => SelectAsync(FullValue)"></span>
+    }
+</button>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+
+    /// <summary>1-based star index (assigned by registration order).</summary>
+    private int Index { get; set; }
+
+    private decimal FullValue => Index;
+
+    private decimal HalfValue => Index - 0.5m;
+
+    // The star that holds the current value announces the real (possibly fractional) value
+    // so a 3.5 rating reads "3.5 stars", not the whole-star "4 stars" it ceils to. Every
+    // other star names the whole value it would select.
+    private decimal AriaValue => IsChecked && Context.Value is decimal v ? v : FullValue;
+
+    // The star that "holds" the value is the one the value ceils to (a half value
+    // N-0.5 still lives in star N, rendered as data-state=half).
+    private bool IsChecked =>
+        Context.Value is decimal v && v > 0m && (int)Math.Ceiling(v) == Index;
+
+    private string State
+    {
+        get
+        {
+            var eff = Context.Effective;
+            if (eff >= Index)
+            {
+                return "full";
+            }
+
+            if (Context.AllowHalf && eff >= Index - 0.5m)
+            {
+                return "half";
+            }
+
+            return "empty";
+        }
+    }
+
+    private bool Highlighted =>
+        Context.HoverValue is decimal h && h > 0m && Index <= (int)Math.Ceiling(h);
+
+    private string TabIndex
+    {
+        get
+        {
+            if (Context.Disabled)
+            {
+                return "-1";
+            }
+
+            // Roving: the checked star is focusable; when unrated the first star keeps
+            // the group reachable.
+            return Context.Value is null
+                ? (Index == 1 ? "0" : "-1")
+                : (IsChecked ? "0" : "-1");
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Index = Context.RegisterItem(() => _element, () => Context.Disabled);
+    }
+
+    private async Task SelectAsync(decimal value)
+    {
+        if (Context.Disabled || Context.ReadOnly)
+        {
+            return;
+        }
+
+        // Clicking the already-selected value clears it (AllowClear), matching the spec.
+        if (Context.AllowClear && Context.Value == value)
+        {
+            await Context.SelectAsync(null);
+            return;
+        }
+
+        await Context.SelectAsync(value);
+    }
+
+    private static string Fmt(decimal v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}

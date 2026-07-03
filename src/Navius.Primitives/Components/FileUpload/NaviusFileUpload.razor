@@ -1,0 +1,353 @@
+@namespace Navius.Primitives.Components.FileUpload
+@inherits ComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@using Microsoft.AspNetCore.Components.Forms
+
+@*
+    Root of a FileUpload. The real hidden <input type="file"> (the Input part) is
+    the a11y + form source of truth; the Trigger and Dropzone merely relay to it.
+    This root owns the file list (controlled via Files/FilesChanged or uncontrolled),
+    validates each selection against Accept / MaxSize / MaxFiles, and emits
+    OnAccepted / OnRejected. It wires the engine's drag/drop relay to itself so a
+    drop anywhere copies files into the hidden input (Blazor's InputFile then fires),
+    mirrors dragging via OnDraggingChange, and exposes the OS dialog open. A polite
+    live region announces added/rejected/removed counts.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div @ref="_root"
+         data-navius-file-upload
+         data-disabled="@(Disabled ? "" : null)"
+         data-invalid="@(_invalid ? "" : null)"
+         data-dragging="@(_context.IsDragging ? "" : null)"
+         @attributes="Attributes">
+        @ChildContent
+
+        <div role="status"
+             aria-live="polite"
+             data-navius-file-upload-status
+             style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0">
+            @_context.StatusMessage
+        </div>
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled file list. Use <c>@bind-Files</c>.</summary>
+    [Parameter] public IReadOnlyList<IBrowserFile>? Files { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<IBrowserFile>> FilesChanged { get; set; }
+
+    /// <summary>Comma-separated MIME types / extensions (native <c>accept</c>).</summary>
+    [Parameter] public string? Accept { get; set; }
+
+    [Parameter] public bool Multiple { get; set; }
+
+    /// <summary>Cap on the total number of files (null = unlimited).</summary>
+    [Parameter] public int? MaxFiles { get; set; }
+
+    /// <summary>Per-file byte ceiling (0 = unlimited).</summary>
+    [Parameter] public long MaxSize { get; set; }
+
+    /// <summary>Accept a whole directory (native <c>webkitdirectory</c>).</summary>
+    [Parameter] public bool Directory { get; set; }
+
+    /// <summary>Native <c>capture</c> hint ("user" / "environment").</summary>
+    [Parameter] public string? Capture { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Form field name (applied to the real file input).</summary>
+    [Parameter] public string? Name { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<IBrowserFile>> OnAccepted { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<NaviusFileRejection>> OnRejected { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private FileUploadContext _context = default!;
+    private ElementReference _root;
+    private NaviusJsInterop? _interop;
+    private FileDropzone? _dropzone;
+    private DotNetObjectReference<NaviusFileUpload>? _selfRef;
+    private bool _interopCreated;
+    private bool _disposed;
+
+    private bool _filesSet;
+    private List<IBrowserFile> _files = new();
+    private bool _invalid;
+    private string _status = string.Empty;
+
+    private bool IsControlled => _filesSet;
+
+    private IReadOnlyList<IBrowserFile> CurrentFiles => IsControlled ? (Files ?? Array.Empty<IBrowserFile>()) : _files;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<IReadOnlyList<IBrowserFile>?>(nameof(Files), out _))
+        {
+            _filesSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _context = new FileUploadContext(HandleFilesAsync, RemoveFileAsync, ClearAllAsync, OpenAsync);
+        _context.ElementsChanged += OnElementsChanged;
+        _context.Configure(Disabled, Accept, Multiple, Directory, Capture, Name);
+        _context.SetState(CurrentFiles, _invalid, _status);
+    }
+
+    protected override void OnParametersSet()
+    {
+        _context.Configure(Disabled, Accept, Multiple, Directory, Capture, Name);
+        _context.SetState(CurrentFiles, _invalid, _status);
+    }
+
+    private void OnElementsChanged() => InvokeAsync(StateHasChanged);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_disposed || _interopCreated || Disabled)
+        {
+            return;
+        }
+
+        if (_context.InputElement is not ElementReference input)
+        {
+            return;
+        }
+
+        _interopCreated = true;
+
+        try
+        {
+            _interop ??= new NaviusJsInterop(JS);
+            _selfRef ??= DotNetObjectReference.Create(this);
+            _dropzone = await _interop.CreateFileDropzoneAsync(_root, input, _selfRef);
+        }
+        catch (JSException)
+        {
+            // Engine export unavailable; the native input (click/keyboard) still works.
+            _interopCreated = false;
+        }
+    }
+
+    private async Task HandleFilesAsync(InputFileChangeEventArgs e)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        IReadOnlyList<IBrowserFile> incoming;
+        try
+        {
+            incoming = e.GetMultipleFiles(maximumFileCount: 1000);
+        }
+        catch (InvalidOperationException)
+        {
+            incoming = e.FileCount > 0 ? new[] { e.File } : Array.Empty<IBrowserFile>();
+        }
+
+        var accepted = new List<IBrowserFile>();
+        var rejected = new List<NaviusFileRejection>();
+        var running = new List<IBrowserFile>(CurrentFiles);
+
+        foreach (var file in incoming)
+        {
+            if (!AcceptMatch(file))
+            {
+                rejected.Add(new NaviusFileRejection(file, FileRejectionReason.WrongType));
+                continue;
+            }
+
+            if (MaxSize > 0 && file.Size > MaxSize)
+            {
+                rejected.Add(new NaviusFileRejection(file, FileRejectionReason.TooLarge));
+                continue;
+            }
+
+            if (Multiple && MaxFiles.HasValue && running.Count >= MaxFiles.Value)
+            {
+                rejected.Add(new NaviusFileRejection(file, FileRejectionReason.TooMany));
+                continue;
+            }
+
+            if (Multiple)
+            {
+                // A duplicate (same name + size) is not added, so it must not be counted as
+                // accepted (it would falsely inflate the polite status and fire OnAccepted).
+                if (running.Any(x => Same(x, file)))
+                {
+                    continue;
+                }
+
+                running.Add(file);
+            }
+
+            accepted.Add(file);
+        }
+
+        IReadOnlyList<IBrowserFile> next = Multiple
+            ? running
+            : (accepted.Count > 0 ? new[] { accepted[^1] } : CurrentFiles);
+
+        _invalid = rejected.Count > 0;
+        _status = BuildStatus(accepted.Count, rejected);
+
+        await ApplyFilesAsync(next);
+
+        if (accepted.Count > 0 && OnAccepted.HasDelegate)
+        {
+            await OnAccepted.InvokeAsync(accepted);
+        }
+
+        if (rejected.Count > 0 && OnRejected.HasDelegate)
+        {
+            await OnRejected.InvokeAsync(rejected);
+        }
+
+        await _context.NotifyChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task RemoveFileAsync(IBrowserFile file)
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        var next = CurrentFiles.Where(f => !ReferenceEquals(f, file)).ToList();
+        _invalid = false;
+        _status = $"Removed {file.Name}";
+        await ApplyFilesAsync(next);
+        await _context.NotifyChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task ClearAllAsync()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        _invalid = false;
+        _status = "Cleared all files";
+        await ApplyFilesAsync(Array.Empty<IBrowserFile>());
+        await _context.NotifyChangedAsync();
+        StateHasChanged();
+    }
+
+    private async Task ApplyFilesAsync(IReadOnlyList<IBrowserFile> next)
+    {
+        if (IsControlled)
+        {
+            await FilesChanged.InvokeAsync(next);
+        }
+        else
+        {
+            _files = next.ToList();
+        }
+
+        // Reflect optimistically so parts repaint even before a controlled parent feeds back.
+        _context.SetState(next, _invalid, _status);
+    }
+
+    private Task OpenAsync()
+        => _dropzone is not null ? _dropzone.ClickToOpenAsync() : Task.CompletedTask;
+
+    [JSInvokable]
+    public async Task OnDraggingChange(bool dragging)
+    {
+        await _context.SetDraggingAsync(dragging);
+        StateHasChanged();
+    }
+
+    private bool AcceptMatch(IBrowserFile file)
+    {
+        if (string.IsNullOrWhiteSpace(Accept))
+        {
+            return true;
+        }
+
+        var name = file.Name ?? string.Empty;
+        var type = file.ContentType ?? string.Empty;
+
+        foreach (var raw in Accept.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (raw.StartsWith(".", StringComparison.Ordinal))
+            {
+                if (name.EndsWith(raw, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            else if (raw.EndsWith("/*", StringComparison.Ordinal))
+            {
+                var prefix = raw[..^1]; // "image/*" -> "image/"
+                if (type.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            else if (string.Equals(type, raw, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool Same(IBrowserFile a, IBrowserFile b)
+        => string.Equals(a.Name, b.Name, StringComparison.Ordinal) && a.Size == b.Size;
+
+    private static string BuildStatus(int acceptedCount, List<NaviusFileRejection> rejected)
+    {
+        var parts = new List<string>();
+
+        if (acceptedCount > 0)
+        {
+            parts.Add($"{acceptedCount} file{(acceptedCount == 1 ? "" : "s")} added");
+        }
+
+        if (rejected.Count > 0)
+        {
+            parts.Add($"{rejected.Count} file{(rejected.Count == 1 ? "" : "s")} rejected");
+        }
+
+        return parts.Count == 0 ? "No files added" : string.Join(". ", parts);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+
+        if (_context is not null)
+        {
+            _context.ElementsChanged -= OnElementsChanged;
+        }
+
+        if (_dropzone is not null)
+        {
+            await _dropzone.DisposeAsync();
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+
+        _selfRef?.Dispose();
+    }
+}

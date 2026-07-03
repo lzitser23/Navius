@@ -1,0 +1,21 @@
+@namespace Navius.Primitives.Components.DateRangePicker
+@inherits ComponentBase
+
+@*
+    The calendar button that opens the popup. Delegates to the Popover trigger (which supplies
+    aria-haspopup="dialog" + aria-expanded + aria-controls + the discrete data-popup-open); this
+    adds the data-navius-date-range-picker-trigger test hook.
+*@
+
+<NaviusPopoverTrigger data-navius-date-range-picker-trigger disabled="@(Ctx.Disabled ? "" : null)" @attributes="Attributes">
+    @ChildContent
+</NaviusPopoverTrigger>
+
+@code {
+    [CascadingParameter] public DateRangePickerContext Ctx { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

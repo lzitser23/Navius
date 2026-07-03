@@ -1,0 +1,140 @@
+@namespace Navius.Primitives.Components.ColorPicker
+@inherits ColorPickerTrackPart
+
+@*
+    The 2D saturation/value canvas. role="group" (react-aria ColorArea is a 2D
+    slider = two grouped sliders) holding two role="slider" thumbs, one per channel:
+    a visible saturation (x) thumb positioned at (saturation, 1 - value) and a
+    visually-hidden brightness (y) slider, so each channel exposes its own
+    aria-valuenow. Both thumbs run the same 2D keyboard model: Left/Right adjust
+    saturation, Up/Down adjust brightness, Shift/Page take a larger step, Home/End
+    jump saturation to its extremes. Pointer drag comes from the engine's 2D tracker
+    (base class). The base hue-fill gradient is rendered inline (it is intrinsic to
+    the canvas) and merged with any consumer style.
+*@
+
+<div @ref="TrackElement"
+     role="group"
+     aria-label="@AriaLabel"
+     aria-disabled="@(Context.Disabled ? "true" : null)"
+     data-navius-color-picker-area
+     data-disabled="@(Context.Disabled ? "" : null)"
+     style="@MergedStyle"
+     @attributes="Forwarded">
+    <span role="slider"
+          tabindex="@TabIndex"
+          aria-label="Saturation"
+          aria-orientation="horizontal"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="@Saturation"
+          aria-valuetext="@Context.Description"
+          aria-disabled="@(Context.Disabled ? "true" : null)"
+          data-navius-color-picker-area-thumb
+          data-channel="saturation"
+          data-dragging="@(Dragging ? "" : null)"
+          data-disabled="@(Context.Disabled ? "" : null)"
+          style="@ThumbStyle"
+          @onkeydown="OnKeyDownAsync"></span>
+    <span role="slider"
+          tabindex="@TabIndex"
+          aria-label="Brightness"
+          aria-orientation="vertical"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="@Brightness"
+          aria-valuetext="@Context.Description"
+          aria-disabled="@(Context.Disabled ? "true" : null)"
+          data-navius-color-picker-area-thumb-y
+          data-channel="brightness"
+          data-disabled="@(Context.Disabled ? "" : null)"
+          style="@HiddenSliderStyle"
+          @onkeydown="OnKeyDownAsync"></span>
+</div>
+
+@code {
+    /// <summary>Accessible name for the area group (default "Color").</summary>
+    [Parameter] public string? AriaLabel { get; set; } = "Color";
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private const double Step = 0.01;
+    private const double LargeStep = 0.1;
+
+    protected override Task HandleFractionAsync(double x, double y)
+        => Context.SetSaturationValueAsync(x, 1 - y);
+
+    private int Saturation => (int)Math.Round(Context.S * 100);
+
+    private int Brightness => (int)Math.Round(Context.V * 100);
+
+    private string TabIndex => Context.Disabled ? "-1" : "0";
+
+    // The brightness (y) channel is exposed for AT only; the visible thumb is the
+    // saturation slider. Visually hidden but still focusable so a SR user can drive it.
+    private const string HiddenSliderStyle =
+        "position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;touch-action:none;";
+
+    private string ThumbStyle =>
+        $"position:absolute;left:{Context.AreaThumbLeft};top:{Context.AreaThumbTop};transform:translate(-50%,-50%);touch-action:none;";
+
+    // Standard SV square: pure hue base, white->transparent (saturation) and
+    // transparent->black (value) overlays. Merged with the consumer's style.
+    private string MergedStyle
+    {
+        get
+        {
+            var baseStyle =
+                "position:relative;touch-action:none;" +
+                $"background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, rgba(255,255,255,0)), {Context.HueCss};";
+            var user = UserStyle;
+            return string.IsNullOrEmpty(user) ? baseStyle : $"{baseStyle}{user}";
+        }
+    }
+
+    private string? UserStyle =>
+        Attributes is not null && Attributes.TryGetValue("style", out var s) && s is string str && str.Length > 0 ? str : null;
+
+    private IDictionary<string, object>? Forwarded
+    {
+        get
+        {
+            if (Attributes is null || !Attributes.ContainsKey("style"))
+            {
+                return Attributes;
+            }
+
+            var copy = new Dictionary<string, object>(Attributes);
+            copy.Remove("style");
+            return copy;
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Context.Disabled || Context.ReadOnly)
+        {
+            return;
+        }
+
+        var step = e.ShiftKey ? LargeStep : Step;
+        var s = Context.S;
+        var v = Context.V;
+
+        switch (e.Key)
+        {
+            case "ArrowRight": s += step; break;
+            case "ArrowLeft": s -= step; break;
+            case "ArrowUp": v += step; break;
+            case "ArrowDown": v -= step; break;
+            case "PageUp": v += LargeStep; break;
+            case "PageDown": v -= LargeStep; break;
+            case "Home": s = 0; break;
+            case "End": s = 1; break;
+            default: return;
+        }
+
+        await Context.SetSaturationValueAsync(ColorMath.Clamp01(s), ColorMath.Clamp01(v));
+    }
+}

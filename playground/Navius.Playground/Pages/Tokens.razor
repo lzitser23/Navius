@@ -1,0 +1,95 @@
+@page "/tokens"
+@using System.Globalization
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-10">
+    <h1 class="text-2xl font-semibold tracking-tight">Navius Token inputs (MaskedInput, CurrencyInput, TagInput, SplitButton, MultiSelect)</h1>
+
+    <section class="space-y-2" data-section="masked">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">MaskedInput (caret-stable)</h2>
+        <div class="w-64">
+            <ZitsMaskedInput @bind-Value="_phone" Mask="(000) 000-0000" />
+        </div>
+        <p class="text-xs text-muted-foreground">value: <span data-mask-value>@_phone</span></p>
+    </section>
+
+    <section class="space-y-2" data-section="currency">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">CurrencyInput (culture formatting)</h2>
+        <div class="flex gap-4">
+            <div class="w-56">
+                <ZitsCurrencyInput @bind-Value="_priceUsd" Culture="_usCulture" data-currency="usd" />
+                <p class="mt-1 text-xs text-muted-foreground">USD: <span data-usd-value>@(_priceUsd?.ToString(CultureInfo.InvariantCulture) ?? "-")</span></p>
+            </div>
+            <div class="w-56">
+                <ZitsCurrencyInput @bind-Value="_priceEur" Culture="_euCulture" data-currency="eur" />
+                <p class="mt-1 text-xs text-muted-foreground">EUR: <span data-eur-value>@(_priceEur?.ToString(CultureInfo.InvariantCulture) ?? "-")</span></p>
+            </div>
+        </div>
+    </section>
+
+    <section class="space-y-2" data-section="tags">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">TagInput (chips + commit + backspace nav)</h2>
+        <div class="w-80">
+            <ZitsTagInput @bind-Value="_tags" Placeholder="Add tag..." />
+        </div>
+        <p class="text-xs text-muted-foreground">tags: <span data-tags-value>@string.Join(",", _tags)</span></p>
+    </section>
+
+    <section class="space-y-2" data-section="split">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">SplitButton</h2>
+        <ZitsSplitButton>
+            <ZitsSplitButtonAction OnClick="OnSave">Save</ZitsSplitButtonAction>
+            <ZitsSplitButtonTrigger aria-label="More save options" />
+            <ZitsSplitButtonMenu>
+                <ZitsMenuItem OnSelect="OnSaveAs">Save as...</ZitsMenuItem>
+                <ZitsMenuItem OnSelect="OnSaveDraft">Save draft</ZitsMenuItem>
+            </ZitsSplitButtonMenu>
+        </ZitsSplitButton>
+        <p class="text-xs text-muted-foreground">last action: <span data-split-last>@_lastAction</span></p>
+    </section>
+
+    <section class="space-y-2" data-section="multi">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">MultiSelect (chips + overflow "+N more")</h2>
+        <div class="w-80">
+            <ZitsMultiSelect TItem="string" Items="_frameworks" @bind-Value="_selected"
+                             Placeholder="Select frameworks..." MaxDisplayChips="2" ClearButton="true" />
+        </div>
+        <p class="text-xs text-muted-foreground">selected: <span data-multi-value>@string.Join(",", _selected)</span></p>
+    </section>
+</div>
+
+@code {
+    private string _phone = "";
+
+    private decimal? _priceUsd;
+    private decimal? _priceEur;
+
+    // Cultures are built from invariant clones with explicit NumberFormat parts so the demo (and
+    // its e2e assertions) do not depend on the WASM ICU set being present.
+    private readonly CultureInfo _usCulture = BuildCulture("$", ",", ".", currencyPositivePattern: 0);
+    private readonly CultureInfo _euCulture = BuildCulture("€", ".", ",", currencyPositivePattern: 3);
+
+    private IList<string> _tags = new List<string> { "design" };
+
+    private string _lastAction = "";
+
+    private readonly IReadOnlyList<string> _frameworks = new[] { "React", "Vue", "Svelte", "Angular", "Solid" };
+    private IReadOnlyList<string> _selected = new List<string>();
+
+    private void OnSave() => _lastAction = "save";
+    private void OnSaveAs() => _lastAction = "saveas";
+    private void OnSaveDraft() => _lastAction = "savedraft";
+
+    private static CultureInfo BuildCulture(string symbol, string group, string dec, int currencyPositivePattern)
+    {
+        var culture = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        var nfi = culture.NumberFormat;
+        nfi.CurrencySymbol = symbol;
+        nfi.CurrencyGroupSeparator = group;
+        nfi.CurrencyDecimalSeparator = dec;
+        nfi.CurrencyGroupSizes = new[] { 3 };
+        nfi.CurrencyDecimalDigits = 2;
+        nfi.CurrencyPositivePattern = currencyPositivePattern;
+        nfi.NegativeSign = "-";
+        return culture;
+    }
+}

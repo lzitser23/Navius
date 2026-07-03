@@ -1,0 +1,244 @@
+@namespace Navius.Primitives.Components.Rating
+@inherits ComponentBase
+
+@*
+    role=radiogroup star rating (WAI-ARIA APG radio pattern). Controlled via
+    @bind-Value or uncontrolled via DefaultValue. Each NaviusRatingItem is one
+    role=radio star with roving tabindex; the checked star is the one that holds
+    the current value. The keyboard model lives here on the root (it owns the
+    value and moves focus onto the resulting star): arrows step by 0.5 (AllowHalf)
+    or 1, Home/End jump to 1 / Max, digit keys jump directly, Backspace/Delete
+    clear (AllowClear). Space/Enter activate the focused star via its native
+    button click (handled on the item). Pointer hover previews through HoverValue,
+    cleared when the pointer leaves the group. A hidden bubble input mirrors the
+    value into native form submission when Name is set.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div role="radiogroup"
+         aria-label="@ResolvedAriaLabel"
+         aria-required="@(Required ? "true" : null)"
+         aria-invalid="@(Invalid ? "true" : null)"
+         aria-readonly="@(ReadOnly ? "true" : null)"
+         aria-disabled="@(Disabled ? "true" : null)"
+         dir="@EffectiveDir"
+         data-navius-rating
+         data-disabled="@(Disabled ? "" : null)"
+         data-readonly="@(ReadOnly ? "" : null)"
+         @onkeydown="OnKeyDownAsync"
+         @onpointerleave="OnPointerLeaveAsync"
+         @attributes="Attributes">
+        @if (ChildContent is not null)
+        {
+            @ChildContent
+        }
+        else
+        {
+            @for (var i = 0; i < Max; i++)
+            {
+                <NaviusRatingItem />
+            }
+        }
+
+        @if (!string.IsNullOrEmpty(Name))
+        {
+            <NaviusBubbleInput InputType="hidden"
+                               Name="@Name"
+                               Value="@FormValue"
+                               Required="Required"
+                               Disabled="Disabled"
+                               data-navius-rating-input />
+        }
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled value (null = unrated). Use <c>@bind-Value</c>.</summary>
+    [Parameter] public decimal? Value { get; set; }
+
+    [Parameter] public EventCallback<decimal?> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial value.</summary>
+    [Parameter] public decimal? DefaultValue { get; set; }
+
+    /// <summary>Number of visual stars (default 5).</summary>
+    [Parameter] public int Max { get; set; } = 5;
+
+    /// <summary>Enable half-star values via pointer half-zones and 0.5 keyboard steps.</summary>
+    [Parameter] public bool AllowHalf { get; set; }
+
+    /// <summary>Re-selecting the current value (or arrowing below 1) clears to unrated (default true).</summary>
+    [Parameter] public bool AllowClear { get; set; } = true;
+
+    /// <summary>Focusable but non-editable.</summary>
+    [Parameter] public bool ReadOnly { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public bool Required { get; set; }
+
+    /// <summary>Marks the group invalid (aria-invalid).</summary>
+    [Parameter] public bool Invalid { get; set; }
+
+    /// <summary>Optional form field name (hidden bubble input for native submission).</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>Accessible-name factory for a star value; defaults to "N star(s)".</summary>
+    [Parameter] public Func<decimal, string>? Label { get; set; }
+
+    /// <summary>Reading direction. Under "rtl" the horizontal arrows are mirrored.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private RatingContext _context = default!;
+    private decimal? _internal;
+    private bool _valueSet;
+
+    private bool IsControlled => _valueSet;
+
+    private decimal? CurrentValue => IsControlled ? Value : _internal;
+
+    private string? EffectiveDir => Dir ?? CascadedDir;
+
+    private bool IsRtl => string.Equals(Dir ?? CascadedDir ?? "ltr", "rtl", StringComparison.OrdinalIgnoreCase);
+
+    private string FormValue => CurrentValue?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+
+    // Label the group unless the consumer already supplied an aria-label/-labelledby.
+    private string? ResolvedAriaLabel =>
+        Attributes is not null && (Attributes.ContainsKey("aria-label") || Attributes.ContainsKey("aria-labelledby"))
+            ? null
+            : "Rating";
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<decimal?>(nameof(Value), out _))
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _internal = DefaultValue;
+        _context = new RatingContext(SelectAsync, SetHoverAsync);
+        _context.Configure(Max, AllowHalf, AllowClear, ReadOnly, Disabled, Required, Name, Label);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.Configure(Max, AllowHalf, AllowClear, ReadOnly, Disabled, Required, Name, Label);
+        await _context.SetValueInternalAsync(CurrentValue);
+    }
+
+    private async Task SelectAsync(decimal? value)
+    {
+        if (Disabled || ReadOnly)
+        {
+            return;
+        }
+
+        var next = Normalize(value);
+
+        if (IsControlled)
+        {
+            await ValueChanged.InvokeAsync(next);
+        }
+        else
+        {
+            _internal = next;
+            await _context.SetValueInternalAsync(next);
+            StateHasChanged();
+        }
+    }
+
+    private async Task SetHoverAsync(decimal? value)
+    {
+        if (Disabled || ReadOnly)
+        {
+            return;
+        }
+
+        await _context.SetHoverInternalAsync(value);
+        StateHasChanged();
+    }
+
+    private async Task OnPointerLeaveAsync()
+    {
+        await _context.SetHoverInternalAsync(null);
+        StateHasChanged();
+    }
+
+    // Clamp to [Step, Max] and snap to the step grid; a null (or non-positive) value clears.
+    private decimal? Normalize(decimal? value)
+    {
+        if (value is not decimal v || v <= 0m)
+        {
+            return null;
+        }
+
+        var step = _context.Step;
+        var snapped = Math.Round(v / step, MidpointRounding.AwayFromZero) * step;
+        return Math.Clamp(snapped, step, Max);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Disabled || ReadOnly)
+        {
+            return;
+        }
+
+        var step = _context.Step;
+        var current = CurrentValue ?? 0m;
+
+        var horizontalNext = IsRtl ? "ArrowLeft" : "ArrowRight";
+        var horizontalPrev = IsRtl ? "ArrowRight" : "ArrowLeft";
+
+        decimal? target;
+
+        if (e.Key == "ArrowUp" || e.Key == horizontalNext)
+        {
+            target = Math.Min(Max, current + step);
+        }
+        else if (e.Key == "ArrowDown" || e.Key == horizontalPrev)
+        {
+            var lowered = current - step;
+            // Below the lowest star: clear when allowed, otherwise stay at the floor.
+            target = lowered < step ? (AllowClear ? (decimal?)null : step) : lowered;
+        }
+        else if (e.Key == "Home")
+        {
+            target = 1m;
+        }
+        else if (e.Key == "End")
+        {
+            target = Max;
+        }
+        else if (e.Key == "Backspace" || e.Key == "Delete")
+        {
+            target = AllowClear ? (decimal?)null : current;
+        }
+        else if (e.Key.Length == 1 && e.Key[0] >= '1' && e.Key[0] <= '9')
+        {
+            target = Math.Min(Max, e.Key[0] - '0');
+        }
+        else
+        {
+            return;
+        }
+
+        await SelectAsync(target);
+
+        var focusIndex = target is decimal t && t > 0m ? (int)Math.Ceiling(t) : 1;
+        await _context.FocusIndexAsync(Math.Clamp(focusIndex, 1, Max));
+    }
+}

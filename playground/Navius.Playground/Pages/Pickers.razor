@@ -1,0 +1,68 @@
+@page "/pickers"
+@using Navius.Primitives.Components.Rating
+@using Navius.Primitives.Components.ColorPicker
+@using Navius.Primitives.Components.FileUpload
+@using Microsoft.AspNetCore.Components.Forms
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-10">
+    <h1 class="text-2xl font-semibold tracking-tight">Navius Pickers (ColorPicker, FileUpload, Rating)</h1>
+
+    <section class="space-y-3" data-testid="rating">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Rating (APG radio group)</h2>
+        <ZitsRating @bind-Value="_rating" Max="5" aria-label="Overall rating" />
+        <p class="text-sm text-muted-foreground">Value: <span data-rating-value>@(_rating?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none")</span></p>
+    </section>
+
+    <section class="space-y-3" data-testid="rating-half">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Rating (half stars, uncontrolled)</h2>
+        <ZitsRating DefaultValue="3.5m" Max="5" AllowHalf="true" aria-label="Difficulty" />
+    </section>
+
+    <section class="space-y-3" data-testid="colorpicker">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">ColorPicker</h2>
+        <ZitsColorPicker @bind-Value="_color" Swatches="_swatches" />
+        <p class="text-sm text-muted-foreground">Value: <span data-color-value>@_color</span></p>
+    </section>
+
+    <section class="space-y-3" data-testid="colorpicker-alpha">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">ColorPicker (alpha, rgba)</h2>
+        <ZitsColorPicker DefaultValue="rgba(239, 68, 68, 0.5)" Format="rgba" AlphaEnabled="true" />
+    </section>
+
+    <section class="space-y-3" data-testid="fileupload">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">FileUpload (dropzone + real input)</h2>
+        <div class="max-w-md">
+            <ZitsFileUpload Multiple="true" Hint="PNG, JPG or PDF up to 5 MB" MaxSize="5242880" />
+        </div>
+    </section>
+
+    <section class="space-y-3" data-testid="fileupload-brain">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">FileUpload (brain: Trigger + Dropzone)</h2>
+        <NaviusFileUpload Multiple="true" class="flex max-w-md flex-col gap-2" data-navius-brain-upload>
+            <NaviusFileUploadInput />
+            <NaviusFileUploadDropzone class="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground data-[dragging]:border-primary data-[dragging]:bg-primary/5">
+                Drop files here
+            </NaviusFileUploadDropzone>
+            <NaviusFileUploadTrigger class="inline-flex h-9 items-center justify-center rounded-md border border-border px-3 text-sm hover:bg-accent">
+                Browse files
+            </NaviusFileUploadTrigger>
+            <NaviusFileUploadList class="space-y-1" ItemTemplate="BrainRow" />
+        </NaviusFileUpload>
+    </section>
+</div>
+
+@code {
+    private decimal? _rating;
+    private string _color = "#3b82f6";
+
+    private readonly IReadOnlyList<string> _swatches = new[]
+    {
+        "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#000000", "#ffffff",
+    };
+
+    private RenderFragment<IBrowserFile> BrainRow => _ =>
+        @<div class="flex items-center justify-between rounded border border-border px-2 py-1 text-sm">
+            <NaviusFileUploadItemName class="truncate" />
+            <NaviusFileUploadItemDelete class="text-muted-foreground hover:text-foreground">✕</NaviusFileUploadItemDelete>
+        </div>;
+}

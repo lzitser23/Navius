@@ -1,0 +1,52 @@
+@namespace Navius.Primitives.Components.ColorPicker
+@inherits ColorPickerPart
+
+@*
+    A non-interactive preview swatch. role="img" with the current color string as
+    its accessible name (react-aria ColorSwatch: the color IS the name). The fill
+    is rendered inline (over a checkerboard so alpha reads) and merged with the
+    consumer style.
+*@
+
+<div role="img"
+     aria-label="@Context.Projected"
+     data-navius-color-picker-swatch
+     style="@MergedStyle"
+     @attributes="Forwarded">
+</div>
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private const string Checkerboard =
+        "conic-gradient(#ccc 25%, transparent 0 50%, #ccc 0 75%, transparent 0) 0 0 / 8px 8px #fff";
+
+    private string MergedStyle
+    {
+        get
+        {
+            var baseStyle = $"background:linear-gradient({Context.CssColor}, {Context.CssColor}), {Checkerboard};";
+            var user = UserStyle;
+            return string.IsNullOrEmpty(user) ? baseStyle : $"{baseStyle}{user}";
+        }
+    }
+
+    private string? UserStyle =>
+        Attributes is not null && Attributes.TryGetValue("style", out var s) && s is string str && str.Length > 0 ? str : null;
+
+    private IDictionary<string, object>? Forwarded
+    {
+        get
+        {
+            if (Attributes is null || !Attributes.ContainsKey("style"))
+            {
+                return Attributes;
+            }
+
+            var copy = new Dictionary<string, object>(Attributes);
+            copy.Remove("style");
+            return copy;
+        }
+    }
+}

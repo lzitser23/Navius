@@ -1,0 +1,87 @@
+@namespace Navius.Primitives.Components.TagInput
+@inherits ComponentBase
+
+@*
+    One chip. Highlighted (chip-navigation) chips are the single roving tab stop (tabindex=0)
+    and carry data-highlighted; arrow keys move the highlight, Delete/Backspace removes.
+    Cascades its boxed value so a nested NaviusTagRemove knows what to remove.
+*@
+
+<span @ref="_element"
+      data-navius-tag
+      data-highlighted="@(IsHighlighted ? "" : null)"
+      tabindex="@(IsHighlighted ? 0 : -1)"
+      @onkeydown="OnKeyDownAsync"
+      @attributes="Attributes">
+    <CascadingValue Value="_valueContext" IsFixed="false">
+        @ChildContent
+    </CascadingValue>
+</span>
+
+@code {
+    [CascadingParameter] private TagInputContext Context { get; set; } = default!;
+
+    /// <summary>The chip's value (the tag string).</summary>
+    [Parameter] public string Value { get; set; } = "";
+
+    /// <summary>The chip's position; when unset it is resolved from the value.</summary>
+    [Parameter] public int Index { get; set; } = -1;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private TagValueContext _valueContext = new("");
+
+    private int MyIndex => Index >= 0 ? Index : Context.IndexOf(Value);
+
+    private bool IsHighlighted => MyIndex >= 0 && Context.HighlightedIndex == MyIndex;
+
+    protected override void OnParametersSet() => _valueContext = new TagValueContext(Value);
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Context.Disabled)
+        {
+            return;
+        }
+
+        var i = MyIndex;
+        var last = Context.Tags.Count - 1;
+
+        switch (e.Key)
+        {
+            case "ArrowLeft":
+                if (i > 0)
+                {
+                    await Context.HighlightAsync(i - 1, true);
+                }
+                break;
+            case "ArrowRight":
+                await Context.HighlightAsync(i < last ? i + 1 : -1, true);
+                break;
+            case "Home":
+                await Context.HighlightAsync(0, true);
+                break;
+            case "End":
+                await Context.HighlightAsync(last, true);
+                break;
+            case "Delete":
+            case "Backspace":
+                await Context.RemoveAtAsync(i);
+                break;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (MyIndex >= 0 && Context.ConsumeChipFocus(MyIndex))
+        {
+            try { await _element.FocusAsync(); }
+            catch (JSException) { }
+            catch (InvalidOperationException) { }
+        }
+    }
+}

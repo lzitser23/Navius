@@ -1,0 +1,467 @@
+@namespace Navius.Primitives.Components.DateInput
+@inherits ComponentBase
+@using System.Globalization
+@using Navius.Primitives.Components.Field
+@implements IDisposable
+
+@*
+    Elective (not part of Base UI). The low-level segmented date editor: MM / DD / YYYY as
+    individually focusable role="spinbutton" segments, culture-aware order + separators, no
+    popup calendar. The react-aria DateField analogue. Owns a DateOnly? value; segments are
+    auto-rendered from Granularity + culture and edited entirely in C# (arrows step + wrap,
+    digits auto-advance, Backspace clears). Field-aware: adopts a NaviusField's control id +
+    reports filled/dirty/touched/valid so the label/description/error reflect it. A hidden
+    NaviusBubbleInput submits ISO yyyy-MM-dd under Name. Controlled via @bind-Value,
+    uncontrolled via DefaultValue.
+*@
+
+<div role="group"
+     id="@GroupId"
+     aria-describedby="@Field?.DescribedBy"
+     aria-invalid="@(IsInvalid ? "true" : null)"
+     data-navius-date-input
+     data-disabled="@(Disabled ? "" : null)"
+     data-readonly="@(ReadOnly ? "" : null)"
+     data-invalid="@(IsInvalid ? "" : null)"
+     data-filled="@(AnyFilled ? "" : null)"
+     data-dirty="@(_dirty ? "" : null)"
+     data-focused="@(_focused ? "" : null)"
+     data-touched="@(_touched ? "" : null)"
+     @onfocusin="OnFocusInAsync"
+     @onfocusout="OnFocusOutAsync"
+     @attributes="Attributes">
+    <CascadingValue Value="_ctx" IsFixed="true">
+        @foreach (var item in _ctx.Layout)
+        {
+            if (item.IsLiteral)
+            {
+                <NaviusFieldSegmentLiteral Text="@item.Literal" />
+            }
+            else
+            {
+                <NaviusFieldSegment Segment="item.Segment!"
+                                    Focus="_ctx.FocusRequested && item.Segment!.Order == _ctx.FocusIndex" />
+            }
+        }
+    </CascadingValue>
+    @ChildContent
+    <NaviusBubbleInput InputType="hidden" Name="@Name" Value="@Iso" Required="Required" Disabled="Disabled" />
+</div>
+
+@code {
+    [CascadingParameter] private FieldContext? Field { get; set; }
+    [CascadingParameter(Name = "NaviusDirection")] private string? CascadedDir { get; set; }
+
+    /// <summary>Controlled value. Use <c>@bind-Value</c>.</summary>
+    [Parameter] public DateOnly? Value { get; set; }
+
+    [Parameter] public EventCallback<DateOnly?> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial value.</summary>
+    [Parameter] public DateOnly? DefaultValue { get; set; }
+
+    /// <summary>Which units the field edits: <c>day</c> (y/m/d), <c>month</c> (y/m) or <c>year</c>.</summary>
+    [Parameter] public string Granularity { get; set; } = "day";
+
+    [Parameter] public DateOnly? MinValue { get; set; }
+
+    [Parameter] public DateOnly? MaxValue { get; set; }
+
+    /// <summary>Seeds which value an empty segment jumps to on the first arrow (defaults to today).</summary>
+    [Parameter] public DateOnly? PlaceholderValue { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; }
+
+    [Parameter] public bool Required { get; set; }
+
+    /// <summary>Force the field invalid regardless of native validity (mirrors Base UI Field).</summary>
+    [Parameter] public bool Invalid { get; set; }
+
+    /// <summary>Pad month/day (and year to 4) with leading zeros (react-aria shouldForceLeadingZeros).</summary>
+    [Parameter] public bool ForceLeadingZeros { get; set; }
+
+    /// <summary>Culture driving segment order + separators. Defaults to the current culture.</summary>
+    [Parameter] public CultureInfo? Culture { get; set; }
+
+    /// <summary>Reading direction; falls back to the cascaded NaviusDirection then "ltr".</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    /// <summary>Form field name for the hidden bubble input (submits ISO yyyy-MM-dd).</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>Optional trailing content (e.g. a decorative calendar glyph).</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private readonly string _id = $"navius-date-input-{Guid.NewGuid():N}";
+    private readonly SegmentFieldContext _ctx = new("date-input");
+
+    private DateTimeSegment? _year, _month, _day;
+    private readonly List<DateTimeSegment> _focusables = new();
+
+    private DateOnly? _internal;
+    private DateOnly? _lastComposed;
+    private bool _valueSet;
+    private bool _initialized;
+    private bool _focused, _touched, _dirty;
+    private string _builtGranularity = "";
+    private string _builtCulture = "";
+    private Func<Task>? _onFieldChange;
+
+    private bool IsControlled => _valueSet;
+    private DateOnly? CurrentValue => IsControlled ? Value : _internal;
+    private string GroupId => Field?.ControlId ?? _id;
+    private bool IsInvalid => Field?.IsInvalid ?? (Invalid || IsOutOfRange);
+    private bool IsOutOfRange => Compose() is { } c && ((MinValue is { } mn && c < mn) || (MaxValue is { } mx && c > mx));
+    private CultureInfo ResolvedCulture => Culture ?? CultureInfo.CurrentCulture;
+    private string ResolvedDir => Dir ?? CascadedDir ?? "ltr";
+    private bool AnyFilled => _focusables.Any(s => s.Filled);
+    private string Iso => Compose()?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<DateOnly?>(nameof(Value), out _))
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _ctx.KeyImpl = HandleKeyAsync;
+        _internal = DefaultValue;
+
+        if (Field is not null)
+        {
+            _onFieldChange = () => InvokeAsync(StateHasChanged);
+            Field.Changed += _onFieldChange;
+            Field.FocusControl = FocusFirstAsync;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        var rebuilt = RebuildIfNeeded();
+        SyncContext();
+
+        if (!_initialized)
+        {
+            SeedSegments(CurrentValue);
+            _lastComposed = Compose();
+            _initialized = true;
+            return;
+        }
+
+        // A layout rebuild (granularity/culture change) drops the segment values; refill them.
+        if (rebuilt)
+        {
+            SeedSegments(CurrentValue);
+            _lastComposed = Compose();
+            return;
+        }
+
+        // Re-seed only when a controlled value arrives that differs from what we last emitted
+        // (so in-progress typing is never clobbered by our own round-trip).
+        if (IsControlled && Value != _lastComposed)
+        {
+            SeedSegments(Value);
+            _lastComposed = Compose();
+        }
+    }
+
+    private bool RebuildIfNeeded()
+    {
+        var cultureName = ResolvedCulture.Name;
+        if (_builtGranularity == Granularity && _builtCulture == cultureName && _focusables.Count > 0)
+        {
+            return false;
+        }
+
+        _builtGranularity = Granularity;
+        _builtCulture = cultureName;
+        BuildLayout();
+        return true;
+    }
+
+    private void BuildLayout()
+    {
+        _year = new DateTimeSegment { Kind = NaviusSegmentKind.Year, Min = 1, Max = 9999, PageStep = 5, MaxDigits = 4 };
+        _month = new DateTimeSegment { Kind = NaviusSegmentKind.Month, Min = 1, Max = 12, PageStep = 3 };
+        _day = new DateTimeSegment { Kind = NaviusSegmentKind.Day, Min = 1, Max = 31, PageStep = 7 };
+
+        var desired = Granularity switch
+        {
+            "year" => new[] { NaviusSegmentKind.Year },
+            "month" => new[] { NaviusSegmentKind.Year, NaviusSegmentKind.Month },
+            _ => new[] { NaviusSegmentKind.Year, NaviusSegmentKind.Month, NaviusSegmentKind.Day },
+        };
+
+        var pattern = ResolvedCulture.DateTimeFormat.ShortDatePattern;
+        var separator = FirstSeparator(pattern);
+        var cultureOrder = OrderFromPattern(pattern);
+
+        // Keep the culture's field order, filtered to the desired units.
+        var ordered = cultureOrder.Where(desired.Contains).ToList();
+
+        var layout = new List<SegmentLayoutItem>();
+        _focusables.Clear();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            if (i > 0)
+            {
+                layout.Add(SegmentLayoutItem.Separator(separator));
+            }
+
+            var seg = SegmentFor(ordered[i])!;
+            seg.Order = _focusables.Count;
+            _focusables.Add(seg);
+            layout.Add(SegmentLayoutItem.Editable(seg));
+        }
+
+        _ctx.Layout = layout;
+    }
+
+    private DateTimeSegment? SegmentFor(NaviusSegmentKind kind) => kind switch
+    {
+        NaviusSegmentKind.Year => _year,
+        NaviusSegmentKind.Month => _month,
+        NaviusSegmentKind.Day => _day,
+        _ => null,
+    };
+
+    // The order of y/M/d as they first appear in the culture's short-date pattern.
+    private static IReadOnlyList<NaviusSegmentKind> OrderFromPattern(string pattern)
+    {
+        var seen = new List<NaviusSegmentKind>();
+        foreach (var c in pattern)
+        {
+            var kind = c switch
+            {
+                'y' => (NaviusSegmentKind?)NaviusSegmentKind.Year,
+                'M' => NaviusSegmentKind.Month,
+                'd' => NaviusSegmentKind.Day,
+                _ => null,
+            };
+            if (kind is { } k && !seen.Contains(k))
+            {
+                seen.Add(k);
+            }
+        }
+
+        return seen.Count == 3 ? seen : new List<NaviusSegmentKind> { NaviusSegmentKind.Year, NaviusSegmentKind.Month, NaviusSegmentKind.Day };
+    }
+
+    private static string FirstSeparator(string pattern)
+    {
+        foreach (var c in pattern)
+        {
+            if (!char.IsLetter(c) && c != '\'')
+            {
+                return c.ToString();
+            }
+        }
+
+        return "/";
+    }
+
+    private void SyncContext()
+    {
+        _ctx.Culture = ResolvedCulture;
+        _ctx.ForceLeadingZeros = ForceLeadingZeros;
+        _ctx.Disabled = Disabled;
+        _ctx.ReadOnly = ReadOnly;
+        _ctx.Required = Required;
+        _ctx.Invalid = IsInvalid;
+        _ctx.Dir = ResolvedDir;
+    }
+
+    private void SeedSegments(DateOnly? v)
+    {
+        if (v is { } d)
+        {
+            if (_year is not null) _year.Value = d.Year;
+            if (_month is not null) _month.Value = d.Month;
+            if (_day is not null) _day.Value = d.Day;
+        }
+        else
+        {
+            foreach (var s in _focusables)
+            {
+                s.Value = null;
+                s.TypeBuffer = "";
+            }
+        }
+
+        RecomputeDayMax();
+    }
+
+    private void RecomputeDayMax()
+    {
+        if (_day is null)
+        {
+            return;
+        }
+
+        var year = _year?.Value ?? 2000;
+        var month = _month?.Value ?? 1;
+        _day.Max = DateTime.DaysInMonth(year, month);
+        if (_day.Value is { } dv && dv > _day.Max)
+        {
+            _day.Value = _day.Max;
+        }
+    }
+
+    private DateOnly? Compose()
+    {
+        // Every editable segment in the layout must be filled.
+        if (_focusables.Any(s => !s.Filled))
+        {
+            return null;
+        }
+
+        var year = _year?.Value ?? 1;
+        var month = _month?.Value ?? 1;
+        var maxDay = DateTime.DaysInMonth(year, month);
+        var day = Math.Min(_day?.Value ?? 1, maxDay);
+
+        // No clamping: the composed value always equals the visible segments. MinValue/MaxValue
+        // surface as data-invalid (IsOutOfRange) rather than silently snapping the value.
+        return new DateOnly(year, month, day);
+    }
+
+    private int? PlaceholderBasis(DateTimeSegment seg)
+    {
+        var basis = PlaceholderValue ?? DateOnly.FromDateTime(DateTime.Today);
+        return seg.Kind switch
+        {
+            NaviusSegmentKind.Year => basis.Year,
+            NaviusSegmentKind.Month => basis.Month,
+            NaviusSegmentKind.Day => basis.Day,
+            _ => null,
+        };
+    }
+
+    private async Task HandleKeyAsync(int order, KeyboardEventArgs e)
+    {
+        if (Disabled || ReadOnly || order < 0 || order >= _focusables.Count)
+        {
+            return;
+        }
+
+        var seg = _focusables[order];
+        var result = SegmentMath.HandleKey(seg, e, PlaceholderBasis(seg));
+
+        switch (result)
+        {
+            case SegmentKeyResult.ValueChanged:
+                RecomputeDayMax();
+                await CommitAsync();
+                break;
+            case SegmentKeyResult.ValueChangedAndAdvance:
+                RecomputeDayMax();
+                await CommitAsync();
+                MoveFocus(order, +1, ignoreDir: true);
+                break;
+            case SegmentKeyResult.MovePrev:
+                MoveFocus(order, -1);
+                break;
+            case SegmentKeyResult.MoveNext:
+                MoveFocus(order, +1);
+                break;
+        }
+
+        StateHasChanged();
+    }
+
+    private void MoveFocus(int fromOrder, int logicalDelta, bool ignoreDir = false)
+    {
+        if (!ignoreDir && ResolvedDir == "rtl")
+        {
+            logicalDelta = -logicalDelta;
+        }
+
+        var next = Math.Clamp(fromOrder + logicalDelta, 0, _focusables.Count - 1);
+        _ctx.FocusIndex = next;
+        _ctx.FocusRequested = true;
+    }
+
+    private async Task CommitAsync()
+    {
+        _dirty = true;
+        var composed = Compose();
+        if (composed == _lastComposed)
+        {
+            await ReportFieldStateAsync();
+            return;
+        }
+
+        _lastComposed = composed;
+        if (!IsControlled)
+        {
+            _internal = composed;
+        }
+
+        await ValueChanged.InvokeAsync(composed);
+        await ReportFieldStateAsync();
+    }
+
+    private async Task OnFocusInAsync()
+    {
+        _focused = true;
+        await ReportFieldStateAsync();
+    }
+
+    private async Task OnFocusOutAsync()
+    {
+        _focused = false;
+        _touched = true;
+        await ReportFieldStateAsync();
+    }
+
+    private Task ReportFieldStateAsync()
+    {
+        if (Field is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var complete = Compose() is not null;
+        return Field.ApplyControlStateAsync(new FieldStatePayload
+        {
+            Value = Iso,
+            Filled = AnyFilled,
+            Dirty = _dirty,
+            Focused = _focused,
+            Touched = _touched,
+            Valid = !(Required && !complete),
+            ValueMissing = Required && !complete,
+        });
+    }
+
+    private async Task FocusFirstAsync()
+    {
+        _ctx.FocusIndex = 0;
+        _ctx.FocusRequested = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // The focus one-shot has been consumed by the target segment's render.
+        _ctx.FocusRequested = false;
+    }
+
+    public void Dispose()
+    {
+        if (_onFieldChange is not null && Field is not null)
+        {
+            Field.Changed -= _onFieldChange;
+        }
+    }
+}

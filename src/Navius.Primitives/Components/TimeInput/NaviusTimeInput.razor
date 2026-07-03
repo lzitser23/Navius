@@ -1,0 +1,426 @@
+@namespace Navius.Primitives.Components.TimeInput
+@inherits ComponentBase
+@using System.Globalization
+@using Navius.Primitives.Components.Field
+@implements IDisposable
+
+@*
+    Elective (not part of Base UI). The segmented time editor: hh : mm [: ss] [AM/PM] as
+    role="spinbutton" segments, 12/24-hour modes, optional seconds, minute/second step. The
+    react-aria TimeField analogue; shares the segment machinery of NaviusDateInput. Owns a
+    TimeOnly? value; the day-period segment toggles on arrows and on the a/p keys. Field-aware,
+    hidden NaviusBubbleInput submits ISO HH:mm[:ss] under Name. Controlled via @bind-Value,
+    uncontrolled via DefaultValue.
+*@
+
+<div role="group"
+     id="@GroupId"
+     aria-describedby="@Field?.DescribedBy"
+     aria-invalid="@(IsInvalid ? "true" : null)"
+     data-navius-time-input
+     data-disabled="@(Disabled ? "" : null)"
+     data-readonly="@(ReadOnly ? "" : null)"
+     data-invalid="@(IsInvalid ? "" : null)"
+     data-filled="@(AnyFilled ? "" : null)"
+     data-dirty="@(_dirty ? "" : null)"
+     data-focused="@(_focused ? "" : null)"
+     data-touched="@(_touched ? "" : null)"
+     @onfocusin="OnFocusInAsync"
+     @onfocusout="OnFocusOutAsync"
+     @attributes="Attributes">
+    <CascadingValue Value="_ctx" IsFixed="true">
+        @foreach (var item in _ctx.Layout)
+        {
+            if (item.IsLiteral)
+            {
+                <NaviusFieldSegmentLiteral Text="@item.Literal" />
+            }
+            else
+            {
+                <NaviusFieldSegment Segment="item.Segment!"
+                                    Focus="_ctx.FocusRequested && item.Segment!.Order == _ctx.FocusIndex" />
+            }
+        }
+    </CascadingValue>
+    @ChildContent
+    <NaviusBubbleInput InputType="hidden" Name="@Name" Value="@Iso" Required="Required" Disabled="Disabled" />
+</div>
+
+@code {
+    [CascadingParameter] private FieldContext? Field { get; set; }
+    [CascadingParameter(Name = "NaviusDirection")] private string? CascadedDir { get; set; }
+
+    /// <summary>Controlled value. Use <c>@bind-Value</c>.</summary>
+    [Parameter] public TimeOnly? Value { get; set; }
+
+    [Parameter] public EventCallback<TimeOnly?> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial value.</summary>
+    [Parameter] public TimeOnly? DefaultValue { get; set; }
+
+    /// <summary>Smallest edited unit: <c>hour</c>, <c>minute</c> (default) or <c>second</c>.</summary>
+    [Parameter] public string Granularity { get; set; } = "minute";
+
+    /// <summary>12 or 24. Defaults to the culture's short-time pattern.</summary>
+    [Parameter] public int? HourCycle { get; set; }
+
+    [Parameter] public int MinuteStep { get; set; } = 1;
+
+    [Parameter] public int SecondStep { get; set; } = 1;
+
+    [Parameter] public TimeOnly? MinValue { get; set; }
+
+    [Parameter] public TimeOnly? MaxValue { get; set; }
+
+    /// <summary>Seeds which value an empty segment jumps to on the first arrow (defaults to now).</summary>
+    [Parameter] public TimeOnly? PlaceholderValue { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; }
+
+    [Parameter] public bool Required { get; set; }
+
+    [Parameter] public bool Invalid { get; set; }
+
+    [Parameter] public bool ForceLeadingZeros { get; set; }
+
+    [Parameter] public CultureInfo? Culture { get; set; }
+
+    [Parameter] public string? Dir { get; set; }
+
+    /// <summary>Form field name for the hidden bubble input (submits ISO HH:mm[:ss]).</summary>
+    [Parameter] public string? Name { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private readonly string _id = $"navius-time-input-{Guid.NewGuid():N}";
+    private readonly SegmentFieldContext _ctx = new("time-input");
+
+    private DateTimeSegment? _hour, _minute, _second, _dayPeriod;
+    private readonly List<DateTimeSegment> _focusables = new();
+
+    private TimeOnly? _internal;
+    private TimeOnly? _lastComposed;
+    private bool _valueSet;
+    private bool _initialized;
+    private bool _focused, _touched, _dirty;
+    private string _builtKey = "";
+    private Func<Task>? _onFieldChange;
+
+    private bool IsControlled => _valueSet;
+    private TimeOnly? CurrentValue => IsControlled ? Value : _internal;
+    private string GroupId => Field?.ControlId ?? _id;
+    private bool IsInvalid => Field?.IsInvalid ?? (Invalid || IsOutOfRange);
+    private bool IsOutOfRange => Compose() is { } c && ((MinValue is { } mn && c < mn) || (MaxValue is { } mx && c > mx));
+    private CultureInfo ResolvedCulture => Culture ?? CultureInfo.CurrentCulture;
+    private string ResolvedDir => Dir ?? CascadedDir ?? "ltr";
+    private int ResolvedHourCycle => HourCycle ?? CultureHourCycle();
+    private bool AnyFilled => _focusables.Any(s => s.Filled);
+
+    private string Iso
+    {
+        get
+        {
+            var t = Compose();
+            if (t is null) return string.Empty;
+            return Granularity == "second"
+                ? t.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
+                : t.Value.ToString("HH:mm", CultureInfo.InvariantCulture);
+        }
+    }
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<TimeOnly?>(nameof(Value), out _))
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _ctx.KeyImpl = HandleKeyAsync;
+        _internal = DefaultValue;
+
+        if (Field is not null)
+        {
+            _onFieldChange = () => InvokeAsync(StateHasChanged);
+            Field.Changed += _onFieldChange;
+            Field.FocusControl = FocusFirstAsync;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        var rebuilt = RebuildIfNeeded();
+        SyncContext();
+
+        if (!_initialized)
+        {
+            SeedSegments(CurrentValue);
+            _lastComposed = Compose();
+            _initialized = true;
+            return;
+        }
+
+        if (rebuilt)
+        {
+            SeedSegments(CurrentValue);
+            _lastComposed = Compose();
+            return;
+        }
+
+        if (IsControlled && Value != _lastComposed)
+        {
+            SeedSegments(Value);
+            _lastComposed = Compose();
+        }
+    }
+
+    private int CultureHourCycle()
+    {
+        var pattern = ResolvedCulture.DateTimeFormat.ShortTimePattern;
+        return pattern.Contains('H') ? 24 : 12;
+    }
+
+    private bool RebuildIfNeeded()
+    {
+        var key = $"{Granularity}|{ResolvedHourCycle}|{MinuteStep}|{SecondStep}";
+        if (_builtKey == key && _focusables.Count > 0)
+        {
+            return false;
+        }
+
+        _builtKey = key;
+        BuildLayout();
+        return true;
+    }
+
+    private void BuildLayout()
+    {
+        var is12 = ResolvedHourCycle == 12;
+        _hour = new DateTimeSegment { Kind = NaviusSegmentKind.Hour, Min = is12 ? 1 : 0, Max = is12 ? 12 : 23, PageStep = 2 };
+        _minute = new DateTimeSegment { Kind = NaviusSegmentKind.Minute, Min = 0, Max = 59, ArrowStep = Math.Max(1, MinuteStep), PageStep = 15 };
+        _second = new DateTimeSegment { Kind = NaviusSegmentKind.Second, Min = 0, Max = 59, ArrowStep = Math.Max(1, SecondStep), PageStep = 15 };
+        _dayPeriod = new DateTimeSegment { Kind = NaviusSegmentKind.DayPeriod, Min = 0, Max = 1, MaxDigits = 0 };
+
+        var units = new List<DateTimeSegment> { _hour };
+        if (Granularity != "hour") units.Add(_minute);
+        if (Granularity == "second") units.Add(_second);
+
+        var layout = new List<SegmentLayoutItem>();
+        _focusables.Clear();
+        for (var i = 0; i < units.Count; i++)
+        {
+            if (i > 0) layout.Add(SegmentLayoutItem.Separator(":"));
+            var seg = units[i];
+            seg.Order = _focusables.Count;
+            _focusables.Add(seg);
+            layout.Add(SegmentLayoutItem.Editable(seg));
+        }
+
+        if (is12)
+        {
+            layout.Add(SegmentLayoutItem.Separator(" "));
+            _dayPeriod.Order = _focusables.Count;
+            _focusables.Add(_dayPeriod);
+            layout.Add(SegmentLayoutItem.Editable(_dayPeriod));
+        }
+
+        _ctx.Layout = layout;
+    }
+
+    private void SyncContext()
+    {
+        _ctx.Culture = ResolvedCulture;
+        _ctx.ForceLeadingZeros = ForceLeadingZeros;
+        _ctx.Disabled = Disabled;
+        _ctx.ReadOnly = ReadOnly;
+        _ctx.Required = Required;
+        _ctx.Invalid = IsInvalid;
+        _ctx.Dir = ResolvedDir;
+    }
+
+    private void SeedSegments(TimeOnly? v)
+    {
+        if (v is { } t)
+        {
+            var is12 = ResolvedHourCycle == 12;
+            if (_hour is not null)
+            {
+                _hour.Value = is12 ? (t.Hour % 12 == 0 ? 12 : t.Hour % 12) : t.Hour;
+            }
+            if (_minute is not null) _minute.Value = t.Minute;
+            if (_second is not null) _second.Value = t.Second;
+            if (_dayPeriod is not null) _dayPeriod.Value = t.Hour >= 12 ? 1 : 0;
+        }
+        else
+        {
+            foreach (var s in _focusables)
+            {
+                s.Value = null;
+                s.TypeBuffer = "";
+            }
+        }
+    }
+
+    private TimeOnly? Compose()
+    {
+        if (_focusables.Any(s => !s.Filled))
+        {
+            return null;
+        }
+
+        int hour24;
+        if (ResolvedHourCycle == 12)
+        {
+            var h12 = _hour!.Value!.Value % 12;
+            hour24 = h12 + (_dayPeriod!.Value == 1 ? 12 : 0);
+        }
+        else
+        {
+            hour24 = _hour!.Value!.Value;
+        }
+
+        var minute = _minute?.Value ?? 0;
+        var second = _second?.Value ?? 0;
+
+        // No clamping: the composed value always equals the visible segments (MinValue/MaxValue
+        // surface as data-invalid via IsOutOfRange instead of silently snapping the value).
+        return new TimeOnly(hour24, minute, second);
+    }
+
+    private int? PlaceholderBasis(DateTimeSegment seg)
+    {
+        var basis = PlaceholderValue ?? TimeOnly.FromDateTime(DateTime.Now);
+        return seg.Kind switch
+        {
+            NaviusSegmentKind.Hour => ResolvedHourCycle == 12 ? (basis.Hour % 12 == 0 ? 12 : basis.Hour % 12) : basis.Hour,
+            NaviusSegmentKind.Minute => basis.Minute,
+            NaviusSegmentKind.Second => basis.Second,
+            NaviusSegmentKind.DayPeriod => basis.Hour >= 12 ? 1 : 0,
+            _ => null,
+        };
+    }
+
+    private async Task HandleKeyAsync(int order, KeyboardEventArgs e)
+    {
+        if (Disabled || ReadOnly || order < 0 || order >= _focusables.Count)
+        {
+            return;
+        }
+
+        var seg = _focusables[order];
+        var result = SegmentMath.HandleKey(seg, e, PlaceholderBasis(seg));
+
+        switch (result)
+        {
+            case SegmentKeyResult.ValueChanged:
+                await CommitAsync();
+                break;
+            case SegmentKeyResult.ValueChangedAndAdvance:
+                await CommitAsync();
+                MoveFocus(order, +1, ignoreDir: true);
+                break;
+            case SegmentKeyResult.MovePrev:
+                MoveFocus(order, -1);
+                break;
+            case SegmentKeyResult.MoveNext:
+                MoveFocus(order, +1);
+                break;
+        }
+
+        StateHasChanged();
+    }
+
+    private void MoveFocus(int fromOrder, int logicalDelta, bool ignoreDir = false)
+    {
+        if (!ignoreDir && ResolvedDir == "rtl")
+        {
+            logicalDelta = -logicalDelta;
+        }
+
+        var next = Math.Clamp(fromOrder + logicalDelta, 0, _focusables.Count - 1);
+        _ctx.FocusIndex = next;
+        _ctx.FocusRequested = true;
+    }
+
+    private async Task CommitAsync()
+    {
+        _dirty = true;
+        var composed = Compose();
+        if (composed == _lastComposed)
+        {
+            await ReportFieldStateAsync();
+            return;
+        }
+
+        _lastComposed = composed;
+        if (!IsControlled)
+        {
+            _internal = composed;
+        }
+
+        await ValueChanged.InvokeAsync(composed);
+        await ReportFieldStateAsync();
+    }
+
+    private async Task OnFocusInAsync()
+    {
+        _focused = true;
+        await ReportFieldStateAsync();
+    }
+
+    private async Task OnFocusOutAsync()
+    {
+        _focused = false;
+        _touched = true;
+        await ReportFieldStateAsync();
+    }
+
+    private Task ReportFieldStateAsync()
+    {
+        if (Field is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var complete = Compose() is not null;
+        return Field.ApplyControlStateAsync(new FieldStatePayload
+        {
+            Value = Iso,
+            Filled = AnyFilled,
+            Dirty = _dirty,
+            Focused = _focused,
+            Touched = _touched,
+            Valid = !(Required && !complete),
+            ValueMissing = Required && !complete,
+        });
+    }
+
+    private async Task FocusFirstAsync()
+    {
+        _ctx.FocusIndex = 0;
+        _ctx.FocusRequested = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _ctx.FocusRequested = false;
+    }
+
+    public void Dispose()
+    {
+        if (_onFieldChange is not null && Field is not null)
+        {
+            Field.Changed -= _onFieldChange;
+        }
+    }
+}

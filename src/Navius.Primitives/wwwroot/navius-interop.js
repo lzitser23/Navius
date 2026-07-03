@@ -2095,3 +2095,319 @@ export function createMessageScroller(viewport, dotNetRef, options) {
     },
   };
 }
+
+// --- 2D pointer tracker (ColorPicker area thumb) -----------------------------
+// The 2D sibling of createDragTracker. Translates a pointer position over
+// `element` into a normalized { x, y } pair (each clamped 0..1) and streams it to
+// .NET (OnFraction2D); on release it fires OnFraction2D's final value once more via
+// OnCommit2D (swallowed if the consumer has no [JSInvokable] OnCommit2D). Captures
+// the pointer so the drag keeps tracking outside the element. Geometry is
+// DOM-natural: x grows to the right, y grows downward (top edge = 0, bottom = 1);
+// C# owns the channel mapping (e.g. a saturation/value area reads value = 1 - y).
+// x is NOT mirrored under RTL: the only consumer is the ColorPicker, whose saturation
+// and hue axes are a physical color surface (not reading-order dependent), and whose
+// keyboard handlers never flip either. Mirroring here made pointer and keyboard
+// disagree under dir=rtl, so both now agree on right = increasing.
+export function createPointerTracker2D(element, dotNetRef) {
+  let dragging = false;
+
+  function fractionFromEvent(e) {
+    const rect = element.getBoundingClientRect();
+    const w = rect.width || 1;
+    const h = rect.height || 1;
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / w));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / h));
+    return { x, y };
+  }
+
+  const emit = (e) => dotNetRef.invokeMethodAsync('OnFraction2D', fractionFromEvent(e));
+
+  function onPointerDown(e) {
+    if (e.button !== 0) return;
+    dragging = true;
+    try { element.setPointerCapture(e.pointerId); } catch {}
+    e.preventDefault();
+    emit(e);
+  }
+  function onPointerMove(e) { if (dragging) { e.preventDefault(); emit(e); } }
+  function onPointerUp(e) {
+    if (!dragging) return;
+    dragging = false;
+    try { element.releasePointerCapture(e.pointerId); } catch {}
+    // OnFraction2D has already streamed the latest position; OnCommit2D marks the
+    // gesture complete (so C# can fire onValueCommit). Swallowed if undeclared.
+    Promise.resolve(dotNetRef.invokeMethodAsync('OnCommit2D', fractionFromEvent(e))).catch(() => {});
+  }
+
+  element.addEventListener('pointerdown', onPointerDown);
+  element.addEventListener('pointermove', onPointerMove);
+  element.addEventListener('pointerup', onPointerUp);
+  element.addEventListener('pointercancel', onPointerUp);
+
+  return {
+    destroy() {
+      element.removeEventListener('pointerdown', onPointerDown);
+      element.removeEventListener('pointermove', onPointerMove);
+      element.removeEventListener('pointerup', onPointerUp);
+      element.removeEventListener('pointercancel', onPointerUp);
+    },
+  };
+}
+
+// --- File dropzone (FileUpload) ----------------------------------------------
+// Wires drag/drop on `element` to relay dropped files into a real hidden
+// <input type="file"> (`inputElement`) so Blazor's InputFile sees them through its
+// own native change handler (the a11y source of truth stays the native input).
+// dragenter/over/leave toggle a data-dragging attribute on `element` (drag depth is
+// counted so moving across child nodes does not flicker it) and report the state to
+// .NET via OnDraggingChange(bool) (swallowed if undeclared). On drop the files are
+// copied through a DataTransfer onto `inputElement.files`, then a bubbling change
+// event is dispatched so InputFile fires. The returned handle also exposes
+// clickToOpen(), which forwards a Trigger/Dropzone activation to inputElement.click()
+// to open the native file dialog.
+export function createFileDropzone(element, inputElement, dotNetRef) {
+  let depth = 0;
+
+  const setDragging = (on) => {
+    if (on) element.setAttribute('data-dragging', '');
+    else element.removeAttribute('data-dragging');
+    if (dotNetRef) {
+      Promise.resolve(dotNetRef.invokeMethodAsync('OnDraggingChange', on)).catch(() => {});
+    }
+  };
+
+  function onDragEnter(e) {
+    e.preventDefault();
+    depth += 1;
+    if (depth === 1) setDragging(true);
+  }
+  function onDragOver(e) {
+    e.preventDefault(); // required so the browser fires a drop event
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  }
+  function onDragLeave(e) {
+    e.preventDefault();
+    depth = Math.max(0, depth - 1);
+    if (depth === 0) setDragging(false);
+  }
+  function onDrop(e) {
+    e.preventDefault();
+    depth = 0;
+    setDragging(false);
+    if (!inputElement || !e.dataTransfer) return;
+    const files = e.dataTransfer.files;
+    if (!files || !files.length) return;
+    try {
+      const dt = new DataTransfer();
+      for (const f of files) dt.items.add(f);
+      inputElement.files = dt.files;
+      inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch {
+      /* DataTransfer / files assignment unsupported; the native picker path still works */
+    }
+  }
+
+  element.addEventListener('dragenter', onDragEnter);
+  element.addEventListener('dragover', onDragOver);
+  element.addEventListener('dragleave', onDragLeave);
+  element.addEventListener('drop', onDrop);
+
+  return {
+    clickToOpen() {
+      if (inputElement && typeof inputElement.click === 'function') inputElement.click();
+    },
+    destroy() {
+      element.removeEventListener('dragenter', onDragEnter);
+      element.removeEventListener('dragover', onDragOver);
+      element.removeEventListener('dragleave', onDragLeave);
+      element.removeEventListener('drop', onDrop);
+    },
+  };
+}
+
+// --- Masked selection (MaskedInput / CurrencyInput) --------------------------
+// Two atomic, synchronous helpers over a text `input` so the C# caret-stable
+// masking pipeline can read and write value + selection in single round trips
+// without a caret flicker between them. getState() snapshots the live value and
+// selection (falling back to the value length when the browser reports null, e.g.
+// on a freshly focused field). setState() assigns the value and calls
+// setSelectionRange in one call; pass selectionStart === selectionEnd for a
+// collapsed caret, or distinct bounds to restore a range selection (the pipeline
+// recomputes Start and End independently). No listeners; destroy() is a no-op kept
+// for the uniform factory/dispose idiom.
+export function createMaskedSelection(input) {
+  return {
+    getState() {
+      const value = input.value;
+      return {
+        value,
+        selectionStart: input.selectionStart != null ? input.selectionStart : value.length,
+        selectionEnd: input.selectionEnd != null ? input.selectionEnd : value.length,
+      };
+    },
+    setState(value, selectionStart, selectionEnd) {
+      input.value = value;
+      const end = selectionEnd == null ? selectionStart : selectionEnd;
+      try {
+        input.setSelectionRange(selectionStart, end);
+      } catch {
+        /* input type does not support text selection */
+      }
+    },
+    destroy() {},
+  };
+}
+
+// --- Sortable (drag-to-reorder) ----------------------------------------------
+// Pointer-driven reorder over the direct element children of `container`. C# owns
+// the ordered collection: the engine never mutates the DOM order (Blazor commits
+// the reorder on re-render), it only tracks the pointer and reports indices +
+// paints style hooks. On press (optionally only when the press starts on a
+// `options.handle` selector inside an item) it records the item rects once, sets
+// data-dragging on the active item, and emits OnDragStart(index). As the pointer
+// moves it computes the target index by comparing the pointer against each item's
+// midpoint (options.axis: 'vertical' uses the Y midpoint, 'horizontal' the X
+// midpoint, 'grid' the nearest 2D center), mirrors data-drop-target onto the item
+// occupying that slot, and emits OnDragOver(fromIndex, toIndex) when it changes. On
+// release it emits OnDrop(fromIndex, toIndex) (only when the position actually
+// moved) or OnCancel; Escape (or pointercancel / a dropped-in-place release) emits
+// OnCancel. All four callbacks are swallowed if undeclared. Keyboard reordering is
+// owned by C#. Returns a handle; destroy() detaches every listener.
+export function createSortable(container, options, dotNetRef) {
+  const opts = Object.assign({ axis: 'vertical', handle: null }, options || {});
+  const axis = opts.axis; // 'vertical' | 'horizontal' | 'grid'
+  const handleSelector = opts.handle || null;
+
+  let dragging = false;
+  let fromIndex = -1;
+  let toIndex = -1;
+  let activeItem = null;
+  let rects = []; // item rects captured at drag start (DOM order is stable until commit)
+  let pointerId = null;
+
+  const notify = (method, ...args) =>
+    Promise.resolve(dotNetRef.invokeMethodAsync(method, ...args)).catch(() => {});
+
+  const directChildren = () =>
+    Array.from(container.children).filter((el) => el.nodeType === 1);
+
+  // Map an event target up to the direct child of `container` it belongs to.
+  function itemFrom(target) {
+    let el = target instanceof Element ? target : null;
+    while (el && el.parentElement !== container) el = el.parentElement;
+    return el && el.parentElement === container ? el : null;
+  }
+
+  // Insertion slot from the pointer, converted to a target index relative to the
+  // removed item (so OnDrop's toIndex is a direct list index for C#).
+  function indexFromPoint(x, y) {
+    if (axis === 'grid') {
+      let best = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < rects.length; i++) {
+        const r = rects[i];
+        const dx = x - (r.left + r.width / 2);
+        const dy = y - (r.top + r.height / 2);
+        const d = dx * dx + dy * dy;
+        if (d < bestDist) { bestDist = d; best = i; }
+      }
+      return best;
+    }
+    const horizontal = axis === 'horizontal';
+    let slot = rects.length; // default: past the last item
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      const mid = horizontal ? r.left + r.width / 2 : r.top + r.height / 2;
+      const p = horizontal ? x : y;
+      if (p < mid) { slot = i; break; }
+    }
+    if (slot > fromIndex) slot -= 1; // account for the dragged item leaving its slot
+    return Math.max(0, Math.min(rects.length - 1, slot));
+  }
+
+  function clearDropTargets() {
+    for (const el of directChildren()) el.removeAttribute('data-drop-target');
+  }
+  function setDropTarget(index) {
+    clearDropTargets();
+    const kids = directChildren();
+    if (index >= 0 && index < kids.length) kids[index].setAttribute('data-drop-target', '');
+  }
+
+  function onPointerDown(e) {
+    if (e.button !== 0) return;
+    const item = itemFrom(e.target);
+    if (!item) return;
+    if (handleSelector) {
+      const h = e.target instanceof Element ? e.target.closest(handleSelector) : null;
+      if (!h || !item.contains(h)) return; // press must start on a handle
+    }
+    const kids = directChildren();
+    fromIndex = kids.indexOf(item);
+    if (fromIndex < 0) return;
+    dragging = true;
+    activeItem = item;
+    toIndex = fromIndex;
+    rects = kids.map((el) => el.getBoundingClientRect());
+    pointerId = e.pointerId;
+    try { container.setPointerCapture(e.pointerId); } catch {}
+    item.setAttribute('data-dragging', '');
+    e.preventDefault();
+    notify('OnDragStart', fromIndex);
+  }
+
+  function onPointerMove(e) {
+    if (!dragging) return;
+    e.preventDefault();
+    const next = indexFromPoint(e.clientX, e.clientY);
+    if (next !== toIndex) {
+      toIndex = next;
+      setDropTarget(toIndex);
+      notify('OnDragOver', fromIndex, toIndex);
+    }
+  }
+
+  function finish(commit) {
+    if (!dragging) return;
+    dragging = false;
+    try { if (pointerId != null) container.releasePointerCapture(pointerId); } catch {}
+    pointerId = null;
+    if (activeItem) activeItem.removeAttribute('data-dragging');
+    clearDropTargets();
+    const from = fromIndex;
+    const to = toIndex;
+    activeItem = null;
+    fromIndex = -1;
+    toIndex = -1;
+    rects = [];
+    if (commit && to >= 0 && to !== from) notify('OnDrop', from, to);
+    else notify('OnCancel');
+  }
+
+  function onPointerUp(e) {
+    if (!dragging) return;
+    e.preventDefault();
+    finish(true);
+  }
+  function onPointerCancel() { finish(false); }
+  function onKeyDown(e) {
+    if (e.key === 'Escape' && dragging) { e.preventDefault(); finish(false); }
+  }
+
+  container.addEventListener('pointerdown', onPointerDown);
+  container.addEventListener('pointermove', onPointerMove);
+  container.addEventListener('pointerup', onPointerUp);
+  container.addEventListener('pointercancel', onPointerCancel);
+  document.addEventListener('keydown', onKeyDown, true);
+
+  return {
+    destroy() {
+      if (dragging) finish(false);
+      container.removeEventListener('pointerdown', onPointerDown);
+      container.removeEventListener('pointermove', onPointerMove);
+      container.removeEventListener('pointerup', onPointerUp);
+      container.removeEventListener('pointercancel', onPointerCancel);
+      document.removeEventListener('keydown', onKeyDown, true);
+    },
+  };
+}

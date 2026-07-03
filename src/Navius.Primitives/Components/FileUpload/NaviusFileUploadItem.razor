@@ -1,0 +1,36 @@
+@namespace Navius.Primitives.Components.FileUpload
+@inherits ComponentBase
+@using Microsoft.AspNetCore.Components.Forms
+
+@*
+    One file row (role="listitem"). Cascades a FileUploadItemContext so its
+    name/size/delete children know which file they describe and can remove it.
+*@
+
+<CascadingValue Value="_itemContext" IsFixed="true">
+    <li role="listitem"
+        data-navius-file-upload-item
+        data-invalid="@(Invalid ? "" : null)"
+        @attributes="Attributes">
+        @ChildContent
+    </li>
+</CascadingValue>
+
+@code {
+    [CascadingParameter] private FileUploadContext Context { get; set; } = default!;
+
+    [Parameter] public IBrowserFile File { get; set; } = default!;
+
+    /// <summary>Mark this row invalid (data-invalid), e.g. a failed upload.</summary>
+    [Parameter] public bool Invalid { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private FileUploadItemContext _itemContext = default!;
+
+    protected override void OnInitialized()
+        => _itemContext = new FileUploadItemContext(File, Invalid, () => Context.RemoveFileAsync(File));
+}

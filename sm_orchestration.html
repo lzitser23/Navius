@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en" class="dark"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="/">
+
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('navius-theme');
+                if (t === 'light') document.documentElement.classList.remove('dark');
+                else document.documentElement.classList.add('dark');
+            } catch (e) { }
+        })();
+        // OS for the hotkey label: ⌘ on Mac, Ctrl elsewhere.
+        try {
+            document.documentElement.setAttribute('data-os',
+                /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || '') ? 'mac' : 'other');
+        } catch (e) { document.documentElement.setAttribute('data-os', 'other'); }
+        function toggleTheme() {
+            var dark = document.documentElement.classList.toggle('dark');
+            try { localStorage.setItem('navius-theme', dark ? 'dark' : 'light'); } catch (e) { }
+        }
+        // CodeBlock copy-to-clipboard (static-SSR safe; buttons call it via onclick).
+        function naviusCopyCode(btn) {
+            var root = btn.closest('[data-codeblock]') || btn.closest('pre');
+            var code = root && (root.querySelector('code') || root);
+            if (!code || !navigator.clipboard) return;
+            navigator.clipboard.writeText(code.innerText).then(function () {
+                btn.setAttribute('data-copied', '');
+                setTimeout(function () { btn.removeAttribute('data-copied'); }, 1500);
+            });
+        }
+        // In-page anchors: with <base href="/"> a bare #hash href resolves against the
+        // base and navigates to the homepage. This listener registers before
+        // blazor.web.js, so its preventDefault also stops enhanced navigation; we
+        // scroll locally and update the hash without navigating.
+        document.addEventListener('click', function (e) {
+            var a = e.target && e.target.closest && e.target.closest('a[href^="#"]');
+            if (!a) return;
+            e.preventDefault();
+            var hash = a.getAttribute('href');
+            if (hash.length > 1) {
+                var el = document.getElementById(hash.slice(1));
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth' });
+                    history.replaceState(null, '', location.pathname + location.search + hash);
+                    // TOC clicks pin the clicked chapter active: sections near the page
+                    // bottom can never scroll to the viewport top, so the position-based
+                    // spy alone could not highlight them. Cleared on user scroll intent.
+                    if (a.closest('[data-toc]')) {
+                        window.__naviusTocTarget = hash.slice(1);
+                        if (window.__naviusSpy) window.__naviusSpy();
+                    }
+                }
+            }
+        });
+        // Markdown-rendered pre blocks (no CodeBlock wrapper) get an injected copy button.
+        function naviusEnhancePre() {
+            document.querySelectorAll('.prose-navius pre').forEach(function (pre) {
+                if (pre.closest('[data-codeblock]') || pre.querySelector('.navius-pre-copy')) return;
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'navius-copy navius-pre-copy';
+                btn.setAttribute('aria-label', 'Copy code');
+                btn.innerHTML = '<svg class="navius-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="navius-check-icon text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+                btn.addEventListener('click', function () { naviusCopyCode(btn); });
+                pre.style.position = 'relative';
+                pre.appendChild(btn);
+            });
+        }
+        // Search palette: the interactive island registers its .NET ref; the header button
+        // (window.naviusOpenSearch) and ⌘K / Ctrl+K both open it.
+        window.naviusWireSearch = function (ref) {
+            window.naviusOpenSearch = function () { ref.invokeMethodAsync('Open'); };
+            document.addEventListener('keydown', function (e) {
+                if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+                    e.preventDefault();
+                    ref.invokeMethodAsync('Open');
+                }
+            });
+        };
+        // Scroll-spy: highlight the current section in the 'On this page' TOC.
+        function naviusInitScrollSpy() {
+            var links = Array.prototype.slice.call(document.querySelectorAll('[data-toc] a[href^="#"]'));
+            if (!links.length) return;
+            var sections = links
+                .map(function (l) { return document.getElementById(l.getAttribute('href').slice(1)); })
+                .filter(Boolean);
+            function onScroll() {
+                var current = null;
+                if (window.__naviusTocTarget) {
+                    current = document.getElementById(window.__naviusTocTarget);
+                }
+                if (!current) {
+                    var pos = window.scrollY + 120;
+                    sections.forEach(function (s) { if (s.offsetTop <= pos) current = s; });
+                    // At the page bottom the tail sections are as visible as they get:
+                    // clamp to the last one so it can activate at all.
+                    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4)
+                        current = sections[sections.length - 1] || current;
+                }
+                links.forEach(function (l) {
+                    if (current && l.getAttribute('href') === '#' + current.id) l.setAttribute('data-active', '');
+                    else l.removeAttribute('data-active');
+                });
+            }
+            if (window.__naviusSpy) window.removeEventListener('scroll', window.__naviusSpy);
+            window.__naviusSpy = onScroll;
+            window.addEventListener('scroll', onScroll, { passive: true });
+            if (!window.__naviusTocClear) {
+                window.__naviusTocClear = function () {
+                    if (window.__naviusTocTarget) { window.__naviusTocTarget = null; if (window.__naviusSpy) window.__naviusSpy(); }
+                };
+                ['wheel', 'touchmove', 'keydown'].forEach(function (ev) { window.addEventListener(ev, window.__naviusTocClear, { passive: true }); });
+            }
+            window.__naviusTocTarget = null;
+            onScroll();
+        }
+    </script>
+
+    <link href="app.css?v=639186973242205284" rel="stylesheet" />
+    <link href="_content/Navius.Motion/navius-motion.css" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <style>
+        /* Brand type (Navius design system): Helvetica Neue 400/500, system mono for
+           meta and code. No webfonts. */
+        html, body { margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, ui-sans-serif, system-ui, sans-serif; }
+        .navius-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+        /* Long unbreakable tokens in inline code (paths, identifiers) must wrap on
+           small screens instead of forcing horizontal page overflow. Code inside
+           pre keeps its own horizontal scroll. */
+        :not(pre) > code { overflow-wrap: anywhere; }
+        /* Dark code surface used across docs. */
+        .navius-surface { background: #201f1c; }
+        ::selection { background: color-mix(in oklch, var(--primary) 30%, transparent); }
+
+        /* Slim themed scrollbars. Chromium/WebKit get the custom pill thumb; Firefox
+           (which ignores the webkit-scrollbar pseudos) gets the standard thin themed
+           scrollbar, scoped to Firefox so it doesn't disable the WebKit styling. */
+        @supports (-moz-appearance: none) {
+            * {
+                scrollbar-width: thin;
+                scrollbar-color: color-mix(in oklch, var(--foreground) 25%, transparent) transparent;
+            }
+        }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            border-radius: 9999px;
+            background: color-mix(in oklch, var(--foreground) 20%, transparent);
+            border: 3px solid var(--background);
+        }
+        ::-webkit-scrollbar-thumb:hover { background: color-mix(in oklch, var(--foreground) 35%, transparent); }
+        ::-webkit-scrollbar-corner { background: transparent; }
+
+        /* Hotkey label: ⌘ on Mac, Ctrl elsewhere (default to non-Mac before JS runs). */
+        .navius-mac { display: none; }
+        [data-os="mac"] .navius-mac { display: inline; }
+        [data-os="mac"] .navius-other { display: none; }
+        /* Scroll-spy: active section in the 'On this page' TOC (clerk-style rail). */
+        [data-toc] a[data-active] { color: var(--primary); border-color: var(--primary); font-weight: 500; }
+
+        /* Code copy buttons: swap icons while the copied state is set; markdown-rendered
+           pre blocks get an injected button (naviusEnhancePre) shown on hover. */
+        .navius-copy .navius-check-icon { display: none; }
+        .navius-copy[data-copied] .navius-check-icon { display: block; }
+        .navius-copy[data-copied] .navius-copy-icon { display: none; }
+        .navius-pre-copy { position: absolute; right: .5rem; top: .5rem; display: grid; place-items: center; height: 1.5rem; width: 1.5rem; color: var(--muted-foreground); background: transparent; border: 0; cursor: pointer; opacity: 0; transition: opacity .15s, color .15s; border-radius: .375rem; }
+        .navius-pre-copy svg { height: .875rem; width: .875rem; }
+        pre:hover > .navius-pre-copy, .navius-pre-copy:focus-visible { opacity: 1; }
+        .navius-pre-copy:hover { color: var(--foreground); }
+
+        /* Markdown (Markdig) output: a compact technical prose style. */
+        .prose-navius { color: var(--foreground); line-height: 1.7; }
+        .prose-navius h1 { font-size: 2.25rem; font-weight: 700; letter-spacing: -.02em; margin: 0 0 .5rem; }
+        .prose-navius h2 { font-size: 1.4rem; font-weight: 600; letter-spacing: -.01em; margin: 2.5rem 0 .75rem; scroll-margin-top: 5rem; }
+        .prose-navius h3 { font-size: 1.1rem; font-weight: 600; margin: 1.75rem 0 .5rem; }
+        .prose-navius p { margin: .85rem 0; color: color-mix(in oklch, var(--foreground) 75%, var(--muted-foreground)); }
+        .prose-navius a { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
+        .prose-navius ul { list-style: disc; padding-left: 1.4rem; margin: .85rem 0; }
+        .prose-navius ol { list-style: decimal; padding-left: 1.4rem; margin: .85rem 0; }
+        .prose-navius li { margin: .35rem 0; color: var(--muted-foreground); }
+        .prose-navius strong { color: var(--foreground); font-weight: 600; }
+        .prose-navius code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85em; background: color-mix(in oklch, var(--muted) 60%, transparent); padding: .1rem .35rem; border-radius: 4px; }
+        .prose-navius pre { background: oklch(.16 0 0); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 1.25rem 0; }
+        .prose-navius pre code { background: none; padding: 0; font-size: .8125rem; color: #e4e4e7; }
+        .prose-navius blockquote { border-left: 2px solid var(--border); padding-left: 1rem; color: var(--muted-foreground); margin: 1rem 0; }
+        .prose-navius hr { border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }
+    </style>
+
+    <title>Orchestration - Navius</title></head>
+
+<body class="bg-background text-foreground antialiased"><div class="min-h-screen"><aside class="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border bg-muted/40 lg:flex"><div class="px-4 pt-4"><a href="/" class="flex items-center text-foreground transition-opacity hover:opacity-80" style="gap:10px"><svg viewBox="0 0 64 64" fill="none" style="height:22px;width:22px;flex:none" aria-hidden="true"><circle cx="10" cy="10" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="24.7" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="39.3" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="54" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="24.7" cy="24.7" r="6" fill="currentColor" fill-opacity="0.6"></circle>
+        <circle cx="39.3" cy="39.3" r="6" fill="currentColor" fill-opacity="0.8"></circle>
+        <circle cx="54" cy="10" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="24.7" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="39.3" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="54" r="6" fill="currentColor"></circle></svg>
+                <span class="text-[18px] font-medium leading-none tracking-[-0.02em]">navius</span>
+                <span class="rounded-md border border-border px-1.5 py-0.5 navius-code text-[10px] text-muted-foreground">primitives</span></a></div>
+        <div class="px-3 pt-3"><button type="button" onclick="(window.naviusOpenSearch||function(){})()" aria-label="Search" class="flex h-9 w-full items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:text-foreground"><svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                <span>Search</span>
+                <span class="ml-auto flex items-center gap-1"><kbd class="navius-code rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px]"><span class="navius-mac">⌘</span><span class="navius-other">Ctrl</span></kbd>
+                    <kbd class="navius-code rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px]">K</kbd></span></button></div>
+        <div class="flex-1 overflow-y-auto px-3 py-4"><nav class="space-y-7 text-sm"><div><p class="mb-2 px-2.5 text-xs font-medium text-muted-foreground">Overview</p>
+        <ul class="space-y-0.5"><li><a href="/docs/introduction" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Introduction</a></li>
+            <li><a href="/docs/getting-started" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Getting started</a></li>
+            <li><a href="/docs/styling" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Styling</a></li>
+            <li><a href="/docs/animation" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Animation</a></li>
+            <li><a href="/docs/composition" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Composition</a></li>
+            <li><a href="/docs/server-side-rendering" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Server &amp; WebAssembly</a></li>
+            <li><a href="/docs/distribution" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Distribution &amp; CLI</a></li>
+            <li><a href="/docs/releases" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Releases</a></li></ul></div>
+    <div><p class="mb-2 px-2.5 text-xs font-medium text-muted-foreground">Components</p>
+        <ul class="space-y-0.5"><li><a href="/docs/components/accordion" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Accordion</a></li>
+            <li><a href="/docs/components/alert-dialog" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Alert Dialog</a></li>
+            <li><a href="/docs/components/aspect-ratio" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Aspect Ratio</a></li>
+            <li><a href="/docs/components/autocomplete" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Autocomplete</a></li>
+            <li><a href="/docs/components/avatar" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Avatar</a></li>
+            <li><a href="/docs/components/checkbox" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Checkbox</a></li>
+            <li><a href="/docs/components/collapsible" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Collapsible</a></li>
+            <li><a href="/docs/components/combobox" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Combobox</a></li>
+            <li><a href="/docs/components/context-menu" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Context Menu</a></li>
+            <li><a href="/docs/components/dialog" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Dialog</a></li>
+            <li><a href="/docs/components/form" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Form</a></li>
+            <li><a href="/docs/components/label" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Label</a></li>
+            <li><a href="/docs/components/menu" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Menu</a></li>
+            <li><a href="/docs/components/menubar" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Menubar</a></li>
+            <li><a href="/docs/components/message-scroller" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Message Scroller</a></li>
+            <li><a href="/docs/components/navigation-menu" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Navigation Menu</a></li>
+            <li><a href="/docs/components/one-time-password-field" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">One-Time Password Field</a></li>
+            <li><a href="/docs/components/password-toggle-field" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Password Toggle Field</a></li>
+            <li><a href="/docs/components/popover" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Popover</a></li>
+            <li><a href="/docs/components/preview-card" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Preview Card</a></li>
+            <li><a href="/docs/components/progress" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Progress</a></li>
+            <li><a href="/docs/components/radio-group" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Radio Group</a></li>
+            <li><a href="/docs/components/scroll-area" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Scroll Area</a></li>
+            <li><a href="/docs/components/select" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Select</a></li>
+            <li><a href="/docs/components/separator" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Separator</a></li>
+            <li><a href="/docs/components/slider" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Slider</a></li>
+            <li><a href="/docs/components/switch" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Switch</a></li>
+            <li><a href="/docs/components/tabs" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Tabs</a></li>
+            <li><a href="/docs/components/toast" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Toast</a></li>
+            <li><a href="/docs/components/toggle" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Toggle</a></li>
+            <li><a href="/docs/components/toggle-group" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Toggle Group</a></li>
+            <li><a href="/docs/components/toolbar" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Toolbar</a></li>
+            <li><a href="/docs/components/tooltip" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Tooltip</a></li></ul></div>
+    <div><p class="mb-2 px-2.5 text-xs font-medium text-muted-foreground">Motion</p>
+        <ul class="space-y-0.5"><li><a href="/docs/motion" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Overview</a></li>
+            <li><a href="/docs/motion/springs" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Springs</a></li>
+            <li><a href="/docs/motion/presence" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Presence</a></li>
+            <li><a href="/docs/motion/gestures" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Gestures</a></li>
+            <li><a href="/docs/motion/micro" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Micro</a></li>
+            <li><a href="/docs/motion/auto-animate" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Auto-Animate</a></li>
+            <li><a href="/docs/motion/orchestration" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground !bg-primary/10 !text-primary font-medium" aria-current="page">Orchestration</a></li></ul></div>
+    <div><p class="mb-2 px-2.5 text-xs font-medium text-muted-foreground">Utilities</p>
+        <ul class="space-y-0.5"><li><a href="/docs/utilities/accessible-icon" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Accessible Icon</a></li>
+            <li><a href="/docs/utilities/direction-provider" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Direction Provider</a></li>
+            <li><a href="/docs/utilities/portal" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Portal</a></li>
+            <li><a href="/docs/utilities/slot" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Slot</a></li>
+            <li><a href="/docs/utilities/visually-hidden" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Visually Hidden</a></li></ul></div></nav></div>
+        <div class="flex items-center justify-between border-t border-border px-4 py-3"><a href="https://github.com/lzitser23/navius" aria-label="GitHub" class="text-muted-foreground transition-colors hover:text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.58.23 2.75.11 3.04.73.81 1.18 1.83 1.18 3.09 0 4.42-2.7 5.39-5.27 5.68.41.36.78 1.06.78 2.14 0 1.54-.01 2.79-.01 3.17 0 .3.2.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path></svg></a>
+            <button type="button" onclick="toggleTheme()" aria-label="Toggle theme" class="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground"><svg class="h-4 w-4 dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+                <svg class="hidden h-4 w-4 dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg></button></div></aside>
+
+    <div class="lg:pl-64"><header class="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur lg:hidden"><a href="/" class="flex items-center text-foreground" style="gap:10px"><svg viewBox="0 0 64 64" fill="none" style="height:22px;width:22px;flex:none" aria-hidden="true"><circle cx="10" cy="10" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="24.7" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="39.3" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="54" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="24.7" cy="24.7" r="6" fill="currentColor" fill-opacity="0.6"></circle>
+        <circle cx="39.3" cy="39.3" r="6" fill="currentColor" fill-opacity="0.8"></circle>
+        <circle cx="54" cy="10" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="24.7" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="39.3" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="54" r="6" fill="currentColor"></circle></svg>
+                <span class="text-[18px] font-medium leading-none tracking-[-0.02em]">navius</span></a>
+            <div class="ml-auto flex items-center gap-2"><button type="button" onclick="(window.naviusOpenSearch||function(){})()" aria-label="Search" class="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg></button>
+                <button type="button" onclick="toggleTheme()" aria-label="Toggle theme" class="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground"><svg class="h-4 w-4 dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+                    <svg class="hidden h-4 w-4 dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg></button></div></header>
+
+        <div class="mx-auto flex max-w-6xl gap-10 px-4 sm:px-6"><main class="min-w-0 flex-1 py-10"><div class="mx-auto max-w-3xl">
+
+
+
+<div class="space-y-2"><p class="navius-code text-xs uppercase tracking-widest text-muted-foreground/60">Motion / Orchestration</p>
+    <h1 class="text-4xl font-bold tracking-tight">Orchestration</h1>
+    <p class="text-lg text-muted-foreground">Coordinating motion across elements and time: reveal on scroll, stagger a group, compose an imperative timeline, slide a selection marker, and cross-fade same-document navigations. Every curve is still a C#-solved spring baked to <code class="navius-code rounded bg-muted/50 px-1 py-0.5 text-sm text-foreground">linear()</code>; JS only executes.</p></div>
+
+<h2 id="in-view" class="mt-12 scroll-mt-20 text-xl font-semibold tracking-tight">In view</h2>
+<p class="my-3 text-muted-foreground">Reveal an element the first time it scrolls into view. The CSS tier does the animating: each <code class="navius-code text-foreground">.motion-in-view-*</code> class starts the element hidden and transitions it in when <code class="navius-code text-foreground">[data-in-view]</code> is set. An <code class="navius-code text-foreground">IntersectionObserver</code> from <code class="navius-code text-foreground">CreateInViewAsync</code> sets that attribute, so the reveal itself is zero per-frame JS. Splat the class with <code class="navius-code text-foreground">Motion.InView</code>, then attach the observer.</p>
+
+<div class="not-prose my-6"><div class="flex min-h-[13rem] flex-wrap items-center justify-center gap-3 rounded-xl border border-border bg-gradient-to-b from-muted/20 to-background p-10"><!--Blazor:{"type":"webassembly","prerenderId":"1d2f7d4b0ecc43e68a083586c2801227","key":{"locationHash":"3F4AAA310294017ACE4AFADA3058B2FF68D0CF769FCCA89E6346E326447B0D82:13","formattedComponentKey":""},"assembly":"Navius.Docs.Client","typeName":"Navius.Docs.Client.Demos.MotionInViewDemo","parameterDefinitions":"W10=","parameterValues":"W10="}--><div class="flex flex-col items-center gap-4"><button type="button" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+        Replay reveal
+    </button>
+
+    <div class="grid grid-cols-3 gap-3"><div class="motion-in-view-fade-up grid h-20 w-20 place-items-center rounded-xl border border-border bg-card text-sm text-card-foreground shadow-sm">1</div><div class="motion-in-view-fade-up grid h-20 w-20 place-items-center rounded-xl border border-border bg-card text-sm text-card-foreground shadow-sm">2</div><div class="motion-in-view-fade-up grid h-20 w-20 place-items-center rounded-xl border border-border bg-card text-sm text-card-foreground shadow-sm">3</div><div class="motion-in-view-fade-up grid h-20 w-20 place-items-center rounded-xl border border-border bg-card text-sm text-card-foreground shadow-sm">4</div><div class="motion-in-view-fade-up grid h-20 w-20 place-items-center rounded-xl border border-border bg-card text-sm text-card-foreground shadow-sm">5</div><div class="motion-in-view-fade-up grid h-20 w-20 place-items-center rounded-xl border border-border bg-card text-sm text-card-foreground shadow-sm">6</div></div></div><!--Blazor:{"prerenderId":"1d2f7d4b0ecc43e68a083586c2801227"}--></div><div data-codeblock class="group relative my-5 overflow-hidden rounded-lg border border-border navius-surface mt-3"><div class="flex items-center justify-between border-b border-white/[0.06] px-4 py-2"><span class="navius-code text-xs text-muted-foreground"></span>
+            <span class="flex items-center gap-2"><span class="navius-code text-[10px] uppercase tracking-widest text-muted-foreground/60">razor</span><button type="button" onclick="naviusCopyCode(this)" aria-label="Copy code" class="navius-copy grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground relative"><svg class="navius-copy-icon h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+        <svg class="navius-check-icon h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></span></div><pre class="overflow-x-auto p-4 text-[13px] leading-relaxed navius-code text-zinc-200"><code>@using Navius.Motion&#xA;@inject IJSRuntime JS&#xA;&#xA;@* CSS tier: the reveal class on each element. *@&#xA;&lt;div @ref=&quot;_group&quot; class=&quot;grid grid-cols-3 gap-3&quot;&gt;&#xA;    @foreach (var card in cards)&#xA;    {&#xA;        &lt;div @attributes=&quot;Motion.InView(Preset.FadeUp)&quot;&gt;@card&lt;/div&gt;&#xA;    }&#xA;&lt;/div&gt;&#xA;&#xA;@code {&#xA;    protected override async Task OnAfterRenderAsync(bool firstRender)&#xA;    {&#xA;        if (!firstRender) return;&#xA;        var interop = new MotionJsInterop(JS);&#xA;        // One observer reveals the group and staggers the children.&#xA;        _reveal = await interop.CreateInViewAsync(&#xA;            _group, new InViewOptions(Amount: 0, Once: true,&#xA;                Stagger: StaggerOptions.Of(90, StaggerFrom.First)));&#xA;    }&#xA;}</code></pre></div></div>
+
+<p class="my-3 text-muted-foreground">There is one <code class="navius-code text-foreground">.motion-in-view-*</code> class per preset (<code class="navius-code text-foreground">fade</code>, <code class="navius-code text-foreground">fade-up</code>, <code class="navius-code text-foreground">zoom</code>, <code class="navius-code text-foreground">pop</code>, the four slides), matching the presence set. Passing a <code class="navius-code text-foreground">Stagger</code> to the options makes the same intersection fan the attribute out to the direct children, with each child's delay set up front, so a whole group reveals in sequence off one observer.</p>
+<h3 id="api-inview-splat" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">Motion.InView</h3><p class="mt-1 text-sm text-muted-foreground">Splat helper (CSS tier): the .motion-in-view-&lt;preset&gt; class plus an optional delay var. Attach the observer separately.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">Motion.InView(Preset preset, double delayMs = 0)</td>
+                    <td>IReadOnlyDictionary&lt;string, object&gt;</td>
+                    <td>-</td></tr></tbody></table></div>
+<h3 id="api-inview-interop" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">MotionJsInterop</h3><p class="mt-1 text-sm text-muted-foreground">Sets data-in-view while the element intersects. The callback overload also reports coarse enter/leave edges via OnInView(bool).</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">CreateInViewAsync(ElementReference element, InViewOptions options)</td>
+                    <td>Task&lt;InViewMotion&gt;</td>
+                    <td>-</td></tr><tr><td class="text-foreground">CreateInViewAsync&lt;T&gt;(ElementReference element, InViewOptions options, DotNetObjectReference&lt;T&gt; callback)</td>
+                    <td>Task&lt;InViewMotion&gt;</td>
+                    <td>-</td></tr></tbody></table></div>
+<h3 id="api-inview-options" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">InViewOptions</h3><p class="mt-1 text-sm text-muted-foreground">Serialized to camelCase. Amount is the visibility threshold (0 = any pixel, 1 = fully visible); Once keeps data-in-view after the first entry; a non-null Stagger fans the reveal out to the children.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">Amount</td>
+                    <td>double</td>
+                    <td>0</td></tr><tr><td class="text-foreground">Margin</td>
+                    <td>string</td>
+                    <td>&quot;0px&quot;</td></tr><tr><td class="text-foreground">Once</td>
+                    <td>bool</td>
+                    <td>false</td></tr><tr><td class="text-foreground">Stagger</td>
+                    <td>StaggerOptions?</td>
+                    <td>null</td></tr></tbody></table></div>
+<h3 id="api-inview-handle" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">InViewMotion</h3><p class="mt-1 text-sm text-muted-foreground">The live observer. RefreshAsync re-reads the child list after a staggered group&#x27;s children change (a no-op without a stagger); dispose to disconnect.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">RefreshAsync()</td>
+                    <td>Task</td>
+                    <td>-</td></tr><tr><td class="text-foreground">DisposeAsync()</td>
+                    <td>ValueTask</td>
+                    <td>-</td></tr></tbody></table></div>
+
+<h2 id="stagger" class="mt-12 scroll-mt-20 text-xl font-semibold tracking-tight">Stagger</h2>
+<p class="my-3 text-muted-foreground">A stagger is a per-child delay schedule written into <code class="navius-code text-foreground">--navius-motion-delay</code>, which the enter and in-view classes already read. <code class="navius-code text-foreground">MotionStagger.Delays</code> is the authoring surface (index-aligned delays in milliseconds); the same distance-from-anchor formula is duplicated in <code class="navius-code text-foreground">navius-motion.js</code> and kept in lock-step by a test. Use <code class="navius-code text-foreground">CreateStaggerAsync</code> to apply the vars to a group revealed by other means, or the <code class="navius-code text-foreground">Stagger</code> option above when the in-view observer drives the reveal.</p>
+<p class="my-3 text-muted-foreground">The <code class="navius-code text-foreground">From</code> anchor sets who moves first. <code class="navius-code text-foreground">Center</code> uses fractional distance for an even count (Motion's stagger semantics), so delays can be half-steps.</p>
+<div data-codeblock class="group relative my-5 overflow-hidden rounded-lg border border-border navius-surface"><div class="flex items-center justify-between border-b border-white/[0.06] px-4 py-2"><span class="navius-code text-xs text-muted-foreground"></span>
+            <span class="flex items-center gap-2"><span class="navius-code text-[10px] uppercase tracking-widest text-muted-foreground/60">csharp</span><button type="button" onclick="naviusCopyCode(this)" aria-label="Copy code" class="navius-copy grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground relative"><svg class="navius-copy-icon h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+        <svg class="navius-check-icon h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></span></div><pre class="overflow-x-auto p-4 text-[13px] leading-relaxed navius-code text-zinc-200"><code>// Authoring: the delay each child would take, index-aligned.&#xA;double[] delays = MotionStagger.Delays(count: 5, stepMs: 60, from: StaggerFrom.Center);&#xA;// -&gt; [120, 60, 0, 60, 120]  (center moves first)&#xA;&#xA;// Runtime: apply the vars to a group revealed by other means.&#xA;var stagger = await interop.CreateStaggerAsync(&#xA;    _container, StaggerOptions.Of(60, StaggerFrom.Center));&#xA;// after the children change:&#xA;await stagger.RefreshAsync();</code></pre></div>
+<h3 id="api-stagger" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">MotionStagger</h3><p class="mt-1 text-sm text-muted-foreground">The authoring/spec surface for the delay schedule.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">MotionStagger.Delays(int count, double stepMs, StaggerFrom from = StaggerFrom.First)</td>
+                    <td>double[]</td>
+                    <td>-</td></tr><tr><td class="text-foreground">StaggerFrom.ToToken()</td>
+                    <td>string</td>
+                    <td>-</td></tr></tbody></table></div>
+<h3 id="api-stagger-from" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">StaggerFrom</h3><p class="mt-1 text-sm text-muted-foreground">The anchor a stagger fans out from.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">StaggerFrom.First</td>
+                    <td>-</td>
+                    <td>first child moves first</td></tr><tr><td class="text-foreground">StaggerFrom.Last</td>
+                    <td>-</td>
+                    <td>last child moves first</td></tr><tr><td class="text-foreground">StaggerFrom.Center</td>
+                    <td>-</td>
+                    <td>centre moves first (half-steps for an even count)</td></tr></tbody></table></div>
+<h3 id="api-stagger-options" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">StaggerOptions</h3><p class="mt-1 text-sm text-muted-foreground">Serialized to camelCase. Build from a typed anchor with StaggerOptions.Of; pass to CreateStaggerAsync or as InViewOptions.Stagger.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">Step</td>
+                    <td>double</td>
+                    <td>50</td></tr><tr><td class="text-foreground">From</td>
+                    <td>string</td>
+                    <td>&quot;first&quot;</td></tr><tr><td class="text-foreground">StaggerOptions.Of(double step, StaggerFrom from)</td>
+                    <td>StaggerOptions</td>
+                    <td>-</td></tr></tbody></table></div>
+<h3 id="api-stagger-interop" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">MotionJsInterop</h3><p class="mt-1 text-sm text-muted-foreground">Set the per-child delay vars from a schedule, with no in-view coupling. RefreshAsync re-reads the child list.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">CreateStaggerAsync(ElementReference container, StaggerOptions options)</td>
+                    <td>Task&lt;StaggerMotion&gt;</td>
+                    <td>-</td></tr><tr><td class="text-foreground">StaggerMotion.RefreshAsync()</td>
+                    <td>Task</td>
+                    <td>-</td></tr></tbody></table></div>
+
+<h2 id="sequences" class="mt-12 scroll-mt-20 text-xl font-semibold tracking-tight">Sequences</h2>
+<p class="my-3 text-muted-foreground"><code class="navius-code text-foreground">MotionSequence</code> is the imperative plane: a fluent builder that composes a multi-element timeline in C# and compiles it to a serialized program the executor plays. Springs bake to <code class="navius-code text-foreground">linear()</code> at <code class="navius-code text-foreground">Build</code> time and every segment's <code class="navius-code text-foreground">at</code> offset resolves to an absolute start time, so the runtime just plays one WAAPI animation per segment on a shared clock. That makes <code class="navius-code text-foreground">Seek</code> a single scrub with no per-frame loop.</p>
+
+<div class="not-prose my-6"><div class="flex min-h-[13rem] flex-wrap items-center justify-center gap-3 rounded-xl border border-border bg-gradient-to-b from-muted/20 to-background p-10"><!--Blazor:{"type":"webassembly","prerenderId":"de2f9e16fa9b4ba686e168c44c43bdee","key":{"locationHash":"36013B2EB6BDC95B5C40EDB9FA0AA1EAE44AE4DA55CB760E21D9B991C5164B7F:76","formattedComponentKey":""},"assembly":"Navius.Docs.Client","typeName":"Navius.Docs.Client.Demos.MotionSequenceDemo","parameterDefinitions":"W10=","parameterValues":"W10="}--><div class="flex w-full max-w-sm flex-col items-stretch gap-4"><div class="flex h-28 items-end justify-center gap-3 rounded-xl border border-border bg-muted/20 p-3"><div data-seq="1" class="h-full w-10 rounded-md bg-primary"></div><div data-seq="2" class="h-full w-10 rounded-md bg-primary"></div><div data-seq="3" class="h-full w-10 rounded-md bg-primary"></div><div data-seq="4" class="h-full w-10 rounded-md bg-primary"></div></div>
+
+    <input type="range" min="0" max="0" step="10" value="0" aria-label="Scrub the timeline" class="w-full accent-primary" />
+
+    <div class="flex flex-wrap items-center justify-center gap-2"><button type="button" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Play
+        </button>
+        <button type="button" class="inline-flex h-9 items-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Pause
+        </button>
+        <button type="button" class="inline-flex h-9 items-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Reset
+        </button>
+        <span class="navius-code text-xs text-muted-foreground">0 ms</span></div></div><!--Blazor:{"prerenderId":"de2f9e16fa9b4ba686e168c44c43bdee"}--></div><div data-codeblock class="group relative my-5 overflow-hidden rounded-lg border border-border navius-surface mt-3"><div class="flex items-center justify-between border-b border-white/[0.06] px-4 py-2"><span class="navius-code text-xs text-muted-foreground"></span>
+            <span class="flex items-center gap-2"><span class="navius-code text-[10px] uppercase tracking-widest text-muted-foreground/60">razor</span><button type="button" onclick="naviusCopyCode(this)" aria-label="Copy code" class="navius-copy grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground relative"><svg class="navius-copy-icon h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+        <svg class="navius-check-icon h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></span></div><pre class="overflow-x-auto p-4 text-[13px] leading-relaxed navius-code text-zinc-200"><code>@inject IJSRuntime JS&#xA;&#xA;MotionFrame[] rise =&#xA;{&#xA;    new(Opacity: 0, Transform: &quot;translateY(40px)&quot;),&#xA;    new(Opacity: 1, Transform: &quot;translateY(0px)&quot;),&#xA;};&#xA;&#xA;// Four bars, each overlapping the previous by 100ms, on a snappy spring.&#xA;var program = new MotionSequence()&#xA;    .To(&quot;[data-seq=&#x27;1&#x27;]&quot;, rise, Spring.Snappy)&#xA;    .To(&quot;[data-seq=&#x27;2&#x27;]&quot;, rise, Spring.Snappy, at: &quot;-100&quot;)&#xA;    .To(&quot;[data-seq=&#x27;3&#x27;]&quot;, rise, Spring.Snappy, at: &quot;-100&quot;)&#xA;    .To(&quot;[data-seq=&#x27;4&#x27;]&quot;, rise, Spring.Snappy, at: &quot;-100&quot;)&#xA;    .Build();&#xA;&#xA;// Scope selectors to _root so several sequences never collide.&#xA;_sequence = await interop.RunSequenceAsync(program, _root);&#xA;await _sequence.PlayAsync();&#xA;await _sequence.SeekAsync(_sequence.DurationMs);   // scrub the shared clock</code></pre></div></div>
+
+<p class="my-3 text-muted-foreground">A segment's <code class="navius-code text-foreground">at</code> is resolved against a running cursor (the end of the previous segment):</p>
+<h3 id="api-at" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">The at grammar</h3><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">null</td>
+                    <td>-</td>
+                    <td>plays right after the previous segment</td></tr><tr><td class="text-foreground">&quot;&#x2B;120&quot;</td>
+                    <td>-</td>
+                    <td>starts 120ms after the previous segment</td></tr><tr><td class="text-foreground">&quot;-80&quot;</td>
+                    <td>-</td>
+                    <td>overlaps the previous segment by 80ms</td></tr><tr><td class="text-foreground">&quot;&lt;&quot;</td>
+                    <td>-</td>
+                    <td>starts together with the previous segment</td></tr><tr><td class="text-foreground">&quot;400&quot;</td>
+                    <td>-</td>
+                    <td>a bare number is an absolute start time</td></tr><tr><td class="text-foreground">&quot;label&quot;</td>
+                    <td>-</td>
+                    <td>starts at a Label&#x27;s marked time</td></tr></tbody></table></div>
+<div class="my-4 rounded-lg border border-border bg-muted/30 p-4"><p class="navius-code text-xs uppercase tracking-wider text-muted-foreground">Pause and resume</p>
+    <p class="mt-1.5 text-sm text-muted-foreground"><code class="navius-code text-foreground">Play</code> resumes from the current position, and segments that already finished hold on their final frame rather than replaying (they are filled both ways). A plain resume would otherwise re-run the finished segments while the rest continue and desync the timeline. To replay from the top, call <code class="navius-code text-foreground">Stop</code> (which rewinds every segment) and then <code class="navius-code text-foreground">Play</code>.</p></div>
+<p class="my-3 text-muted-foreground">Own the limits honestly: no per-frame or <code class="navius-code text-foreground">onUpdate</code> callbacks, no nested sequences, no infinite iterations, and one segment targets one element (a selector's first match, scoped to the run root, or an <code class="navius-code text-foreground">@ref</code>).</p>
+<h3 id="api-sequence" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">MotionSequence</h3><p class="mt-1 text-sm text-muted-foreground">The builder. To adds a segment; Label marks the cursor for a later at; Build compiles to a MotionProgram.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">To(string selector, MotionFrame[] keyframes, Spring spring, string? at = null)</td>
+                    <td>MotionSequence</td>
+                    <td>-</td></tr><tr><td class="text-foreground">To(string selector, MotionFrame[] keyframes, double durationMs, string easing = &quot;linear&quot;, string? at = null)</td>
+                    <td>MotionSequence</td>
+                    <td>-</td></tr><tr><td class="text-foreground">To(ElementReference element, MotionFrame[] keyframes, Spring spring, string? at = null)</td>
+                    <td>MotionSequence</td>
+                    <td>-</td></tr><tr><td class="text-foreground">To(ElementReference element, MotionFrame[] keyframes, double durationMs, string easing = &quot;linear&quot;, string? at = null)</td>
+                    <td>MotionSequence</td>
+                    <td>-</td></tr><tr><td class="text-foreground">Label(string name)</td>
+                    <td>MotionSequence</td>
+                    <td>-</td></tr><tr><td class="text-foreground">Build()</td>
+                    <td>MotionProgram</td>
+                    <td>-</td></tr><tr><td class="text-foreground">ReduceMotion</td>
+                    <td>string</td>
+                    <td>&quot;user&quot;</td></tr></tbody></table></div>
+<h3 id="api-sequence-interop" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">MotionJsInterop</h3><p class="mt-1 text-sm text-muted-foreground">Play a compiled program. The root overload scopes selector targets to one element so several sequences never collide.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">RunSequenceAsync(MotionProgram program)</td>
+                    <td>Task&lt;MotionSequenceHandle&gt;</td>
+                    <td>-</td></tr><tr><td class="text-foreground">RunSequenceAsync(MotionProgram program, ElementReference root)</td>
+                    <td>Task&lt;MotionSequenceHandle&gt;</td>
+                    <td>-</td></tr></tbody></table></div>
+<h3 id="api-sequence-handle" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">MotionSequenceHandle</h3><p class="mt-1 text-sm text-muted-foreground">Drives the whole timeline. DurationMs is the resolved total length; dispose to cancel every segment.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">DurationMs</td>
+                    <td>double</td>
+                    <td>-</td></tr><tr><td class="text-foreground">PlayAsync()</td>
+                    <td>Task</td>
+                    <td>-</td></tr><tr><td class="text-foreground">PauseAsync()</td>
+                    <td>Task</td>
+                    <td>-</td></tr><tr><td class="text-foreground">SeekAsync(double ms)</td>
+                    <td>Task</td>
+                    <td>-</td></tr><tr><td class="text-foreground">StopAsync()</td>
+                    <td>Task</td>
+                    <td>-</td></tr><tr><td class="text-foreground">WaitForFinishAsync()</td>
+                    <td>Task</td>
+                    <td>-</td></tr><tr><td class="text-foreground">DisposeAsync()</td>
+                    <td>ValueTask</td>
+                    <td>-</td></tr></tbody></table></div>
+
+<h2 id="selection" class="mt-12 scroll-mt-20 text-xl font-semibold tracking-tight">Selection indicator</h2>
+<p class="my-3 text-muted-foreground"><code class="navius-code text-foreground">NaviusSelectionIndicator</code> is a standalone spring-animated marker (the Tabs and NavigationMenu indicator math, generalized). Place it inside the container it should track, give that container <code class="navius-code text-foreground">position: relative</code>, pass the container's <code class="navius-code text-foreground">@ref</code>, and change the <code class="navius-code text-foreground">Active</code> token whenever the active element changes. The marker slides to the element matching <code class="navius-code text-foreground">ActiveSelector</code>: position rides a compositor transform and its size animates, so a pill or underline tracks items of differing size. It is resize-aware.</p>
+
+<div class="not-prose my-6"><div class="flex min-h-[13rem] flex-wrap items-center justify-center gap-3 rounded-xl border border-border bg-gradient-to-b from-muted/20 to-background p-10"><!--Blazor:{"type":"webassembly","prerenderId":"7737314290644c1089b34892b870d920","key":{"locationHash":"3D845CCA58EE00AFA59C10C8A8025A05E285D71640ABA0EAECC27B0C18F3F2AD:109","formattedComponentKey":""},"assembly":"Navius.Docs.Client","typeName":"Navius.Docs.Client.Demos.MotionSelectionDemo","parameterDefinitions":"W10=","parameterValues":"W10="}--><div class="relative inline-flex items-center gap-1 rounded-xl border border-border bg-muted p-1"><div data-navius-selection-indicator class="pointer-events-none rounded-lg bg-primary shadow-sm"></div><button type="button" data-active="" class="relative z-10 rounded-lg px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors data-[active]:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">Overview</button><button type="button" class="relative z-10 rounded-lg px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors data-[active]:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">Activity</button><button type="button" class="relative z-10 rounded-lg px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors data-[active]:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">Settings</button><button type="button" class="relative z-10 rounded-lg px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors data-[active]:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">Members</button></div><!--Blazor:{"prerenderId":"7737314290644c1089b34892b870d920"}--></div><div data-codeblock class="group relative my-5 overflow-hidden rounded-lg border border-border navius-surface mt-3"><div class="flex items-center justify-between border-b border-white/[0.06] px-4 py-2"><span class="navius-code text-xs text-muted-foreground"></span>
+            <span class="flex items-center gap-2"><span class="navius-code text-[10px] uppercase tracking-widest text-muted-foreground/60">razor</span><button type="button" onclick="naviusCopyCode(this)" aria-label="Copy code" class="navius-copy grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground relative"><svg class="navius-copy-icon h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+        <svg class="navius-check-icon h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></span></div><pre class="overflow-x-auto p-4 text-[13px] leading-relaxed navius-code text-zinc-200"><code>&lt;div @ref=&quot;_row&quot; class=&quot;relative inline-flex gap-1&quot;&gt;&#xA;    &lt;NaviusSelectionIndicator Container=&quot;_row&quot; Active=&quot;_selected&quot; Spring=&quot;Spring.Snappy&quot;&#xA;                              class=&quot;pointer-events-none rounded-lg bg-primary&quot; /&gt;&#xA;    @for (var i = 0; i &lt; labels.Length; i&#x2B;&#x2B;)&#xA;    {&#xA;        var index = i;&#xA;        &lt;button data-active=&quot;@(_selected == index ? &quot;&quot; : null)&quot;&#xA;                @onclick=&quot;() =&gt; _selected = index&quot;&gt;@labels[index]&lt;/button&gt;&#xA;    }&#xA;&lt;/div&gt;</code></pre></div></div>
+
+<h3 id="api-selection" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">NaviusSelectionIndicator</h3><p class="mt-1 text-sm text-muted-foreground">Renders one div (a single element, per ADR-0003); style it via splat. It self-wires once the Container ref is populated.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">Container</td>
+                    <td>ElementReference (EditorRequired)</td>
+                    <td>-</td></tr><tr><td class="text-foreground">Active</td>
+                    <td>object?</td>
+                    <td>-</td></tr><tr><td class="text-foreground">ActiveSelector</td>
+                    <td>string</td>
+                    <td>&quot;[data-active]&quot;</td></tr><tr><td class="text-foreground">Spring</td>
+                    <td>Spring</td>
+                    <td>Spring.Snappy</td></tr><tr><td class="text-foreground">Axis</td>
+                    <td>string</td>
+                    <td>&quot;both&quot;</td></tr><tr><td class="text-foreground">ReduceMotion</td>
+                    <td>string</td>
+                    <td>&quot;user&quot;</td></tr><tr><td class="text-foreground">Attributes</td>
+                    <td>IDictionary&lt;string, object&gt;? (splat)</td>
+                    <td>-</td></tr></tbody></table></div>
+<p class="my-3 text-muted-foreground">To drive the marker yourself, the interop mirrors the component: <code class="navius-code text-foreground">CreateSelectionIndicatorAsync</code> with options built by <code class="navius-code text-foreground">MotionPrograms.SelectionIndicator</code> (spring baked to a <code class="navius-code text-foreground">linear()</code> easing), then call <code class="navius-code text-foreground">UpdateAsync</code> after the active element changes.</p>
+<h3 id="api-selection-options" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">SelectionIndicatorOptions</h3><p class="mt-1 text-sm text-muted-foreground">Serialized to camelCase. Axis is x, y or both; Easing is the baked spring the marker moves with. Build with MotionPrograms.SelectionIndicator.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">CreateSelectionIndicatorAsync(ElementReference container, ElementReference indicator, SelectionIndicatorOptions options)</td>
+                    <td>Task&lt;SelectionIndicatorMotion&gt;</td>
+                    <td>-</td></tr><tr><td class="text-foreground">MotionPrograms.SelectionIndicator(Spring? spring = null, string activeSelector = &quot;[data-active]&quot;, string axis = &quot;both&quot;, string reduceMotion = &quot;user&quot;)</td>
+                    <td>SelectionIndicatorOptions</td>
+                    <td>-</td></tr><tr><td class="text-foreground">SelectionIndicatorMotion.UpdateAsync()</td>
+                    <td>Task</td>
+                    <td>-</td></tr></tbody></table></div>
+
+<h2 id="page-transitions" class="mt-12 scroll-mt-20 text-xl font-semibold tracking-tight">Page transitions</h2>
+<div class="my-4 rounded-lg border border-border bg-muted/30 p-4"><p class="navius-code text-xs uppercase tracking-wider text-muted-foreground">Experimental</p>
+    <p class="mt-1.5 text-sm text-muted-foreground"><code class="navius-code text-foreground">NaviusPageTransition</code> is experimental: treat the API surface as unstable. It is scoped to same-document navigation only. Where the View Transition API is unsupported, or under <code class="navius-code text-foreground">prefers-reduced-motion</code>, navigation falls back to instant with no visual effect.</p></div>
+<p class="my-3 text-muted-foreground">Wrap the region whose content changes across navigations (typically the router region) in one <code class="navius-code text-foreground">NaviusPageTransition</code>. It registers a <code class="navius-code text-foreground">NavigationManager</code> location-changing handler and snapshots the change through <code class="navius-code text-foreground">document.startViewTransition</code>. Because Blazor renders the new page through its own cycle rather than inside the transition callback, the handler blocks the navigation until the browser has captured the old snapshot, then resolves the transition once the new render has settled. Use one wrapper per app (a single in-flight transition).</p>
+<div data-codeblock class="group relative my-5 overflow-hidden rounded-lg border border-border navius-surface"><div class="flex items-center justify-between border-b border-white/[0.06] px-4 py-2"><span class="navius-code text-xs text-muted-foreground"></span>
+            <span class="flex items-center gap-2"><span class="navius-code text-[10px] uppercase tracking-widest text-muted-foreground/60">razor</span><button type="button" onclick="naviusCopyCode(this)" aria-label="Copy code" class="navius-copy grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground relative"><svg class="navius-copy-icon h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+        <svg class="navius-check-icon h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></span></div><pre class="overflow-x-auto p-4 text-[13px] leading-relaxed navius-code text-zinc-200"><code>@* Wrap the router region once, near the app root. Experimental; same-document only. *@&#xA;&lt;NaviusPageTransition&gt;&#xA;    &lt;Router AppAssembly=&quot;@typeof(App).Assembly&quot;&gt;&#xA;        ...&#xA;    &lt;/Router&gt;&#xA;&lt;/NaviusPageTransition&gt;</code></pre></div>
+<h3 id="api-page-transition" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">NaviusPageTransition</h3><p class="mt-1 text-sm text-muted-foreground">Same-document transitions for the WASM router. Reduced or unsupported falls back to instant navigation.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">ChildContent</td>
+                    <td>RenderFragment?</td>
+                    <td>-</td></tr><tr><td class="text-foreground">ReduceMotion</td>
+                    <td>string</td>
+                    <td>&quot;user&quot;</td></tr><tr><td class="text-foreground">SettleFrames</td>
+                    <td>int</td>
+                    <td>2</td></tr></tbody></table></div>
+                    <nav aria-label="Pages" class="mt-14 grid gap-3 border-t border-border pt-6 sm:grid-cols-2"><a href="/docs/motion/auto-animate" class="group flex flex-col gap-1 rounded-lg border border-border p-4 transition-colors hover:border-primary/40 hover:bg-accent/50"><span class="flex items-center gap-1 text-xs text-muted-foreground"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
+                    Previous
+                </span>
+                <span class="text-sm font-medium transition-colors group-hover:text-primary">Auto-Animate</span></a><a href="/docs/utilities/accessible-icon" class="group flex flex-col items-end gap-1 rounded-lg border border-border p-4 text-right transition-colors hover:border-primary/40 hover:bg-accent/50 sm:col-start-2"><span class="flex items-center gap-1 text-xs text-muted-foreground">
+                    Next
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></span>
+                <span class="text-sm font-medium transition-colors group-hover:text-primary">Accessible Icon</span></a></nav></div></main>
+            <aside class="sticky top-0 hidden h-screen w-56 shrink-0 overflow-y-auto py-10 xl:block"><nav data-toc class="text-[13px]"><p class="mb-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M7 12h14"></path><path d="M11 18h10"></path></svg>
+            On this page
+        </p>
+        <ul><li><a href="#in-view" class="block border-l-2 border-border py-1 pl-3 text-muted-foreground transition-colors hover:text-foreground">In view</a></li><li><a href="#stagger" class="block border-l-2 border-border py-1 pl-3 text-muted-foreground transition-colors hover:text-foreground">Stagger</a></li><li><a href="#sequences" class="block border-l-2 border-border py-1 pl-3 text-muted-foreground transition-colors hover:text-foreground">Sequences</a></li><li><a href="#selection" class="block border-l-2 border-border py-1 pl-3 text-muted-foreground transition-colors hover:text-foreground">Selection indicator</a></li><li><a href="#page-transitions" class="block border-l-2 border-border py-1 pl-3 text-muted-foreground transition-colors hover:text-foreground">Page transitions</a></li></ul></nav></aside></div></div></div>
+
+<!--Blazor:{"type":"webassembly","prerenderId":"50e5e4620cd148939cbc6bb38fe524be","key":{"locationHash":"F023DDA1E3B4AAC6131E5C511443036FA45AAD611F955EE2FDCE82C253183131:53","formattedComponentKey":""},"assembly":"Navius.Docs.Client","typeName":"Navius.Docs.Client.Search.SearchPalette","parameterDefinitions":"W10=","parameterValues":"W10="}--><!--Blazor:{"prerenderId":"50e5e4620cd148939cbc6bb38fe524be"}-->
+
+<div id="blazor-error-ui" style="display:none;position:fixed;bottom:0;left:0;right:0;padding:0.75rem;background:#b91c1c;color:#fff;z-index:100">
+    An unhandled error has occurred.
+    <a href class="reload" style="text-decoration:underline">Reload</a>
+    <a class="dismiss">🗙</a></div>
+        
+    <script src="_framework/blazor.web.js"></script>
+    <script>
+        // Re-run the scroll-spy + pre copy-button enhancer on first load and after
+        // each enhanced navigation.
+        naviusInitScrollSpy();
+        naviusEnhancePre();
+        try { Blazor.addEventListener('enhancedload', function () { naviusInitScrollSpy(); naviusEnhancePre(); }); } catch (e) { }
+    </script></body></html><!--Blazor-WebAssembly-Component-State:eyJfX2ludGVybmFsX19BbnRpZm9yZ2VyeVJlcXVlc3RUb2tlbiI6ImV5SjJZV3gxWlNJNklrTm1SRW80VUVzdFV6VmlPVEpGTlV0MVkxQTVaVmxzTlZNeWQyOWpkbHBXTTJsSlFrTnlha040TFhCTldVdEpaMDF4TXpoTE5tWkpibmN3UXpNdExXRjRSV3BYTUVkZmIxTjVZMkY2VVhoVk9IRjFaMmMxUWpkRE9XVnhRMmxxVlRGMVVYSldNRm95V25oVlJXSklWMWhVVERCTk0wbzJOVUZmZEUxYVZrTXROVWsxVnpWQ1VVMW9YMlZmWDJZd2MxVk1la0ZuV0dsek5FZHZJaXdpWm05eWJVWnBaV3hrVG1GdFpTSTZJbDlmVW1WeGRXVnpkRlpsY21sbWFXTmhkR2x2YmxSdmEyVnVJbjA9In0=-->

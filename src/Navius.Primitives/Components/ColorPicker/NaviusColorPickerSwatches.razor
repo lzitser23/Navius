@@ -1,0 +1,61 @@
+@namespace Navius.Primitives.Components.ColorPicker
+@inherits ColorPickerPart
+
+@*
+    Optional preset swatch grid (APG listbox). Auto-generates NaviusColorPickerSwatchItem
+    children from the Colors list, or accepts explicit children. Home/End jump to
+    the ends; the items own Arrow navigation + selection.
+*@
+
+<CascadingValue Value="_swatches" IsFixed="true">
+    <div role="listbox"
+         aria-label="@AriaLabel"
+         aria-orientation="horizontal"
+         data-navius-color-picker-swatches
+         @onkeydown="OnKeyDownAsync"
+         @attributes="Attributes">
+        @if (ChildContent is not null)
+        {
+            @ChildContent
+        }
+        else if (Colors is not null)
+        {
+            @foreach (var c in Colors)
+            {
+                <NaviusColorPickerSwatchItem Value="@c" />
+            }
+        }
+    </div>
+</CascadingValue>
+
+@code {
+    [Parameter] public string? AriaLabel { get; set; } = "Swatches";
+
+    /// <summary>Preset color strings to auto-render as options.</summary>
+    [Parameter] public IReadOnlyList<string>? Colors { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private SwatchesContext _swatches = default!;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _swatches = new SwatchesContext(Context);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Home")
+        {
+            await _swatches.MoveEdgeAsync(last: false);
+        }
+        else if (e.Key == "End")
+        {
+            await _swatches.MoveEdgeAsync(last: true);
+        }
+    }
+}

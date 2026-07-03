@@ -1,0 +1,192 @@
+@namespace Navius.Primitives.Components.MaskedInput
+@inherits ComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    MaskedInput: a caret-stable masked <input>. Controlled via @bind-Value or uncontrolled
+    via DefaultValue. On every input the engine's createMaskedSelection bridge reads the
+    proposed value + selection atomically; C# runs the pipeline (preprocessors → walk the mask
+    → postprocessors → editable-char caret reposition) and writes value + selection back in one
+    call. Because Blazor re-renders and rewrites the value attribute after the event (which would
+    otherwise reset the caret to the end), the computed selection is (re)applied in
+    OnAfterRenderAsync, which also forces the DOM back to the masked value when an edit is
+    rejected and the masked string is unchanged. Emits data-empty / data-disabled / data-invalid.
+*@
+
+<input @ref="_input"
+       value="@_display"
+       data-navius-masked-input
+       data-empty="@(string.IsNullOrEmpty(_unmasked) ? "" : null)"
+       data-disabled="@(Disabled ? "" : null)"
+       data-invalid="@(Invalid ? "" : null)"
+       disabled="@Disabled"
+       @oninput="OnInputAsync"
+       @attributes="Attributes" />
+
+@code {
+    /// <summary>The mask pattern: <c>0</c>=digit, <c>A</c>=letter, <c>*</c>=alnum, anything else is a fixed literal.</summary>
+    [Parameter] public string Mask { get; set; } = "";
+
+    /// <summary>Controlled masked value. Use <c>@bind-Value</c>.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial value (masked or raw; it is normalized through the mask).</summary>
+    [Parameter] public string? DefaultValue { get; set; }
+
+    /// <summary>The char shown for empty slots (e.g. <c>_</c>). Null shows nothing (lazy skeleton).</summary>
+    [Parameter] public char? Placeholder { get; set; }
+
+    /// <summary>True: trailing fixed tokens appear only as you reach them. False: eager.</summary>
+    [Parameter] public bool Lazy { get; set; } = true;
+
+    /// <summary>Reserved for type-over (replace) mode; accepted for parity, not yet wired to insertion.</summary>
+    [Parameter] public bool Overwrite { get; set; }
+
+    /// <summary>Ordered pure transforms run on the proposed state before masking.</summary>
+    [Parameter] public IReadOnlyList<Func<ElementState, ElementState>>? Preprocessors { get; set; }
+
+    /// <summary>Ordered pure transforms run on the masked state after masking (postfix, clamp …).</summary>
+    [Parameter] public IReadOnlyList<Func<ElementState, ElementState>>? Postprocessors { get; set; }
+
+    /// <summary>The raw editable characters (placeholder-filled, no literals) for consumers who want them.</summary>
+    [Parameter] public EventCallback<string> UnmaskedValueChanged { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Reflected as <c>data-invalid</c> for the skin (validation is the consumer's concern).</summary>
+    [Parameter] public bool Invalid { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _input;
+    private NaviusJsInterop? _interop;
+    private MaskedSelection? _masked;
+    private IReadOnlyList<MaskToken> _tokens = Array.Empty<MaskToken>();
+    private string _display = "";
+    private string _unmasked = "";
+    private bool _valueSet;
+    private bool _initialized;
+    private bool _hasPending;
+    private int _pendingStart;
+    private int _pendingEnd;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<string>(nameof(Value), out _))
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnParametersSet()
+    {
+        _tokens = MaskEngine.Parse(Mask ?? "");
+
+        if (!_initialized)
+        {
+            Reformat(_valueSet ? Value ?? "" : DefaultValue ?? "");
+            _initialized = true;
+            return;
+        }
+
+        // External (controlled) change: renormalize, leaving the caret at the end.
+        if (_valueSet && Value != _display)
+        {
+            Reformat(Value ?? "");
+        }
+    }
+
+    private void Reformat(string raw)
+    {
+        var (state, unmasked) = RunPipeline(new ElementState(raw, (raw.Length, raw.Length)));
+        _display = state.Value;
+        _unmasked = unmasked;
+    }
+
+    private (ElementState State, string Unmasked) RunPipeline(ElementState proposed)
+    {
+        var pre = proposed;
+        if (Preprocessors is not null)
+        {
+            foreach (var p in Preprocessors)
+            {
+                pre = p(pre);
+            }
+        }
+
+        var (value, start, end, unmasked) =
+            MaskEngine.Format(_tokens, pre.Value, pre.Selection.Start, pre.Selection.End, Lazy, Placeholder);
+
+        var masked = new ElementState(value, (start, end));
+        if (Postprocessors is not null)
+        {
+            foreach (var p in Postprocessors)
+            {
+                masked = p(masked);
+            }
+        }
+
+        return (masked, unmasked);
+    }
+
+    private async Task OnInputAsync()
+    {
+        if (_masked is null)
+        {
+            return; // engine unavailable → the field degrades to a plain input.
+        }
+
+        var dom = await _masked.GetStateAsync();
+        var (state, unmasked) = RunPipeline(new ElementState(dom.Value, (dom.SelectionStart, dom.SelectionEnd)));
+
+        _display = state.Value;
+        _unmasked = unmasked;
+        _pendingStart = state.Selection.Start;
+        _pendingEnd = state.Selection.End;
+        _hasPending = true;
+
+        await ValueChanged.InvokeAsync(_display);
+        await UnmaskedValueChanged.InvokeAsync(_unmasked);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _interop = new NaviusJsInterop(JS);
+                _masked = await _interop.CreateMaskedSelectionAsync(_input);
+            }
+            catch (JSException)
+            {
+                // Engine export unavailable: binding still works, caret stability does not.
+            }
+        }
+
+        if (_hasPending && _masked is not null)
+        {
+            _hasPending = false;
+            await _masked.SetStateAsync(_display, _pendingStart, _pendingEnd);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_masked is not null)
+        {
+            await _masked.DisposeAsync();
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+    }
+}
