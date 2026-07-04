@@ -81,6 +81,27 @@ public static class MotionPrograms
     }
 
     /// <summary>
+    /// Build <see cref="HeightAnimationOptions"/> for a height-animating container. A
+    /// <paramref name="spring"/> bakes to a <c>linear()</c> easing and its settle duration;
+    /// <paramref name="durationMs"/> and <paramref name="easing"/> override either
+    /// independently. With no spring the calm defaults (300ms, <c>ease</c>) apply.
+    /// <paramref name="expanded"/> is the initial mode: null (always track), true (open) or
+    /// false (collapsed).
+    /// </summary>
+    public static HeightAnimationOptions HeightAnimation(
+        Spring? spring = null, double? durationMs = null, string? easing = null,
+        string reduceMotion = "user", bool? expanded = null)
+    {
+        if (spring is Spring resolved)
+        {
+            var baked = LinearEasingBaker.Bake(resolved);
+            return new HeightAnimationOptions(
+                durationMs ?? baked.DurationMilliseconds, easing ?? baked.Easing, reduceMotion, expanded);
+        }
+        return new HeightAnimationOptions(durationMs ?? 300, easing ?? "ease", reduceMotion, expanded);
+    }
+
+    /// <summary>
     /// Build <see cref="SelectionIndicatorOptions"/> from a spring (default: snappy): the
     /// spring bakes to a <c>linear()</c> easing and its settle duration, so the marker
     /// moves with the same C#-solved physics as the rest of the engine.

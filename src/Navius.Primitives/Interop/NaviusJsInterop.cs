@@ -386,6 +386,23 @@ public sealed class NaviusJsInterop : IAsyncDisposable
     }
 
     /// <summary>
+    /// A single document-level keydown listener that matches canonical chord strings
+    /// against a table pushed from C# (via <see cref="ShortcutListener.UpdateChordsAsync"/>)
+    /// and invokes <c>OnShortcut(chord)</c> on <paramref name="callback"/>. The
+    /// preventDefault decision is made JS-side off that table (synchronously, before any
+    /// round trip); handler execution dispatches back to C#. For
+    /// <c>KeyboardShortcutService</c>.
+    /// </summary>
+    public async Task<ShortcutListener> CreateShortcutListenerAsync<T>(
+        DotNetObjectReference<T> callback) where T : class
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createShortcutListener", callback, new { });
+        return new ShortcutListener(handle);
+    }
+
+    /// <summary>
     /// Pointer/touch drag carousel rooted at <paramref name="viewport"/> (whose first
     /// child is the slide track). Invokes <c>OnSelect</c>/<c>OnSettle</c>/
     /// <c>OnCanScrollChange</c> on <paramref name="callback"/>. Keyboard + autoplay
@@ -822,6 +839,45 @@ public sealed class ToastHotkey : IAsyncDisposable
     private readonly IJSObjectReference _handle;
 
     internal ToastHotkey(IJSObjectReference handle) => _handle = handle;
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// A live global keyboard-shortcut listener. <see cref="UpdateChordsAsync"/> replaces the
+/// JS-side chord table (the source of the synchronous preventDefault decision); dispose to
+/// remove the document keydown handler.
+/// </summary>
+public sealed class ShortcutListener : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal ShortcutListener(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>
+    /// Push the current effective chord table. <paramref name="entries"/> serializes to
+    /// <c>{ chord, preventDefault, allowInInputs, repeat }[]</c> (camelCase).
+    /// </summary>
+    public async Task UpdateChordsAsync(object entries)
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("updateChords", entries);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
 
     public async ValueTask DisposeAsync()
     {

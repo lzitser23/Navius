@@ -122,15 +122,30 @@ test('MessageScroller: prepend preserves the reading position (stable ids)', asy
   await page.locator('[data-testid="jump-first"]').click();
   await expect.poll(async () => (await metrics(viewport)).top).toBeLessThanOrEqual(12);
   await expect(page.locator('[data-testid="current-anchor"]')).toHaveText('m0');
-  await page.waitForTimeout(450);
+
+  // Poll the SETTLED scroll state instead of a fixed delay: wait until scrollTop
+  // stops moving (two consecutive samples within 1px) while parked at the top, so
+  // the baseline below is captured from a viewport at rest, not mid-animation.
+  let prevTop = Number.NaN;
+  await expect
+    .poll(async () => {
+      const top = (await metrics(viewport)).top;
+      const settled = Number.isFinite(prevTop) && Math.abs(top - prevTop) <= 1 && top <= 12;
+      prevTop = top;
+      return settled;
+    })
+    .toBe(true);
 
   const before = await metrics(viewport);
   const yBefore = await rowOffset(first, viewport);
 
   await page.locator('[data-testid="prepend"]').click();
 
-  // Older rows arrived above, so scrollTop grew, but m0 stayed exactly where it was.
+  // Older rows arrived above, so scrollTop grew (incidental margin, kept modest to
+  // catch a "prepend did not shift" regression without flaking)...
   await expect.poll(async () => (await metrics(viewport)).top).toBeGreaterThan(before.top + 20);
+  // ...but m0 stayed exactly where it was. This is the meaningful reading-position
+  // assertion, kept tight to catch a real anchoring regression.
   await expect.poll(async () => Math.abs((await rowOffset(first, viewport)) - yBefore)).toBeLessThan(8);
 });
 

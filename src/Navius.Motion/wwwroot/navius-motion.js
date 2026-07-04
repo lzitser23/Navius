@@ -984,6 +984,118 @@ export function createAutoAnimate(parent, options) {
   return { enable, disable, destroy };
 }
 
+// --- Height animation (NaviusHeightAnimation) --------------------------------
+// Measure a content element's natural height and WAAPI-tween the clipped OUTER element's
+// height to match, so a collapse/expand or a content-size change resizes smoothly instead
+// of jumping. Two elements: `element` is the overflow:hidden box whose height we animate;
+// `content` is the inner wrapper we measure (its border box is the natural height, immune to
+// the outer clip). A ResizeObserver on `content` catches content-driven changes.
+//
+// This deliberately duplicates nothing from navius-interop.js (createSizeObserver): the
+// motion package carries zero references to the brain, so it ships its own ~1-screen tween.
+//
+// options: { durationMs, easing, reduceMotion, expanded }. `expanded` is null (always track
+// content size, never collapses), true (open, tracks) or false (collapsed to height 0). The
+// tween sets the resting inline height up front and animates the delta with fill:'none', so
+// at rest the element sits at its own natural px (tracking stays live) or 0. Under reduced
+// motion the tween is skipped and the end state is applied instantly. Returns
+// { setExpanded, remeasure, destroy }.
+
+export function createHeightAnimation(element, content, options) {
+  const opts = Object.assign(
+    { durationMs: 300, easing: 'ease', reduceMotion: 'user', expanded: null },
+    options || {}
+  );
+
+  let expanded = opts.expanded === true || opts.expanded === false ? opts.expanded : null;
+  let current = null;
+
+  const tracking = () => expanded !== false;
+  const natural = () => content.getBoundingClientRect().height;
+  const currentHeight = () => element.getBoundingClientRect().height;
+
+  // Animate the outer box from `from` to `to`, settling at `restHeight` (the inline value it
+  // holds at rest: its own natural px while open, '0px' while collapsed). fill:'none' plus a
+  // pre-set resting height means the element reverts to exactly that height when the tween
+  // ends, with no snap.
+  function tween(from, to, restHeight) {
+    if (current) {
+      current.cancel();
+      current = null;
+    }
+    element.style.height = restHeight;
+
+    if (
+      Math.abs(from - to) < 0.5 ||
+      shouldReduceMotion(opts.reduceMotion) ||
+      typeof element.animate !== 'function'
+    ) {
+      return; // snapped via the inline height
+    }
+
+    void element.offsetHeight; // commit the from-height before the tween
+    const animation = element.animate(
+      [{ height: `${from}px` }, { height: `${to}px` }],
+      { duration: opts.durationMs, easing: opts.easing, fill: 'none' }
+    );
+    animation.finished.catch(() => {});
+    current = animation;
+    animation.finished.then(
+      () => {
+        if (current !== animation) return;
+        current = null;
+        if (tracking()) onContentResize(); // catch any content change that landed mid-tween
+      },
+      () => {}
+    );
+  }
+
+  function setExpanded(next) {
+    const normalized = next === true || next === false ? next : null;
+    if (normalized === expanded) return;
+    const from = currentHeight();
+    expanded = normalized;
+    if (expanded === false) {
+      tween(from, 0, '0px');
+    } else {
+      const to = natural();
+      tween(from, to, `${to}px`);
+    }
+  }
+
+  function onContentResize() {
+    if (!tracking()) return; // collapsed: content changes stay clipped at 0
+    if (current) return; // mid-tween: our own writes, or an in-flight change we will re-check
+    const to = natural();
+    const from = currentHeight();
+    if (Math.abs(from - to) < 0.5) return;
+    tween(from, to, `${to}px`);
+  }
+
+  let ro = null;
+  if (typeof ResizeObserver === 'function') {
+    ro = new ResizeObserver(onContentResize);
+    ro.observe(content);
+  }
+
+  // Initial rest state, applied without animation (existing content never animates in).
+  element.style.height = expanded === false ? '0px' : `${natural()}px`;
+
+  return {
+    setExpanded,
+    remeasure() {
+      onContentResize();
+    },
+    destroy() {
+      if (ro) ro.disconnect();
+      if (current) {
+        current.cancel();
+        current = null;
+      }
+    },
+  };
+}
+
 // --- Small numeric helpers (M3) ----------------------------------------------
 
 function clamp01(value) {

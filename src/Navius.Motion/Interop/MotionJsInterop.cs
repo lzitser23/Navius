@@ -113,6 +113,23 @@ public sealed class MotionJsInterop : IAsyncDisposable
     }
 
     /// <summary>
+    /// Turn <paramref name="element"/> (an overflow-clipped box) into a height-animating
+    /// container that WAAPI-tweens its height to match the natural size of
+    /// <paramref name="content"/> (the inner measured wrapper). Drives both collapse/expand
+    /// (via <see cref="HeightAnimationMotion.SetExpandedAsync"/>) and content-tracking (a
+    /// <c>ResizeObserver</c> on the content). Build <paramref name="options"/> with
+    /// <see cref="MotionPrograms.HeightAnimation"/> (springs bake to a <c>linear()</c> easing).
+    /// </summary>
+    public async Task<HeightAnimationMotion> CreateHeightAnimationAsync(
+        ElementReference element, ElementReference content, HeightAnimationOptions options)
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createHeightAnimation", element, content, options);
+        return new HeightAnimationMotion(handle);
+    }
+
+    /// <summary>
     /// Observe <paramref name="element"/> and set <c>data-in-view</c> on it while it
     /// intersects the viewport (IntersectionObserver v1), so the generated
     /// <c>.motion-in-view-*</c> classes reveal it on scroll with zero per-frame JS. With
@@ -417,6 +434,58 @@ public sealed class AutoAnimateMotion : IAsyncDisposable
         try
         {
             await _handle.InvokeVoidAsync("disable");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// A live height-animation binding. <see cref="SetExpandedAsync"/> tweens between the
+/// collapsed (0) and open (natural) height; <see cref="RemeasureAsync"/> re-checks the
+/// content size (call after a content change the ResizeObserver could miss). Dispose to
+/// disconnect the observer and cancel any in-flight tween.
+/// </summary>
+public sealed class HeightAnimationMotion : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal HeightAnimationMotion(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>
+    /// Animate to the open (natural height) or collapsed (0) state. <c>null</c> switches to
+    /// always-track mode (open, tracking content size).
+    /// </summary>
+    public async Task SetExpandedAsync(bool? expanded)
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("setExpanded", expanded);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>Re-measure the content and tween to it if it changed (tracking mode).</summary>
+    public async Task RemeasureAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("remeasure");
         }
         catch (JSDisconnectedException)
         {
@@ -766,3 +835,17 @@ public sealed record AutoAnimateOptions(
     double DurationMs = 250,
     string Easing = "ease-in-out",
     string ReduceMotion = "user");
+
+/// <summary>
+/// Options for <see cref="MotionJsInterop.CreateHeightAnimationAsync"/> (serialized to
+/// camelCase). <see cref="Easing"/> accepts a baked <c>linear()</c> spring string.
+/// <see cref="Expanded"/> is the initial mode: <c>null</c> = always track content size
+/// (never collapses), <c>true</c> = open (tracks), <c>false</c> = collapsed to height 0.
+/// Under reduced motion the tween is skipped and the end state applies instantly. Build with
+/// <see cref="MotionPrograms.HeightAnimation"/>.
+/// </summary>
+public sealed record HeightAnimationOptions(
+    double DurationMs = 300,
+    string Easing = "ease",
+    string ReduceMotion = "user",
+    bool? Expanded = null);

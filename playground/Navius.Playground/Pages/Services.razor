@@ -1,0 +1,202 @@
+@page "/services"
+@using Microsoft.AspNetCore.Components.Web
+@using Navius.Primitives
+@using Navius.Motion
+@using Zits.Ui
+@inject ZitsDialogService Dialog
+@inject KeyboardShortcutService Shortcuts
+@implements IDisposable
+
+<div class="min-h-screen bg-background text-foreground flex flex-col items-center gap-12 p-8">
+
+    <div class="text-center space-y-3 max-w-xl">
+        <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Navius · services</p>
+        <h1 class="text-4xl font-semibold tracking-tight">Imperative services over the declarative primitives.</h1>
+        <p class="text-muted-foreground">
+            An awaitable dialog store, a global keyboard-shortcut registry, and a standalone
+            height animation. Each composes the real engines; none re-implements them.
+        </p>
+    </div>
+
+    @* ---- DialogService ------------------------------------------------------ *@
+    <section data-testid="dialog-section" class="w-full max-w-xl space-y-4">
+        <h2 class="text-lg font-semibold">ZitsDialogService</h2>
+        <p class="text-sm text-muted-foreground">
+            <code class="font-mono">await Dialog.ConfirmAsync(...)</code> resolves to a bool, so a
+            confirm reads like a modal function call.
+        </p>
+        <div class="flex flex-wrap items-center gap-3">
+            <button data-testid="confirm-trigger" @onclick="RunConfirm"
+                    class="inline-flex h-10 items-center justify-center rounded-md bg-destructive px-5 text-sm font-medium text-destructive-foreground shadow transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Delete project…
+            </button>
+            <button data-testid="alert-trigger" @onclick="RunAlert"
+                    class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Show alert
+            </button>
+            <button data-testid="prompt-trigger" @onclick="RunRename"
+                    class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Rename (custom)…
+            </button>
+        </div>
+        <p class="font-mono text-sm">
+            confirm result: <span data-testid="confirm-result" class="font-semibold">@_confirmResult</span>
+            · alert: <span data-testid="alert-result" class="font-semibold">@_alertResult</span>
+            · rename: <span data-testid="prompt-result" class="font-semibold">@_renameResult</span>
+        </p>
+    </section>
+
+    @* ---- KeyboardShortcutService -------------------------------------------- *@
+    <section data-testid="shortcut-section" class="w-full max-w-xl space-y-4">
+        <h2 class="text-lg font-semibold">KeyboardShortcutService</h2>
+        <p class="text-sm text-muted-foreground">
+            Press <kbd class="font-mono">mod</kbd>+<kbd class="font-mono">K</kbd> anywhere on
+            this page to toggle the palette. The browser's own Ctrl/Cmd+K is prevented,
+            synchronously, JS-side.
+        </p>
+        <div class="flex items-center gap-3 text-sm">
+            <span>fired: <span data-testid="shortcut-count" class="font-mono font-semibold">@_shortcutCount</span> times</span>
+        </div>
+        @if (_paletteOpen)
+        {
+            <div data-testid="palette"
+                 class="rounded-md border border-border bg-card p-4 text-card-foreground shadow-lg">
+                <p class="text-sm font-medium">Command palette</p>
+                <p class="mt-1 text-sm text-muted-foreground">Opened by the registered shortcut. Press mod+K again to hide.</p>
+            </div>
+        }
+    </section>
+
+    @* ---- HeightAnimation ---------------------------------------------------- *@
+    <section data-testid="height-section" class="w-full max-w-xl space-y-4">
+        <h2 class="text-lg font-semibold">NaviusHeightAnimation</h2>
+        <p class="text-sm text-muted-foreground">
+            One clipped element, height WAAPI-tweened on a baked spring. Collapse/expand plus
+            live content-tracking, both reduced-motion aware.
+        </p>
+
+        <button data-testid="height-toggle" @onclick="() => _expanded = !_expanded"
+                class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            @(_expanded ? "Collapse" : "Expand")
+        </button>
+
+        <NaviusHeightAnimation data-testid="height-region" Expanded="_expanded" Spring="Spring.Smooth"
+                               class="rounded-md border border-border bg-muted/40">
+            <div class="p-4 text-sm text-muted-foreground">
+                <p class="font-medium text-foreground">Release notes</p>
+                <p class="mt-2">
+                    This panel is always mounted; only its visible height animates between 0 and its
+                    natural size. Collapsed content stays in the tab order (this is the visual-only
+                    sibling of Collapsible, not a replacement for it).
+                </p>
+                <p class="mt-2">
+                    The spring is solved in C# and baked to a linear() easing before it ever crosses
+                    into JavaScript, so the tween matches the rest of the motion system exactly.
+                </p>
+            </div>
+        </NaviusHeightAnimation>
+
+        <div class="pt-2">
+            <button data-testid="track-add" @onclick="AddLine"
+                    class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Add a line (content-tracking)
+            </button>
+            <NaviusHeightAnimation data-testid="track-region"
+                                   class="mt-3 rounded-md border border-border bg-muted/40">
+                <ul class="p-4 text-sm text-muted-foreground space-y-1">
+                    @foreach (var line in _lines)
+                    {
+                        <li data-testid="track-line">@line</li>
+                    }
+                </ul>
+            </NaviusHeightAnimation>
+        </div>
+    </section>
+
+    <p class="font-mono text-xs text-muted-foreground">
+        view source · <code>playground/Navius.Playground/Pages/Services.razor</code>
+    </p>
+</div>
+
+@code {
+    // --- DialogService -------------------------------------------------------
+    private string _confirmResult = "not run";
+    private string _alertResult = "not run";
+    private string _renameResult = "not run";
+    private string _renameValue = "Untitled";
+
+    private async Task RunConfirm()
+    {
+        var ok = await Dialog.ConfirmAsync(
+            "Delete project?",
+            "This permanently removes the project and its history. This cannot be undone.",
+            new ConfirmOptions(ConfirmLabel: "Delete", CancelLabel: "Keep it", Destructive: true));
+        _confirmResult = ok ? "deleted" : "kept";
+        StateHasChanged();
+    }
+
+    private async Task RunAlert()
+    {
+        await Dialog.AlertAsync("Heads up", "Your session will expire in five minutes.");
+        _alertResult = "acknowledged";
+        StateHasChanged();
+    }
+
+    private async Task RunRename()
+    {
+        _renameValue = "Untitled";
+        var result = await Dialog.ShowAsync<string>(RenameContent);
+        _renameResult = result is null ? "cancelled" : $"renamed to '{result}'";
+        StateHasChanged();
+    }
+
+    private RenderFragment<DialogHandle<string>> RenameContent => handle =>
+        @<div class="grid gap-4">
+            <ZitsDialogHeader>
+                <ZitsDialogTitle>Rename project</ZitsDialogTitle>
+                <ZitsDialogDescription>Pick a new name, then save.</ZitsDialogDescription>
+            </ZitsDialogHeader>
+            <input data-testid="rename-input" value="@_renameValue"
+                   @oninput="e => _renameValue = e.Value?.ToString() ?? string.Empty"
+                   class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+            <ZitsDialogFooter>
+                <button data-testid="rename-cancel" @onclick="() => handle.Cancel()"
+                        class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm transition-colors hover:bg-accent">
+                    Cancel
+                </button>
+                <button data-testid="rename-save" @onclick="() => handle.Close(_renameValue)"
+                        class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90">
+                    Save
+                </button>
+            </ZitsDialogFooter>
+        </div>;
+
+    // --- KeyboardShortcutService ---------------------------------------------
+    private bool _paletteOpen;
+    private int _shortcutCount;
+    private IDisposable? _shortcut;
+
+    // --- HeightAnimation -----------------------------------------------------
+    private bool _expanded;
+    private readonly List<string> _lines = new() { "First line." };
+
+    private void AddLine()
+    {
+        _lines.Add($"Line {_lines.Count + 1}, added at {DateTime.Now:HH:mm:ss}.");
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _shortcut = Shortcuts.Register(new ShortcutOptions("mod+k"), () =>
+            {
+                _paletteOpen = !_paletteOpen;
+                _shortcutCount++;
+                return InvokeAsync(StateHasChanged);
+            });
+        }
+    }
+
+    public void Dispose() => _shortcut?.Dispose();
+}

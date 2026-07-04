@@ -1212,6 +1212,78 @@ export function createToastHotkey(dotNetRef, keys) {
   };
 }
 
+// --- Global keyboard shortcuts (KeyboardShortcutService) ----------------------
+// One document-level keydown listener that matches serialized chord strings against a
+// C#-pushed table. The preventDefault decision has to happen HERE, synchronously, before
+// any interop round trip, or the browser's own handler (Ctrl+K search, "/" typing, ...)
+// has already fired by the time an async .NET callback resolves. So the small chord table
+// (chord -> flags) lives JS-side; the handler EXECUTION still dispatches to C#.
+//
+// Chords are canonical strings: modifiers in the fixed order ctrl+alt+shift+meta, then the
+// key, all lowercased (e.g. "ctrl+k", "shift+?", "escape"). C# owns the canonicalization
+// and expands "mod" to both the ctrl and meta variants before pushing, so this listener
+// only ever does a Map lookup. updateChords(entries) replaces the whole table; entries is
+// { chord, preventDefault, allowInInputs, repeat }[].
+export function createShortcutListener(dotNetRef, options) {
+  const opts = Object.assign({}, options || {});
+  void opts;
+  let chords = new Map();
+
+  function isEditable(el) {
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+
+  // Build the canonical chord for a keydown: ctrl+alt+shift+meta+key, lowercased. The
+  // modifier keys themselves are never emitted as the key (a bare Ctrl press is not a chord).
+  function canonical(e) {
+    const parts = [];
+    if (e.ctrlKey) parts.push('ctrl');
+    if (e.altKey) parts.push('alt');
+    if (e.shiftKey) parts.push('shift');
+    if (e.metaKey) parts.push('meta');
+    let key = (e.key || '').toLowerCase();
+    if (key === ' ' || key === 'spacebar') key = 'space';
+    if (key === 'control' || key === 'alt' || key === 'shift' || key === 'meta' || key === 'os') {
+      return parts.join('+');
+    }
+    parts.push(key);
+    return parts.join('+');
+  }
+
+  function onKeyDown(e) {
+    const chord = canonical(e);
+    const entry = chords.get(chord);
+    if (!entry) return;
+    if (e.repeat && !entry.repeat) return;
+    if (!entry.allowInInputs && isEditable(document.activeElement)) return;
+    if (entry.preventDefault) e.preventDefault();
+    Promise.resolve(dotNetRef.invokeMethodAsync('OnShortcut', chord)).catch(() => {});
+  }
+
+  document.addEventListener('keydown', onKeyDown);
+
+  return {
+    updateChords(entries) {
+      const next = new Map();
+      for (const en of entries || []) {
+        next.set(en.chord, {
+          preventDefault: !!en.preventDefault,
+          allowInInputs: !!en.allowInInputs,
+          repeat: !!en.repeat,
+        });
+      }
+      chords = next;
+    },
+    destroy() {
+      document.removeEventListener('keydown', onKeyDown);
+      chords = new Map();
+    },
+  };
+}
+
 // --- Carousel (Embla role) ---------------------------------------------------
 // A dependency-free slide carousel. `viewport` is the overflow-clipping element;
 // its first element child is the track that holds the slides. Pointer/touch drag
