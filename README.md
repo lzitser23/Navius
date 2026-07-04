@@ -22,7 +22,7 @@
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-171614)
 ![Blazor](https://img.shields.io/badge/Blazor-WASM%20%2B%20Server-737270)
 ![Contract](https://img.shields.io/badge/contract-Base%20UI-737270)
-![Tests](https://img.shields.io/badge/e2e-74%20Playwright-737270)
+![Tests](https://img.shields.io/badge/e2e-175%20Playwright-737270)
 
 </div>
 
@@ -49,13 +49,13 @@ accessible) or hides it. navius builds it in the open.
 
 ## Features
 
-- **44 headless component families**, aligned 1:1 with the Base UI contract: discrete
+- **56 headless component families**, aligned 1:1 with the Base UI contract: discrete
   boolean-presence attributes (`data-open` / `data-closed`, `data-checked`,
   `data-popup-open`, field states), the `Portal → Positioner → Popup` overlay anatomy,
   and the `data-starting-style` / `data-ending-style` presence model for CSS-driven
   enter and exit animation.
 - **A real engine, driven from C#.** `navius-interop.js` is a dependency-free ES module
-  with 31 exports: focus trap, ref-counted scroll lock, anchored positioning with
+  with 37 exports: focus trap, ref-counted scroll lock, anchored positioning with
   flip, clamp, RTL-aware alignment and auto-update (no Floating-UI), dismissable
   layers, roving focus with type-ahead, presence timing, focus-preserving teleport,
   toast interactions, and more.
@@ -68,7 +68,13 @@ accessible) or hides it. navius builds it in the open.
 - **Forms that actually submit.** Hidden native inputs mirror component state into
   real form posts; constraint validation surfaces as discrete
   `data-valid` / `data-invalid` / `data-dirty` / `data-touched` field states.
-- **Browser-verified.** 74 Playwright tests drive a real headless Chromium against
+- **A native motion engine (`Navius.Motion`).** Springs are solved closed-form in C#,
+  compiled to CSS `linear()` easings, and rendered on the compositor: presence
+  presets for every overlay, press and hover gestures, micro interactions,
+  FLIP auto-animate, in-view reveals with stagger, an imperative sequence builder,
+  and experimental same-document page transitions. Standalone package, zero
+  references to the primitives, zero JavaScript animation library on the wire.
+- **Browser-verified.** 175 Playwright tests drive a real headless Chromium against
   the playground: focus trapping, scroll lock, positioning, dismissal, roving focus,
   exit animation, portal teleport. CI runs the full suite.
 - **CSP-clean.** No `eval` anywhere; a DOM-transparent `NaviusCspProvider` carries the
@@ -125,8 +131,9 @@ builder.Services.AddNavius();
 
 All overlays support controlled (`@bind-Open`) and uncontrolled (`DefaultOpen`) usage,
 expose the discrete presence contract for styling and animation, and restore focus on
-close. See the playground routes (`/`, `/wave1` to `/wave3`, `/ui`, `/fidelity`) for
-every component in motion.
+close. See the playground routes (`/`, `/wave1` to `/wave3`, `/ui`, `/fidelity`, plus
+`/dates`, `/pickers`, `/sort`, `/tree`, `/tokens`, `/services`, `/extras`,
+`/uncontrolled`, `/motion`, `/charts`, `/chat`) for every component in motion.
 
 ---
 
@@ -136,7 +143,8 @@ every component in motion.
 | --- | --- |
 | Runtime | .NET 8 |
 | UI | Blazor (WebAssembly and Server) |
-| Engine | Hand-rolled dependency-free ES module, 31 exports, additive contract |
+| Engine | Hand-rolled dependency-free ES module, 37 exports, additive contract |
+| Motion | `Navius.Motion`: C#-compiled springs on WAAPI, standalone, 84 unit tests |
 | Reference contract | [Base UI](https://base-ui.com), mirrored 1:1 |
 | Tests | Playwright (headless Chromium) against the playground |
 | Styling | None shipped. The playground demos use Tailwind (Play CDN) |

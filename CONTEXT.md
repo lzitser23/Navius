@@ -49,7 +49,8 @@ listeners, long-press, drag tracker (with commit), scroll-area observer + thumb 
 swipe-to-dismiss, NavigationMenu viewport mirror + indicator positioning,
 hidden-until-found (beforematch) observer, message scroller (anchored turns,
 streamed-reply follow, prepend scroll preservation, lazy visibility tracking),
-and small DOM readers.
+sortable drag-reorder, file dropzone, masked-input selection, 2D pointer tracker,
+keyboard-shortcut listener, and small DOM readers.
 
 > ⚠️ **Validate engine JS as an ES module**, not a script: `node --input-type=module
 > --check < navius-interop.js`. Plain `node --check` parses loose-mode and misses
@@ -110,7 +111,9 @@ as a dev shortcut.
   checkout, ADR-0008).
 - Run: `dotnet run --project playground/Navius.Playground --urls http://localhost:5247`.
   **Kill port 5247 before rebuilding** (the dev server locks bin output). Routes: `/`,
-  `/wave1`–`/wave3`, `/ui` and `/fidelity` (the helm showcase).
+  `/wave1`–`/wave3`, `/ui` and `/fidelity` (the helm showcase), plus `/dates`,
+  `/pickers`, `/sort`, `/tree`, `/tokens`, `/services`, `/extras`, `/uncontrolled`,
+  `/motion`, `/charts`, `/chat`.
 - Test: `cd tests/e2e; DOTNET_EXE=<sdk dotnet> CI=1 npx playwright test`. The
   `webServer` auto-launches the app. Note: the background-task exit code can read 0
   even when Playwright failed — always grep the `N passed / N failed` summary line.
