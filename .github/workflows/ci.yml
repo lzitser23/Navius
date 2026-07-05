@@ -17,8 +17,9 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: lzitser23/zits-helm
+          repository: lzitser23/Zits-helm
           path: zits-helm
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -28,6 +29,22 @@ jobs:
       - name: Build library + playground
         working-directory: navius
         run: dotnet build playground/Navius.Playground/Navius.Playground.csproj -c Debug
+
+      - name: Build packages in Release
+        working-directory: navius
+        run: |
+          dotnet build src/Navius.Primitives/Navius.Primitives.csproj -c Release
+          dotnet build src/Navius.Motion/Navius.Motion.csproj -c Release
+
+      - name: Run unit tests
+        working-directory: navius
+        run: dotnet test tests/Navius.Motion.Tests/Navius.Motion.Tests.csproj -c Release
+
+      - name: Pack NuGet artifacts
+        working-directory: navius
+        run: |
+          dotnet pack src/Navius.Primitives/Navius.Primitives.csproj -c Release --no-build -o "${{ runner.temp }}/nupkgs"
+          dotnet pack src/Navius.Motion/Navius.Motion.csproj -c Release --no-build -o "${{ runner.temp }}/nupkgs"
 
       - name: Setup Node
         uses: actions/setup-node@v4

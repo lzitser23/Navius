@@ -6,6 +6,23 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>true</IsPackable>
     <RootNamespace>Navius.Primitives</RootNamespace>
+    <PackageId>Navius.Primitives</PackageId>
+    <Version>0.3.0-preview.1</Version>
+    <Authors>Navius contributors</Authors>
+    <Description>Headless Blazor primitives for accessible overlays, controls, field composition, and application UI behavior.</Description>
+    <PackageProjectUrl>https://github.com/lzitser23/Navius</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/lzitser23/Navius</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>blazor;razor-components;headless-ui;accessibility;components</PackageTags>
+    <PackageReleaseNotes>Preview release of the Navius headless primitive layer.</PackageReleaseNotes>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,6 +31,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.0" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

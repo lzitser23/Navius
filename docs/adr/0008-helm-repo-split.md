@@ -29,20 +29,23 @@ contributions independently. Executing it required six interdependent decisions
    publication (2026-07-02). The full pre-publication development history — including
    the helm's pre-split archaeology — is archived locally by the maintainer as git
    bundles.
-5. **Hosting:** the four repos publish to GitHub under `lzitser23` (`navius`,
-   `zits-helm`, `navius-docs`, `zits-ui`) — green-lit 2026-07-02. The CI workflows in
-   both code repos encode the sibling checkout.
-6. **Packaging metadata** for the brain (`PackageId`/`Version`/`Authors`/license
-   expression) is deferred together with the NuGet decision.
+5. **Hosting:** the open-source technology repos publish to GitHub under `lzitser23`
+   as `Navius` and `Zits-helm`. The `navius-docs` and `zits-ui` docs/showcase repos
+   remain private sibling repositories. The CI workflows in both code repos encode the
+   sibling checkout.
+6. **Packaging metadata.** Initially deferred with the NuGet decision. On 2026-07-05,
+   the preview package surface was locked as explicit `0.3.0-preview.1` metadata for
+   `Navius.Primitives`, `Navius.Motion`, `Zits.Ui`, and the `navius` dotnet tool.
 
 ## Consequences
 
-- The ecosystem is now **four sibling repos** that must be checked out side by side:
-  `navius` (brain + engine + playground + e2e), `zits-helm` (helm + CLI + registry),
-  `navius-docs` (brain docs), `zits-ui` (helm docs, repointed to `zits-helm`).
-- The registry's brain-source items (`core`/`dialog`/`popover`) use sibling-relative
-  paths (`../navius/src/...`); run the CLI from the `zits-helm` root. Wiring the full
-  helm component set into the registry (the known distribution gap) now happens there.
+- The ecosystem is now **four sibling repos** when working on the full stack:
+  `Navius` (brain + engine + playground + e2e), `Zits-helm` (helm + CLI + registry),
+  `navius-docs` (private brain docs), and `zits-ui` (private helm docs, repointed to
+  `Zits-helm`).
+- The registry's source items still use repo-relative paths during development, but the
+  packaged `navius` tool now bundles `registry/` plus a `registry-source/` payload so
+  `navius list` and `navius add <item>` work after `dotnet tool install`.
 - A brain-only checkout still builds `src/Navius.Primitives` standalone; building the
   playground (and running e2e) requires the sibling helm checkout.
 - The helm can no longer silently drift against the brain via a shared build — the

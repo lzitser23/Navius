@@ -17,8 +17,13 @@ tests/e2e/.last-run.json
 
 # IDE
 .vs/
+.vscode/
 .idea/
 *.suo
+
+# Local config / secrets
+.env*
+*.local
 
 # OS
 Thumbs.db

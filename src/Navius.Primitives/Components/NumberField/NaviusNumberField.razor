@@ -61,7 +61,6 @@
     private readonly NumberFieldContext _context = new();
     private double? _internal;
     private bool _valueSet;
-    private bool _initialized;
 
     private bool IsControlled => _valueSet;
     private double? CurrentValue => IsControlled ? Value : _internal;
@@ -79,7 +78,6 @@
     protected override void OnInitialized()
     {
         _internal = DefaultValue;
-        _initialized = true;
         _context.StepImpl = StepByAsync;
         _context.SetBoundImpl = SetBoundAsync;
         _context.SetTextImpl = SetTextAsync;

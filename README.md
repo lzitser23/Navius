@@ -13,6 +13,7 @@
 [Features](#features) ·
 [Installation](#installation) ·
 [Quick start](#quick-start) ·
+[Packages](#packages) ·
 [Stack](#stack) ·
 [Development](#development) ·
 [Architecture](#architecture) ·
@@ -22,7 +23,7 @@
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-171614)
 ![Blazor](https://img.shields.io/badge/Blazor-WASM%20%2B%20Server-737270)
 ![Contract](https://img.shields.io/badge/contract-Base%20UI-737270)
-![Tests](https://img.shields.io/badge/e2e-175%20Playwright-737270)
+![Tests](https://img.shields.io/badge/e2e-183%20Playwright-737270)
 
 </div>
 
@@ -49,11 +50,14 @@ accessible) or hides it. navius builds it in the open.
 
 ## Features
 
-- **56 headless component families**, aligned 1:1 with the Base UI contract: discrete
+- **58 primitive, utility, and infrastructure families** under
+  `src/Navius.Primitives/Components`, including product-facing primitives plus
+  providers such as `CspProvider`, `DirectionProvider`, `Slot`, and shared overlay
+  bases. The user-facing primitives align to the Base UI contract: discrete
   boolean-presence attributes (`data-open` / `data-closed`, `data-checked`,
-  `data-popup-open`, field states), the `Portal → Positioner → Popup` overlay anatomy,
-  and the `data-starting-style` / `data-ending-style` presence model for CSS-driven
-  enter and exit animation.
+  `data-popup-open`, field states), the `Portal -> Positioner -> Popup` overlay
+  anatomy, and the `data-starting-style` / `data-ending-style` presence model for
+  CSS-driven enter and exit animation.
 - **A real engine, driven from C#.** `navius-interop.js` is a dependency-free ES module
   with 37 exports: focus trap, ref-counted scroll lock, anchored positioning with
   flip, clamp, RTL-aware alignment and auto-update (no Floating-UI), dismissable
@@ -74,7 +78,7 @@ accessible) or hides it. navius builds it in the open.
   FLIP auto-animate, in-view reveals with stagger, an imperative sequence builder,
   and experimental same-document page transitions. Standalone package, zero
   references to the primitives, zero JavaScript animation library on the wire.
-- **Browser-verified.** 175 Playwright tests drive a real headless Chromium against
+- **Browser-verified.** 183 Playwright tests drive a real headless Chromium against
   the playground: focus trapping, scroll lock, positioning, dismissal, roving focus,
   exit animation, portal teleport. CI runs the full suite.
 - **CSP-clean.** No `eval` anywhere; a DOM-transparent `NaviusCspProvider` carries the
@@ -84,25 +88,59 @@ accessible) or hides it. navius builds it in the open.
 
 ## Installation
 
-The brain is not on NuGet yet. Consume it as a project reference:
+Preview package IDs are locked for NuGet as `0.3.0-preview.1`. Until the preview
+packages are pushed, use the source-checkout workflow below. After publish, install
+the brain with:
 
 ```bash
-git clone https://github.com/lzitser23/navius.git
+dotnet add package Navius.Primitives --prerelease
 ```
 
-```xml
-<ProjectReference Include="path/to/navius/src/Navius.Primitives/Navius.Primitives.csproj" />
+Register the services once in your app:
+
+```csharp
+builder.Services.AddNavius();
 ```
 
-`src/Navius.Primitives` builds standalone. Building the **playground** additionally
-requires the styled-layer repo checked out as a sibling (see
-[Architecture](#architecture)):
+Motion is a separate package:
+
+```bash
+dotnet add package Navius.Motion --prerelease
+```
+
+```html
+<link href="_content/Navius.Motion/navius-motion.css" rel="stylesheet" />
+```
+
+For repository development before and alongside package upload, keep using sibling
+project references. Clone with the verified remote and keep the styled-layer repo
+checked out next to this one when building the playground:
+
+```bash
+git clone https://github.com/lzitser23/Navius.git navius
+git clone https://github.com/lzitser23/Zits-helm.git zits-helm
+```
 
 ```
 <parent>/
   navius/       this repo
-  zits-helm/    github.com/lzitser23/zits-helm
+  zits-helm/    github.com/lzitser23/Zits-helm
 ```
+
+---
+
+## Packages
+
+| Package | Role |
+| --- | --- |
+| `Navius.Primitives` | Headless Blazor primitives plus the `navius-interop.js` static web asset. |
+| `Navius.Motion` | Standalone motion engine, generated CSS, spring solver, presence presets, gestures, and FLIP helpers. |
+| `Zits.Ui` | Styled component reference layer in the sibling `zits-helm` repo. |
+| `navius` | Dotnet tool that copies zits/ui source from the bundled registry into your app. |
+
+Release builds produce `.nupkg` and `.snupkg` artifacts with MIT license metadata,
+package readmes, repository URLs, SourceLink, symbols, and package validation. The
+actual NuGet push is intentionally a separate release step.
 
 ---
 
@@ -133,7 +171,8 @@ All overlays support controlled (`@bind-Open`) and uncontrolled (`DefaultOpen`) 
 expose the discrete presence contract for styling and animation, and restore focus on
 close. See the playground routes (`/`, `/wave1` to `/wave3`, `/ui`, `/fidelity`, plus
 `/dates`, `/pickers`, `/sort`, `/tree`, `/tokens`, `/services`, `/extras`,
-`/uncontrolled`, `/motion`, `/charts`, `/chat`) for every component in motion.
+`/uncontrolled`, `/motion`, `/charts`, `/chat`, `/theme`) for every component in
+motion.
 
 ---
 
@@ -144,7 +183,7 @@ close. See the playground routes (`/`, `/wave1` to `/wave3`, `/ui`, `/fidelity`,
 | Runtime | .NET 8 |
 | UI | Blazor (WebAssembly and Server) |
 | Engine | Hand-rolled dependency-free ES module, 37 exports, additive contract |
-| Motion | `Navius.Motion`: C#-compiled springs on WAAPI, standalone, 84 unit tests |
+| Motion | `Navius.Motion`: C#-compiled springs, generated CSS `linear()` easings, standalone, 84 unit tests |
 | Reference contract | [Base UI](https://base-ui.com), mirrored 1:1 |
 | Tests | Playwright (headless Chromium) against the playground |
 | Styling | None shipped. The playground demos use Tailwind (Play CDN) |
@@ -154,6 +193,9 @@ close. See the playground routes (`/`, `/wave1` to `/wave3`, `/ui`, `/fidelity`,
 ## Development
 
 ```bash
+git clone https://github.com/lzitser23/Navius.git navius
+cd navius
+
 # build the whole graph (brain + sibling helm + showcase)
 dotnet build playground/Navius.Playground/Navius.Playground.csproj
 
@@ -162,7 +204,7 @@ dotnet run --project playground/Navius.Playground --urls http://localhost:5247
 
 # e2e suite (auto-launches the app via Playwright's webServer)
 cd tests/e2e
-npm install
+npm ci
 npx playwright install chromium
 npm test
 ```
@@ -177,6 +219,17 @@ node --input-type=module --check < src/Navius.Primitives/wwwroot/navius-interop.
 Conventions, invariants, and the test-hook contract live in
 [CONTEXT.md](CONTEXT.md).
 
+### Project Structure
+
+```text
+navius/
+|-- assets/        # brand marks used by the README and docs
+|-- docs/          # ADRs and the Base UI parity dossier
+|-- playground/    # Blazor WebAssembly showcase for the brain and sibling helm
+|-- src/           # packable libraries: Navius.Primitives and Navius.Motion
+`-- tests/         # xUnit motion tests and Playwright e2e tests
+```
+
 ---
 
 ## Architecture
@@ -187,11 +240,11 @@ Three layers with a hard boundary, spread across four sibling repos:
 | --- | --- | --- |
 | **brain** | `src/Navius.Primitives` (this repo) | Headless `Navius*` primitives. Behaviour, accessibility, state contracts. |
 | **engine** | `src/Navius.Primitives/wwwroot/navius-interop.js` | The DOM-touching behaviour C# cannot do synchronously, driven over JS interop. |
-| **helm** | [`zits-helm`](https://github.com/lzitser23/zits-helm) | zits/ui: styled `Zits*` components on the brain, plus the `navius` CLI and copy-paste registry. |
+| **helm** | [`Zits-helm`](https://github.com/lzitser23/Zits-helm) | zits/ui: styled `Zits*` components on the brain, plus the `navius` CLI and copy-paste registry. |
 
-Docs sites (live WebAssembly demos, not mockups):
-[`Navius-docs`](https://github.com/lzitser23/Navius-docs) for the brain,
-[`Zits-ui`](https://github.com/lzitser23/Zits-ui) for the helm.
+Companion docs/showcase sites are maintained in private sibling repositories.
+The open-source technology surface is this repository plus
+[`Zits-helm`](https://github.com/lzitser23/Zits-helm).
 
 The why behind the load-bearing decisions is recorded in
 [`docs/adr/`](docs/adr/), and the full Base UI parity dossier with per-component

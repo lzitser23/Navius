@@ -7,6 +7,10 @@
     <title>Navius Playground</title>
     <base href="/" />
 
+    <!-- Pre-paint theme restore (classic script, before the stylesheet links) so a
+         stored zits-theme is applied before first paint with no flash. -->
+    <script src="_content/Zits.Ui/zits-theme-init.js"></script>
+
     <!--
       DEV-ONLY shortcut: Tailwind Play CDN so the playground looks right with zero
       build step, mapped to the zits/ui OKLCH token theme (served from the Zits.Ui
@@ -15,6 +19,7 @@
       wires the same tokens to utilities natively (including opacity modifiers).
     -->
     <link href="_content/Zits.Ui/zits-ui.css" rel="stylesheet" />
+    <link href="_content/Zits.Ui/zits-theme.css" rel="stylesheet" />
     <link href="_content/Navius.Motion/navius-motion.css" rel="stylesheet" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>

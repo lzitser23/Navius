@@ -42,7 +42,6 @@
     private CheckboxGroupContext _context = default!;
     private List<string> _internal = new();
     private bool _valueSet;
-    private bool _initialized;
 
     private bool IsControlled => _valueSet;
     private IReadOnlyList<string> CurrentValue => IsControlled ? (Value ?? Array.Empty<string>()) : _internal;
@@ -60,7 +59,6 @@
     protected override void OnInitialized()
     {
         _internal = DefaultValue is not null ? new List<string>(DefaultValue) : new List<string>();
-        _initialized = true;
 
         _context = new CheckboxGroupContext(
             () => CurrentValue,

@@ -17,6 +17,11 @@ A two-layer Blazor UI system:
 The split mirrors the React ecosystem's "headless primitives + styled components"
 model, ported to Blazor. Attribution for the prior art lives in the README.
 
+OSS boundary: the public technology repos are
+`https://github.com/lzitser23/Navius` and
+`https://github.com/lzitser23/Zits-helm`. The `navius-docs` and `zits-ui` docs/showcase
+repos are private sibling repos and should not be presented as public GitHub surfaces.
+
 ## The three layers (precise)
 
 | Layer | Project | Role |
@@ -102,6 +107,75 @@ Theme: `../zits-helm/src/Zits.Ui/wwwroot/zits-ui.css` holds the OKLCH token pale
 `.dark`) and a Tailwind v4 `@theme inline` mapping. Production builds with the Tailwind
 v4 standalone CLI (no Node); the playground uses the Play CDN mapped to the same tokens
 as a dev shortcut.
+
+## NuGet preview readiness
+
+2026-07-05 release-prep pass moved the packable surface from implicit SDK defaults to
+explicit preview metadata:
+
+- Package IDs/versions: `Navius.Primitives`, `Navius.Motion`, `Zits.Ui`, and the
+  dotnet tool `navius` all pack as `0.3.0-preview.1`.
+- Package metadata now includes MIT license expressions, package readmes, repository
+  URLs, tags, SourceLink, `.snupkg` symbols, and package validation on the libraries.
+- `Zits.Ui` still uses a sibling `ProjectReference` during development, but pack output
+  resolves the dependency as `Navius.Primitives 0.3.0-preview.1`.
+- The installed `navius` tool is self-contained: if no repo-local
+  `registry/registry.json` exists, it falls back to the registry and `registry-source`
+  payload bundled inside the tool package. `--root` and `--registry` still support
+  local/custom registries.
+- CI in `navius` now Release-builds, tests, and packs `Navius.Primitives` and
+  `Navius.Motion`. CI in `zits-helm` now Release-builds, tests, packs `Zits.Ui` and
+  `navius`, then installs the local tool package and smoke-tests `navius list` plus
+  `navius add button`.
+- Local verification passed: `Navius.Motion.Tests` 84/84, `Zits.Ui.Tests` 11/11, all
+  four `.nupkg` and `.snupkg` files packed, and the locally installed `navius` tool
+  copied `button` from the bundled registry.
+
+## OSS readiness
+
+2026-07-05 `oss-ready` pass covered both open-source technology repos:
+`E:\Lzitser\navius` and `E:\Lzitser\zits-helm`.
+
+- GitHub remotes exist as private repos for now:
+  `lzitser23/Navius` and `lzitser23/Zits-helm`, default branch `main`.
+- Public package and README links must use those canonical repo names. Do not link the
+  private docs repos from package metadata or public README surfaces.
+- Root `LICENSE`, `README.md`, `.gitignore`, `.gitattributes`, and CI are present in
+  both technology repos.
+- Scanner result: no high-confidence working-tree secrets, no history secrets, no
+  tracked sensitive/junk filenames, and no tracked files over 5 MB in either repo.
+- GitHub Actions reference no repo secrets or variables beyond automatic
+  `GITHUB_TOKEN`; no `gh secret set` / `gh variable set` handoff is needed today.
+- Remaining scanner warnings are expected public owner/license/repo identity strings
+  plus known false positives in generated SVG path data, Node version ranges, and
+  prose containing words like `home/end`.
+- Do not run fresh-history migration, push to a new public remote, or flip visibility
+  without an explicit target `OWNER/REPO` and explicit user confirmation.
+
+## Docs QA notes
+
+2026-07-04 pass covered both sibling docs sites: `../zits-ui` on port 5298 and
+`../navius-docs` on port 5299. The browser harness crawled route files plus sidebar
+links, then checked desktop `1280x900`, tablet `768x1024`, and mobile `390x844` for
+page errors, horizontal overflow, uncontained tables/pre blocks/media, chart SVG escape,
+and the Navius release-list flex regression. Final numbers: zits/ui `98` routes +
+`97` internal links, Navius docs `70` routes + `69` internal links, `504` viewport page
+visits, zero issues.
+
+Fixes from that pass:
+- zits/ui chart SVGs must keep the plot wrapper `min-h-0 flex-1` and the SVG `block
+  h-full w-full`; otherwise the chart can overflow its card vertically.
+- Docs preview frames and docs tables should be `min-w-0` with `overflow-x-auto` at
+  the frame/table wrapper, not allowed to widen the page.
+- Navius release notes must not apply list-level `[_li]:flex` to prose-heavy list
+  items with inline links and code. A global guard in `navius-docs` also neutralizes
+  that exact utility combination if it appears again.
+- The Navius marketing header keeps its full nav at `lg` and above; showing it at
+  `md` made the search/GitHub controls overflow the tablet viewport.
+- zits/ui docs links `favicon.png` explicitly so clean browser QA does not report the
+  implicit `/favicon.ico` 404.
+- 2026-07-05 zits/ui favicon was replaced with a raster mark based on the animated
+  stacked-bar logo.
 
 ## Build / run / test (environment-specific)
 

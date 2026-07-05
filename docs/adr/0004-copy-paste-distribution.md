@@ -26,3 +26,6 @@ what the registry distributes.
 - Two distribution mechanisms to maintain (NuGet for the brain, registry/CLI for the
   helm), but each matches what that layer needs.
 - Anyone can host their own registry — the schema is plain JSON.
+- The published `navius` dotnet tool must be self-contained. It bundles the default
+  registry and source payload, while `--root` and `--registry` remain the escape hatch
+  for local development and custom registries.
