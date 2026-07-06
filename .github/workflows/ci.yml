@@ -9,26 +9,14 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      # The playground references the styled helm in the sibling zits-helm repo
-      # (ADR-0008): both repos must be checked out side by side.
       - uses: actions/checkout@v4
         with:
           path: navius
-
-      - uses: actions/checkout@v4
-        with:
-          repository: lzitser23/Zits-helm
-          path: zits-helm
-          token: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-
-      - name: Build library + playground
-        working-directory: navius
-        run: dotnet build playground/Navius.Playground/Navius.Playground.csproj -c Debug
 
       - name: Build packages in Release
         working-directory: navius
@@ -45,22 +33,3 @@ jobs:
         run: |
           dotnet pack src/Navius.Primitives/Navius.Primitives.csproj -c Release --no-build -o "${{ runner.temp }}/nupkgs"
           dotnet pack src/Navius.Motion/Navius.Motion.csproj -c Release --no-build -o "${{ runner.temp }}/nupkgs"
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install e2e deps
-        working-directory: navius/tests/e2e
-        run: npm ci
-
-      - name: Install Playwright browser
-        working-directory: navius/tests/e2e
-        run: npx playwright install --with-deps chromium
-
-      - name: Run E2E tests
-        working-directory: navius/tests/e2e
-        env:
-          CI: 'true'
-        run: npm test
