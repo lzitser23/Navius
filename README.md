@@ -88,9 +88,7 @@ accessible) or hides it. navius builds it in the open.
 
 ## Installation
 
-Preview package IDs are locked for NuGet as `0.3.0-preview.1`. Until the preview
-packages are pushed, use the source-checkout workflow below. After publish, install
-the brain with:
+Preview packages are published to NuGet as `0.3.0-preview.1`. Install the brain with:
 
 ```bash
 dotnet add package Navius.Primitives --prerelease
@@ -112,9 +110,9 @@ dotnet add package Navius.Motion --prerelease
 <link href="_content/Navius.Motion/navius-motion.css" rel="stylesheet" />
 ```
 
-For repository development before and alongside package upload, keep using sibling
-project references. Clone with the verified remote and keep the styled-layer repo
-checked out next to this one when building the playground:
+For repository development and playground integration, keep using sibling project
+references. Clone with the verified remote and keep the styled-layer repo checked
+out next to this one when building the playground:
 
 ```bash
 git clone https://github.com/lzitser23/Navius.git navius
@@ -138,9 +136,8 @@ git clone https://github.com/lzitser23/Zits-helm.git zits-helm
 | `Zits.Ui` | Styled component reference layer in the sibling `zits-helm` repo. |
 | `navius` | Dotnet tool that copies zits/ui source from the bundled registry into your app. |
 
-Release builds produce `.nupkg` and `.snupkg` artifacts with MIT license metadata,
-package readmes, repository URLs, SourceLink, symbols, and package validation. The
-actual NuGet push is intentionally a separate release step.
+Published packages include `.nupkg` and `.snupkg` artifacts with MIT license metadata,
+package readmes, repository URLs, SourceLink, symbols, and package validation.
 
 ---
 
