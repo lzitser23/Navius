@@ -1,0 +1,38 @@
+@namespace Navius.Primitives.Components.DateRangePicker
+@inherits ComponentBase
+@using Navius.Primitives.Components.DateInput
+
+@*
+    One endpoint of the range: an embedded NaviusDateInput bound to the start or end side of
+    the shared range value (Part="start" | "end"). Reuses the whole segment brain from §1.
+*@
+
+<NaviusDateInput Value="@Endpoint"
+                 ValueChanged="OnChangedAsync"
+                 Granularity="@Ctx.Granularity"
+                 MinValue="Ctx.MinValue"
+                 MaxValue="Ctx.MaxValue"
+                 Disabled="Ctx.Disabled"
+                 ReadOnly="Ctx.ReadOnly"
+                 Required="Ctx.Required"
+                 Invalid="Ctx.Invalid"
+                 data-navius-date-range-picker-input
+                 data-part="@Part"
+                 @attributes="Attributes" />
+
+@code {
+    [CascadingParameter] public DateRangePickerContext Ctx { get; set; } = default!;
+
+    /// <summary>Which endpoint this input edits: <c>start</c> or <c>end</c>.</summary>
+    [Parameter] public string Part { get; set; } = "start";
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool IsStart => Part != "end";
+
+    private DateOnly? Endpoint => IsStart ? Ctx.Value.Start : Ctx.Value.End;
+
+    private Task OnChangedAsync(DateOnly? value) =>
+        IsStart ? Ctx.SetStartAsync(value) : Ctx.SetEndAsync(value);
+}

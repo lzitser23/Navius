@@ -1,0 +1,72 @@
+@namespace Navius.Primitives.Components.FileUpload
+@inherits FileUploadPart
+@using Microsoft.AspNetCore.Components.Forms
+
+@*
+    The real, hidden <input type="file"> (Blazor InputFile). This is the a11y +
+    form source of truth; it is visually hidden but present, so native keyboard,
+    the OS file dialog and screen-reader announcements all come for free, and
+    tests drive it via setInputFiles. It registers its element with the root so
+    the engine can relay dropped files into it and open the dialog. accept /
+    multiple / webkitdirectory / capture / name flow from the root's params.
+*@
+
+<InputFile @ref="_inputFile"
+           OnChange="OnChangeAsync"
+           @attributes="InputAttributes" />
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private InputFile? _inputFile;
+    private bool _registered;
+
+    private const string SrOnly =
+        "position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0";
+
+    private IDictionary<string, object> InputAttributes
+    {
+        get
+        {
+            var d = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["multiple"] = Context.Multiple,
+                ["disabled"] = Context.Disabled,
+                ["data-navius-file-upload-input"] = string.Empty,
+            };
+
+            if (!string.IsNullOrEmpty(Context.Accept)) d["accept"] = Context.Accept!;
+            if (!string.IsNullOrEmpty(Context.Name)) d["name"] = Context.Name!;
+            if (Context.Directory) d["webkitdirectory"] = string.Empty;
+            if (!string.IsNullOrEmpty(Context.Capture)) d["capture"] = Context.Capture!;
+
+            var userStyle = Attributes is not null && Attributes.TryGetValue("style", out var s) && s is string str ? str : null;
+
+            if (Attributes is not null)
+            {
+                foreach (var kv in Attributes)
+                {
+                    if (!string.Equals(kv.Key, "style", StringComparison.Ordinal))
+                    {
+                        d[kv.Key] = kv.Value;
+                    }
+                }
+            }
+
+            d["style"] = string.IsNullOrEmpty(userStyle) ? SrOnly : $"{SrOnly};{userStyle}";
+            return d;
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!_registered && _inputFile?.Element is ElementReference el)
+        {
+            _registered = true;
+            Context.SetInputElement(el);
+        }
+    }
+
+    private Task OnChangeAsync(InputFileChangeEventArgs e) => Context.HandleFilesAsync(e);
+}

@@ -1,0 +1,59 @@
+@namespace Navius.Primitives.Components.MessageScroller
+@inherits ComponentBase
+
+@*
+    Headless root of the message scroller (a Navius extra; the shadcn MessageScroller
+    role, no Base UI counterpart). Renders NO element of its own: it owns the scroll
+    options and cascades a MessageScrollerContext, so the scroll commands, the
+    scrollable-edge state and the visibility subscription work anywhere inside it,
+    including outside the scroller frame. The scroll behaviour itself lives in the
+    engine (createMessageScroller), attached by the Viewport part.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    /// <summary>
+    /// Follow new content, but only while the reader is already at the live edge.
+    /// Wheel, touch, keyboard scrolling, scrollbar drags and explicit jumps release
+    /// the follow; the scroll button or ScrollToEndAsync re-engages it.
+    /// </summary>
+    [Parameter] public bool AutoScroll { get; set; }
+
+    /// <summary>
+    /// Opening position on the first non-empty render, applied once:
+    /// "start", "end" (default) or "last-anchor" (the last anchor row, falling back
+    /// to "end" when the turn fits the viewport or no anchor exists).
+    /// </summary>
+    [Parameter] public string DefaultScrollPosition { get; set; } = "end";
+
+    /// <summary>
+    /// Distance in pixels from either edge that still counts as being at it. Drives
+    /// the scrollable-edge state and the scroll button visibility.
+    /// </summary>
+    [Parameter] public double ScrollEdgeThreshold { get; set; } = 8;
+
+    /// <summary>
+    /// Margin in pixels applied to the aligned edge for scroll targets and the
+    /// visibility reading line.
+    /// </summary>
+    [Parameter] public double ScrollMargin { get; set; }
+
+    /// <summary>
+    /// Extra margin added to ScrollMargin when a newly appended anchor row is
+    /// positioned, so part of the previous item stays visible above it.
+    /// </summary>
+    [Parameter] public double ScrollPreviousItemPeek { get; set; } = 64;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private MessageScrollerContext _context = default!;
+
+    protected override void OnInitialized() => _context = new MessageScrollerContext();
+
+    protected override Task OnParametersSetAsync() =>
+        _context.SetProviderOptionsInternalAsync(new MessageScrollerOptions(
+            AutoScroll, DefaultScrollPosition, ScrollEdgeThreshold, ScrollMargin, ScrollPreviousItemPeek));
+}

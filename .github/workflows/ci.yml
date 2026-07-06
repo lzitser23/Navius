@@ -9,41 +9,27 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      # The playground references the styled helm in the sibling zits-helm repo
-      # (ADR-0008): both repos must be checked out side by side.
       - uses: actions/checkout@v4
         with:
           path: navius
-
-      - uses: actions/checkout@v4
-        with:
-          repository: lzitser23/zits-helm
-          path: zits-helm
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Build library + playground
+      - name: Build packages in Release
         working-directory: navius
-        run: dotnet build playground/Navius.Playground/Navius.Playground.csproj -c Debug
+        run: |
+          dotnet build src/Navius.Primitives/Navius.Primitives.csproj -c Release
+          dotnet build src/Navius.Motion/Navius.Motion.csproj -c Release
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
+      - name: Run unit tests
+        working-directory: navius
+        run: dotnet test tests/Navius.Motion.Tests/Navius.Motion.Tests.csproj -c Release
 
-      - name: Install e2e deps
-        working-directory: navius/tests/e2e
-        run: npm ci
-
-      - name: Install Playwright browser
-        working-directory: navius/tests/e2e
-        run: npx playwright install --with-deps chromium
-
-      - name: Run E2E tests
-        working-directory: navius/tests/e2e
-        env:
-          CI: 'true'
-        run: npm test
+      - name: Pack NuGet artifacts
+        working-directory: navius
+        run: |
+          dotnet pack src/Navius.Primitives/Navius.Primitives.csproj -c Release --no-build -o "${{ runner.temp }}/nupkgs"
+          dotnet pack src/Navius.Motion/Navius.Motion.csproj -c Release --no-build -o "${{ runner.temp }}/nupkgs"

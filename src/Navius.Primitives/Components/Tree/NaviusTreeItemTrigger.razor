@@ -1,0 +1,29 @@
+@namespace Navius.Primitives.Components.Tree
+@inherits TreePart
+
+@*
+    The expand/collapse + label click target. Clicking toggles expansion on a parent and applies
+    selection (single: select; multiple: toggle), then moves roving focus onto the node, the
+    same path Enter takes on the keyboard. Rendered as a presentational span (not a nested
+    button) so it lives cleanly inside the focusable role="treeitem" without a second tab stop.
+*@
+
+<span data-navius-tree-item-trigger
+      data-expanded="@(Item.Expandable && Item.IsExpanded ? "" : null)"
+      data-selected="@(Tree.SelectionEnabled && Item.IsSelected ? "" : null)"
+      data-disabled="@(Item.IsDisabled ? "" : null)"
+      @onclick="OnClickAsync"
+      @attributes="Attributes">
+    @ChildContent
+</span>
+
+@code {
+    [CascadingParameter] private TreeItemContext Item { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private Task OnClickAsync() => Item.IsDisabled ? Task.CompletedTask : Item.ActivateAsync();
+}

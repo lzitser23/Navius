@@ -1,0 +1,54 @@
+name: playground-integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      zits_ref:
+        description: 'Zits-helm branch, tag, or SHA to test against. Defaults to the Navius ref name.'
+        required: false
+        type: string
+
+jobs:
+  playground-and-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      # The playground references the styled helm in the sibling zits-helm repo
+      # (ADR-0008). This integration check is opt-in so Navius package CI stays
+      # independent of Zits.Ui.
+      - uses: actions/checkout@v4
+        with:
+          path: navius
+
+      - uses: actions/checkout@v4
+        with:
+          repository: lzitser23/Zits-helm
+          path: zits-helm
+          ref: ${{ inputs.zits_ref || github.ref_name }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build playground
+        working-directory: navius
+        run: dotnet build playground/Navius.Playground/Navius.Playground.csproj -c Debug
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install e2e deps
+        working-directory: navius/tests/e2e
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: navius/tests/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        working-directory: navius/tests/e2e
+        env:
+          CI: 'true'
+        run: npm test

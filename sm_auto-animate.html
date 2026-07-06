@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en" class="dark"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="/">
+
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('navius-theme');
+                if (t === 'light') document.documentElement.classList.remove('dark');
+                else document.documentElement.classList.add('dark');
+            } catch (e) { }
+        })();
+        // OS for the hotkey label: ⌘ on Mac, Ctrl elsewhere.
+        try {
+            document.documentElement.setAttribute('data-os',
+                /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || '') ? 'mac' : 'other');
+        } catch (e) { document.documentElement.setAttribute('data-os', 'other'); }
+        function toggleTheme() {
+            var dark = document.documentElement.classList.toggle('dark');
+            try { localStorage.setItem('navius-theme', dark ? 'dark' : 'light'); } catch (e) { }
+        }
+        // CodeBlock copy-to-clipboard (static-SSR safe; buttons call it via onclick).
+        function naviusCopyCode(btn) {
+            var root = btn.closest('[data-codeblock]') || btn.closest('pre');
+            var code = root && (root.querySelector('code') || root);
+            if (!code || !navigator.clipboard) return;
+            navigator.clipboard.writeText(code.innerText).then(function () {
+                btn.setAttribute('data-copied', '');
+                setTimeout(function () { btn.removeAttribute('data-copied'); }, 1500);
+            });
+        }
+        // In-page anchors: with <base href="/"> a bare #hash href resolves against the
+        // base and navigates to the homepage. This listener registers before
+        // blazor.web.js, so its preventDefault also stops enhanced navigation; we
+        // scroll locally and update the hash without navigating.
+        document.addEventListener('click', function (e) {
+            var a = e.target && e.target.closest && e.target.closest('a[href^="#"]');
+            if (!a) return;
+            e.preventDefault();
+            var hash = a.getAttribute('href');
+            if (hash.length > 1) {
+                var el = document.getElementById(hash.slice(1));
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth' });
+                    history.replaceState(null, '', location.pathname + location.search + hash);
+                    // TOC clicks pin the clicked chapter active: sections near the page
+                    // bottom can never scroll to the viewport top, so the position-based
+                    // spy alone could not highlight them. Cleared on user scroll intent.
+                    if (a.closest('[data-toc]')) {
+                        window.__naviusTocTarget = hash.slice(1);
+                        if (window.__naviusSpy) window.__naviusSpy();
+                    }
+                }
+            }
+        });
+        // Markdown-rendered pre blocks (no CodeBlock wrapper) get an injected copy button.
+        function naviusEnhancePre() {
+            document.querySelectorAll('.prose-navius pre').forEach(function (pre) {
+                if (pre.closest('[data-codeblock]') || pre.querySelector('.navius-pre-copy')) return;
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'navius-copy navius-pre-copy';
+                btn.setAttribute('aria-label', 'Copy code');
+                btn.innerHTML = '<svg class="navius-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="navius-check-icon text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+                btn.addEventListener('click', function () { naviusCopyCode(btn); });
+                pre.style.position = 'relative';
+                pre.appendChild(btn);
+            });
+        }
+        // Search palette: the interactive island registers its .NET ref; the header button
+        // (window.naviusOpenSearch) and ⌘K / Ctrl+K both open it.
+        window.naviusWireSearch = function (ref) {
+            window.naviusOpenSearch = function () { ref.invokeMethodAsync('Open'); };
+            document.addEventListener('keydown', function (e) {
+                if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+                    e.preventDefault();
+                    ref.invokeMethodAsync('Open');
+                }
+            });
+        };
+        // Scroll-spy: highlight the current section in the 'On this page' TOC.
+        function naviusInitScrollSpy() {
+            var links = Array.prototype.slice.call(document.querySelectorAll('[data-toc] a[href^="#"]'));
+            if (!links.length) return;
+            var sections = links
+                .map(function (l) { return document.getElementById(l.getAttribute('href').slice(1)); })
+                .filter(Boolean);
+            function onScroll() {
+                var current = null;
+                if (window.__naviusTocTarget) {
+                    current = document.getElementById(window.__naviusTocTarget);
+                }
+                if (!current) {
+                    var pos = window.scrollY + 120;
+                    sections.forEach(function (s) { if (s.offsetTop <= pos) current = s; });
+                    // At the page bottom the tail sections are as visible as they get:
+                    // clamp to the last one so it can activate at all.
+                    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4)
+                        current = sections[sections.length - 1] || current;
+                }
+                links.forEach(function (l) {
+                    if (current && l.getAttribute('href') === '#' + current.id) l.setAttribute('data-active', '');
+                    else l.removeAttribute('data-active');
+                });
+            }
+            if (window.__naviusSpy) window.removeEventListener('scroll', window.__naviusSpy);
+            window.__naviusSpy = onScroll;
+            window.addEventListener('scroll', onScroll, { passive: true });
+            if (!window.__naviusTocClear) {
+                window.__naviusTocClear = function () {
+                    if (window.__naviusTocTarget) { window.__naviusTocTarget = null; if (window.__naviusSpy) window.__naviusSpy(); }
+                };
+                ['wheel', 'touchmove', 'keydown'].forEach(function (ev) { window.addEventListener(ev, window.__naviusTocClear, { passive: true }); });
+            }
+            window.__naviusTocTarget = null;
+            onScroll();
+        }
+    </script>
+
+    <link href="app.css?v=639186973242205284" rel="stylesheet" />
+    <link href="_content/Navius.Motion/navius-motion.css" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <style>
+        /* Brand type (Navius design system): Helvetica Neue 400/500, system mono for
+           meta and code. No webfonts. */
+        html, body { margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, ui-sans-serif, system-ui, sans-serif; }
+        .navius-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+        /* Long unbreakable tokens in inline code (paths, identifiers) must wrap on
+           small screens instead of forcing horizontal page overflow. Code inside
+           pre keeps its own horizontal scroll. */
+        :not(pre) > code { overflow-wrap: anywhere; }
+        /* Dark code surface used across docs. */
+        .navius-surface { background: #201f1c; }
+        ::selection { background: color-mix(in oklch, var(--primary) 30%, transparent); }
+
+        /* Slim themed scrollbars. Chromium/WebKit get the custom pill thumb; Firefox
+           (which ignores the webkit-scrollbar pseudos) gets the standard thin themed
+           scrollbar, scoped to Firefox so it doesn't disable the WebKit styling. */
+        @supports (-moz-appearance: none) {
+            * {
+                scrollbar-width: thin;
+                scrollbar-color: color-mix(in oklch, var(--foreground) 25%, transparent) transparent;
+            }
+        }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            border-radius: 9999px;
+            background: color-mix(in oklch, var(--foreground) 20%, transparent);
+            border: 3px solid var(--background);
+        }
+        ::-webkit-scrollbar-thumb:hover { background: color-mix(in oklch, var(--foreground) 35%, transparent); }
+        ::-webkit-scrollbar-corner { background: transparent; }
+
+        /* Hotkey label: ⌘ on Mac, Ctrl elsewhere (default to non-Mac before JS runs). */
+        .navius-mac { display: none; }
+        [data-os="mac"] .navius-mac { display: inline; }
+        [data-os="mac"] .navius-other { display: none; }
+        /* Scroll-spy: active section in the 'On this page' TOC (clerk-style rail). */
+        [data-toc] a[data-active] { color: var(--primary); border-color: var(--primary); font-weight: 500; }
+
+        /* Code copy buttons: swap icons while the copied state is set; markdown-rendered
+           pre blocks get an injected button (naviusEnhancePre) shown on hover. */
+        .navius-copy .navius-check-icon { display: none; }
+        .navius-copy[data-copied] .navius-check-icon { display: block; }
+        .navius-copy[data-copied] .navius-copy-icon { display: none; }
+        .navius-pre-copy { position: absolute; right: .5rem; top: .5rem; display: grid; place-items: center; height: 1.5rem; width: 1.5rem; color: var(--muted-foreground); background: transparent; border: 0; cursor: pointer; opacity: 0; transition: opacity .15s, color .15s; border-radius: .375rem; }
+        .navius-pre-copy svg { height: .875rem; width: .875rem; }
+        pre:hover > .navius-pre-copy, .navius-pre-copy:focus-visible { opacity: 1; }
+        .navius-pre-copy:hover { color: var(--foreground); }
+
+        /* Markdown (Markdig) output: a compact technical prose style. */
+        .prose-navius { color: var(--foreground); line-height: 1.7; }
+        .prose-navius h1 { font-size: 2.25rem; font-weight: 700; letter-spacing: -.02em; margin: 0 0 .5rem; }
+        .prose-navius h2 { font-size: 1.4rem; font-weight: 600; letter-spacing: -.01em; margin: 2.5rem 0 .75rem; scroll-margin-top: 5rem; }
+        .prose-navius h3 { font-size: 1.1rem; font-weight: 600; margin: 1.75rem 0 .5rem; }
+        .prose-navius p { margin: .85rem 0; color: color-mix(in oklch, var(--foreground) 75%, var(--muted-foreground)); }
+        .prose-navius a { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
+        .prose-navius ul { list-style: disc; padding-left: 1.4rem; margin: .85rem 0; }
+        .prose-navius ol { list-style: decimal; padding-left: 1.4rem; margin: .85rem 0; }
+        .prose-navius li { margin: .35rem 0; color: var(--muted-foreground); }
+        .prose-navius strong { color: var(--foreground); font-weight: 600; }
+        .prose-navius code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85em; background: color-mix(in oklch, var(--muted) 60%, transparent); padding: .1rem .35rem; border-radius: 4px; }
+        .prose-navius pre { background: oklch(.16 0 0); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 1.25rem 0; }
+        .prose-navius pre code { background: none; padding: 0; font-size: .8125rem; color: #e4e4e7; }
+        .prose-navius blockquote { border-left: 2px solid var(--border); padding-left: 1rem; color: var(--muted-foreground); margin: 1rem 0; }
+        .prose-navius hr { border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }
+    </style>
+
+    <title>Auto-Animate - Navius</title></head>
+
+<body class="bg-background text-foreground antialiased"><div class="min-h-screen"><aside class="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border bg-muted/40 lg:flex"><div class="px-4 pt-4"><a href="/" class="flex items-center text-foreground transition-opacity hover:opacity-80" style="gap:10px"><svg viewBox="0 0 64 64" fill="none" style="height:22px;width:22px;flex:none" aria-hidden="true"><circle cx="10" cy="10" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="24.7" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="39.3" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="54" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="24.7" cy="24.7" r="6" fill="currentColor" fill-opacity="0.6"></circle>
+        <circle cx="39.3" cy="39.3" r="6" fill="currentColor" fill-opacity="0.8"></circle>
+        <circle cx="54" cy="10" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="24.7" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="39.3" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="54" r="6" fill="currentColor"></circle></svg>
+                <span class="text-[18px] font-medium leading-none tracking-[-0.02em]">navius</span>
+                <span class="rounded-md border border-border px-1.5 py-0.5 navius-code text-[10px] text-muted-foreground">primitives</span></a></div>
+        <div class="px-3 pt-3"><button type="button" onclick="(window.naviusOpenSearch||function(){})()" aria-label="Search" class="flex h-9 w-full items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:text-foreground"><svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                <span>Search</span>
+                <span class="ml-auto flex items-center gap-1"><kbd class="navius-code rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px]"><span class="navius-mac">⌘</span><span class="navius-other">Ctrl</span></kbd>
+                    <kbd class="navius-code rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px]">K</kbd></span></button></div>
+        <div class="flex-1 overflow-y-auto px-3 py-4"><nav class="space-y-7 text-sm"><div><p class="mb-2 px-2.5 text-xs font-medium text-muted-foreground">Overview</p>
+        <ul class="space-y-0.5"><li><a href="/docs/introduction" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Introduction</a></li>
+            <li><a href="/docs/getting-started" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Getting started</a></li>
+            <li><a href="/docs/styling" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Styling</a></li>
+            <li><a href="/docs/animation" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Animation</a></li>
+            <li><a href="/docs/composition" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Composition</a></li>
+            <li><a href="/docs/server-side-rendering" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Server &amp; WebAssembly</a></li>
+            <li><a href="/docs/distribution" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Distribution &amp; CLI</a></li>
+            <li><a href="/docs/releases" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Releases</a></li></ul></div>
+    <div><p class="mb-2 px-2.5 text-xs font-medium text-muted-foreground">Components</p>
+        <ul class="space-y-0.5"><li><a href="/docs/components/accordion" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Accordion</a></li>
+            <li><a href="/docs/components/alert-dialog" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Alert Dialog</a></li>
+            <li><a href="/docs/components/aspect-ratio" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Aspect Ratio</a></li>
+            <li><a href="/docs/components/autocomplete" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Autocomplete</a></li>
+            <li><a href="/docs/components/avatar" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Avatar</a></li>
+            <li><a href="/docs/components/checkbox" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Checkbox</a></li>
+            <li><a href="/docs/components/collapsible" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Collapsible</a></li>
+            <li><a href="/docs/components/combobox" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Combobox</a></li>
+            <li><a href="/docs/components/context-menu" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Context Menu</a></li>
+            <li><a href="/docs/components/dialog" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Dialog</a></li>
+            <li><a href="/docs/components/form" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Form</a></li>
+            <li><a href="/docs/components/label" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Label</a></li>
+            <li><a href="/docs/components/menu" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Menu</a></li>
+            <li><a href="/docs/components/menubar" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Menubar</a></li>
+            <li><a href="/docs/components/message-scroller" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Message Scroller</a></li>
+            <li><a href="/docs/components/navigation-menu" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Navigation Menu</a></li>
+            <li><a href="/docs/components/one-time-password-field" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">One-Time Password Field</a></li>
+            <li><a href="/docs/components/password-toggle-field" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Password Toggle Field</a></li>
+            <li><a href="/docs/components/popover" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Popover</a></li>
+            <li><a href="/docs/components/preview-card" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Preview Card</a></li>
+            <li><a href="/docs/components/progress" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Progress</a></li>
+            <li><a href="/docs/components/radio-group" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Radio Group</a></li>
+            <li><a href="/docs/components/scroll-area" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Scroll Area</a></li>
+            <li><a href="/docs/components/select" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Select</a></li>
+            <li><a href="/docs/components/separator" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Separator</a></li>
+            <li><a href="/docs/components/slider" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Slider</a></li>
+            <li><a href="/docs/components/switch" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Switch</a></li>
+            <li><a href="/docs/components/tabs" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Tabs</a></li>
+            <li><a href="/docs/components/toast" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Toast</a></li>
+            <li><a href="/docs/components/toggle" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Toggle</a></li>
+            <li><a href="/docs/components/toggle-group" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Toggle Group</a></li>
+            <li><a href="/docs/components/toolbar" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Toolbar</a></li>
+            <li><a href="/docs/components/tooltip" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Tooltip</a></li></ul></div>
+    <div><p class="mb-2 px-2.5 text-xs font-medium text-muted-foreground">Motion</p>
+        <ul class="space-y-0.5"><li><a href="/docs/motion" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Overview</a></li>
+            <li><a href="/docs/motion/springs" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Springs</a></li>
+            <li><a href="/docs/motion/presence" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Presence</a></li>
+            <li><a href="/docs/motion/gestures" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Gestures</a></li>
+            <li><a href="/docs/motion/micro" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Micro</a></li>
+            <li><a href="/docs/motion/auto-animate" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground !bg-primary/10 !text-primary font-medium" aria-current="page">Auto-Animate</a></li>
+            <li><a href="/docs/motion/orchestration" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Orchestration</a></li></ul></div>
+    <div><p class="mb-2 px-2.5 text-xs font-medium text-muted-foreground">Utilities</p>
+        <ul class="space-y-0.5"><li><a href="/docs/utilities/accessible-icon" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Accessible Icon</a></li>
+            <li><a href="/docs/utilities/direction-provider" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Direction Provider</a></li>
+            <li><a href="/docs/utilities/portal" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Portal</a></li>
+            <li><a href="/docs/utilities/slot" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Slot</a></li>
+            <li><a href="/docs/utilities/visually-hidden" class="block rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">Visually Hidden</a></li></ul></div></nav></div>
+        <div class="flex items-center justify-between border-t border-border px-4 py-3"><a href="https://github.com/lzitser23/Navius" aria-label="GitHub" class="text-muted-foreground transition-colors hover:text-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.74 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.58.23 2.75.11 3.04.73.81 1.18 1.83 1.18 3.09 0 4.42-2.7 5.39-5.27 5.68.41.36.78 1.06.78 2.14 0 1.54-.01 2.79-.01 3.17 0 .3.2.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path></svg></a>
+            <button type="button" onclick="toggleTheme()" aria-label="Toggle theme" class="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground"><svg class="h-4 w-4 dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+                <svg class="hidden h-4 w-4 dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg></button></div></aside>
+
+    <div class="lg:pl-64"><header class="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur lg:hidden"><a href="/" class="flex items-center text-foreground" style="gap:10px"><svg viewBox="0 0 64 64" fill="none" style="height:22px;width:22px;flex:none" aria-hidden="true"><circle cx="10" cy="10" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="24.7" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="39.3" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="54" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="24.7" cy="24.7" r="6" fill="currentColor" fill-opacity="0.6"></circle>
+        <circle cx="39.3" cy="39.3" r="6" fill="currentColor" fill-opacity="0.8"></circle>
+        <circle cx="54" cy="10" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="24.7" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="39.3" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="54" r="6" fill="currentColor"></circle></svg>
+                <span class="text-[18px] font-medium leading-none tracking-[-0.02em]">navius</span></a>
+            <div class="ml-auto flex items-center gap-2"><button type="button" onclick="(window.naviusOpenSearch||function(){})()" aria-label="Search" class="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg></button>
+                <button type="button" onclick="toggleTheme()" aria-label="Toggle theme" class="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground"><svg class="h-4 w-4 dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+                    <svg class="hidden h-4 w-4 dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg></button></div></header>
+
+        <div class="mx-auto flex max-w-6xl gap-10 px-4 sm:px-6"><main class="min-w-0 flex-1 py-10"><div class="mx-auto max-w-3xl">
+
+
+
+<div class="space-y-2"><p class="navius-code text-xs uppercase tracking-widest text-muted-foreground/60">Motion / Auto-Animate</p>
+    <h1 class="text-4xl font-bold tracking-tight">Auto-Animate</h1>
+    <p class="text-lg text-muted-foreground">One attribute on a list container animates every add, remove and reorder of its children. A single <code class="navius-code rounded bg-muted/50 px-1 py-0.5 text-sm text-foreground">MutationObserver</code> FLIPs survivors, new items scale and fade in, removed items pin and fade out, and the whole FLIP can ride a C#-baked spring.</p></div>
+
+<div class="not-prose my-6"><div class="flex min-h-[13rem] flex-wrap items-center justify-center gap-3 rounded-xl border border-border bg-gradient-to-b from-muted/20 to-background p-10"><!--Blazor:{"type":"webassembly","prerenderId":"2ba337d530014eaf8ab3bbd70ccbb8cc","key":{"locationHash":"067808D2470F6DD5AB0A2A1D1571E3697AACF17391C88572861B32F900A8972C:11","formattedComponentKey":""},"assembly":"Navius.Docs.Client","typeName":"Navius.Docs.Client.Demos.MotionAutoAnimateDemo","parameterDefinitions":"W10=","parameterValues":"W10="}--><div class="flex w-full max-w-xs flex-col items-stretch gap-4"><div class="flex flex-wrap justify-center gap-2"><button type="button" class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Add
+        </button>
+        <button type="button" class="inline-flex h-9 items-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Remove first
+        </button>
+        <button type="button" class="inline-flex h-9 items-center rounded-md border border-input bg-background px-4 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Shuffle
+        </button></div>
+
+    <div data-navius-auto-animate class="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-2"><div class="flex h-11 items-center rounded-lg border border-border bg-card px-3.5 text-sm text-card-foreground shadow-sm">
+                Item 1</div><div class="flex h-11 items-center rounded-lg border border-border bg-card px-3.5 text-sm text-card-foreground shadow-sm">
+                Item 2</div><div class="flex h-11 items-center rounded-lg border border-border bg-card px-3.5 text-sm text-card-foreground shadow-sm">
+                Item 3</div><div class="flex h-11 items-center rounded-lg border border-border bg-card px-3.5 text-sm text-card-foreground shadow-sm">
+                Item 4</div></div></div><!--Blazor:{"prerenderId":"2ba337d530014eaf8ab3bbd70ccbb8cc"}--></div><div data-codeblock class="group relative my-5 overflow-hidden rounded-lg border border-border navius-surface mt-3"><div class="flex items-center justify-between border-b border-white/[0.06] px-4 py-2"><span class="navius-code text-xs text-muted-foreground"></span>
+            <span class="flex items-center gap-2"><span class="navius-code text-[10px] uppercase tracking-widest text-muted-foreground/60">razor</span><button type="button" onclick="naviusCopyCode(this)" aria-label="Copy code" class="navius-copy grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground relative"><svg class="navius-copy-icon h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+        <svg class="navius-check-icon h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></span></div><pre class="overflow-x-auto p-4 text-[13px] leading-relaxed navius-code text-zinc-200"><code>@* One attribute. Key the children so reorders FLIP; splat your own layout. *@&#xA;&lt;NaviusAutoAnimate Spring=&quot;Spring.Default&quot; class=&quot;flex flex-col gap-2&quot;&gt;&#xA;    @foreach (var item in items)&#xA;    {&#xA;        &lt;div @key=&quot;item&quot;&gt;Item @item&lt;/div&gt;&#xA;    }&#xA;&lt;/NaviusAutoAnimate&gt;</code></pre></div></div>
+
+<h2 id="component" class="mt-12 scroll-mt-20 text-xl font-semibold tracking-tight">The component</h2>
+<p class="my-3 text-muted-foreground"><code class="navius-code text-foreground">NaviusAutoAnimate</code> renders one <code class="navius-code text-foreground">&lt;div&gt;</code> (a single element, per ADR-0003, so there is no <code class="navius-code text-foreground">asChild</code>) and turns it into the FLIP container. Splat your layout classes; the direct element children are the animated set, so key them and let the list drive itself. The FLIP measures real DOM moves, so keep a stable <code class="navius-code text-foreground">@key</code> on each child for reorders to animate.</p>
+<div data-codeblock class="group relative my-5 overflow-hidden rounded-lg border border-border navius-surface"><div class="flex items-center justify-between border-b border-white/[0.06] px-4 py-2"><span class="navius-code text-xs text-muted-foreground"></span>
+            <span class="flex items-center gap-2"><span class="navius-code text-[10px] uppercase tracking-widest text-muted-foreground/60">razor</span><button type="button" onclick="naviusCopyCode(this)" aria-label="Copy code" class="navius-copy grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground relative"><svg class="navius-copy-icon h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+        <svg class="navius-check-icon h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></span></div><pre class="overflow-x-auto p-4 text-[13px] leading-relaxed navius-code text-zinc-200"><code>@using Navius.Motion&#xA;&#xA;@* Defaults (250ms, ease-in-out): *@&#xA;&lt;NaviusAutoAnimate class=&quot;...&quot;&gt; ... &lt;/NaviusAutoAnimate&gt;&#xA;&#xA;@* A spring on the FLIP, and disable-able while a bulk edit runs: *@&#xA;&lt;NaviusAutoAnimate Spring=&quot;Spring.Snappy&quot; @bind-Enabled=&quot;_animate&quot; class=&quot;...&quot;&gt; ... &lt;/NaviusAutoAnimate&gt;</code></pre></div>
+<h3 id="api-component" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">NaviusAutoAnimate</h3><p class="mt-1 text-sm text-muted-foreground">A FLIP-on-mutation list container. Enabled is two-way bindable; when false, mutations apply instantly. Duration/Easing time the remain, or pass a Spring to animate the FLIP on a baked linear() curve.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">Enabled</td>
+                    <td>bool</td>
+                    <td>true</td></tr><tr><td class="text-foreground">EnabledChanged</td>
+                    <td>EventCallback&lt;bool&gt;</td>
+                    <td>-</td></tr><tr><td class="text-foreground">Duration</td>
+                    <td>double?</td>
+                    <td>-</td></tr><tr><td class="text-foreground">Easing</td>
+                    <td>string?</td>
+                    <td>-</td></tr><tr><td class="text-foreground">Spring</td>
+                    <td>Spring?</td>
+                    <td>-</td></tr><tr><td class="text-foreground">ReduceMotion</td>
+                    <td>string</td>
+                    <td>&quot;user&quot;</td></tr><tr><td class="text-foreground">ChildContent</td>
+                    <td>RenderFragment?</td>
+                    <td>-</td></tr><tr><td class="text-foreground">Attributes</td>
+                    <td>IDictionary&lt;string, object&gt;? (splat)</td>
+                    <td>-</td></tr></tbody></table></div>
+
+<h2 id="options" class="mt-12 scroll-mt-20 text-xl font-semibold tracking-tight">Timing the FLIP</h2>
+<p class="my-3 text-muted-foreground">With no timing arguments the FLIP uses the <code class="navius-code text-foreground">@formkit/auto-animate</code> defaults: 250ms, <code class="navius-code text-foreground">ease-in-out</code>. Pass a <code class="navius-code text-foreground">Spring</code> and it bakes to a <code class="navius-code text-foreground">linear()</code> easing plus its settle duration (springs on the FLIP is the differentiator over the reference); <code class="navius-code text-foreground">Duration</code> and <code class="navius-code text-foreground">Easing</code> override either dimension independently. Adds run at 1.5x the remain duration and removes at 1x, both eased the same way.</p>
+<p class="my-3 text-muted-foreground">Under <code class="navius-code text-foreground">prefers-reduced-motion</code> (or <code class="navius-code text-foreground">ReduceMotion="always"</code>) the transform animation is skipped so mutations land instantly, while adds and removes keep their opacity fade. Set <code class="navius-code text-foreground">ReduceMotion="never"</code> to opt one container out.</p>
+
+<h2 id="guardrail" class="mt-12 scroll-mt-20 text-xl font-semibold tracking-tight">Scroll-owner guardrail</h2>
+<p class="my-3 text-muted-foreground">If the container itself scrolls, auto-animate owns its <code class="navius-code text-foreground">scrollTop</code>: it counter-scrolls on removals near the bottom so surviving rows do not jump. That makes it the sole writer of the scroll position.</p>
+<div class="my-4 rounded-lg border border-border bg-muted/30 p-4"><p class="navius-code text-xs uppercase tracking-wider text-muted-foreground">Guardrail</p>
+    <p class="mt-1.5 text-sm text-muted-foreground">Do not wrap a container whose scroll position is already driven by another engine, for example a chat viewport that sticks to the bottom (<code class="navius-code text-foreground">NaviusMessageScroller</code>). Two writers of <code class="navius-code text-foreground">scrollTop</code> will fight. Auto-animate a non-scrolling inner wrapper instead, and let the other engine own the scroll container.</p></div>
+
+<h2 id="runtime" class="mt-12 scroll-mt-20 text-xl font-semibold tracking-tight">Imperative runtime</h2>
+<p class="my-3 text-muted-foreground">The component is a thin wrapper over the interop. Bind it yourself when you need to toggle the behaviour on an existing element or hold the handle: <code class="navius-code text-foreground">CreateAutoAnimateAsync</code> attaches the observer, and the handle enables or disables the FLIP without tearing it down (while disabled, mutations apply instantly). Dispose it to disconnect the observer, stop the position pollers and detach any in-flight exit clones, so nothing is orphaned.</p>
+<div data-codeblock class="group relative my-5 overflow-hidden rounded-lg border border-border navius-surface"><div class="flex items-center justify-between border-b border-white/[0.06] px-4 py-2"><span class="navius-code text-xs text-muted-foreground"></span>
+            <span class="flex items-center gap-2"><span class="navius-code text-[10px] uppercase tracking-widest text-muted-foreground/60">csharp</span><button type="button" onclick="naviusCopyCode(this)" aria-label="Copy code" class="navius-copy grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground relative"><svg class="navius-copy-icon h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+        <svg class="navius-check-icon h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></span></div><pre class="overflow-x-auto p-4 text-[13px] leading-relaxed navius-code text-zinc-200"><code>@inject IJSRuntime JS&#xA;&#xA;var interop = new MotionJsInterop(JS);&#xA;var options = MotionPrograms.AutoAnimate(Spring.Default);&#xA;_handle = await interop.CreateAutoAnimateAsync(_listElement, options);&#xA;&#xA;// Pause the FLIP for a bulk splice, then resume (re-baselines the children):&#xA;await _handle.DisableAsync();&#xA;// ... mutate the list instantly ...&#xA;await _handle.EnableAsync();&#xA;&#xA;// Later: await _handle.DisposeAsync();</code></pre></div>
+<h3 id="api-interop" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">MotionJsInterop</h3><p class="mt-1 text-sm text-muted-foreground">Bridge to navius-motion.js. CreateAutoAnimateAsync returns an AutoAnimateMotion; build its options from a spring (or raw timing) with MotionPrograms.AutoAnimate.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">CreateAutoAnimateAsync(ElementReference parent, AutoAnimateOptions options)</td>
+                    <td>Task&lt;AutoAnimateMotion&gt;</td>
+                    <td>-</td></tr><tr><td class="text-foreground">MotionPrograms.AutoAnimate(Spring? spring = null, double? durationMs = null, string? easing = null, string reduceMotion = &quot;user&quot;)</td>
+                    <td>AutoAnimateOptions</td>
+                    <td>-</td></tr></tbody></table></div>
+<h3 id="api-options" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">AutoAnimateOptions</h3><p class="mt-1 text-sm text-muted-foreground">Serialized to the executor. Easing accepts a baked linear() spring string, which is how a spring animates the FLIP.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">DurationMs</td>
+                    <td>double</td>
+                    <td>250</td></tr><tr><td class="text-foreground">Easing</td>
+                    <td>string</td>
+                    <td>&quot;ease-in-out&quot;</td></tr><tr><td class="text-foreground">ReduceMotion</td>
+                    <td>string</td>
+                    <td>&quot;user&quot;</td></tr></tbody></table></div>
+<h3 id="api-handle" class="mt-8 scroll-mt-20 navius-code text-base font-semibold tracking-tight text-foreground">AutoAnimateMotion</h3><p class="mt-1 text-sm text-muted-foreground">The live binding. Enable/Disable toggle the FLIP-on-mutation behaviour; dispose to disconnect the observer and clean up.</p><div class="my-4 overflow-hidden rounded-lg border border-border"><table class="w-full text-left text-sm"><thead class="border-b border-border bg-muted/30 navius-code text-xs uppercase tracking-wider text-muted-foreground"><tr><th class="px-4 py-2.5 font-medium">Prop</th>
+                <th class="px-4 py-2.5 font-medium">Type</th>
+                <th class="px-4 py-2.5 font-medium">Default</th></tr></thead>
+        <tbody class="navius-code [&amp;_td:not(:first-child)]:text-muted-foreground [&amp;_td]:px-4 [&amp;_td]:py-2 [&amp;_td]:align-top [&amp;_tr]:border-b [&amp;_tr]:border-border/50"><tr><td class="text-foreground">EnableAsync()</td>
+                    <td>Task</td>
+                    <td>-</td></tr><tr><td class="text-foreground">DisableAsync()</td>
+                    <td>Task</td>
+                    <td>-</td></tr><tr><td class="text-foreground">DisposeAsync()</td>
+                    <td>ValueTask</td>
+                    <td>-</td></tr></tbody></table></div>
+                    <nav aria-label="Pages" class="mt-14 grid gap-3 border-t border-border pt-6 sm:grid-cols-2"><a href="/docs/motion/micro" class="group flex flex-col gap-1 rounded-lg border border-border p-4 transition-colors hover:border-primary/40 hover:bg-accent/50"><span class="flex items-center gap-1 text-xs text-muted-foreground"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
+                    Previous
+                </span>
+                <span class="text-sm font-medium transition-colors group-hover:text-primary">Micro</span></a><a href="/docs/motion/orchestration" class="group flex flex-col items-end gap-1 rounded-lg border border-border p-4 text-right transition-colors hover:border-primary/40 hover:bg-accent/50 sm:col-start-2"><span class="flex items-center gap-1 text-xs text-muted-foreground">
+                    Next
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></span>
+                <span class="text-sm font-medium transition-colors group-hover:text-primary">Orchestration</span></a></nav></div></main>
+            <aside class="sticky top-0 hidden h-screen w-56 shrink-0 overflow-y-auto py-10 xl:block"><nav data-toc class="text-[13px]"><p class="mb-3 flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M7 12h14"></path><path d="M11 18h10"></path></svg>
+            On this page
+        </p>
+        <ul><li><a href="#component" class="block border-l-2 border-border py-1 pl-3 text-muted-foreground transition-colors hover:text-foreground">The component</a></li><li><a href="#options" class="block border-l-2 border-border py-1 pl-3 text-muted-foreground transition-colors hover:text-foreground">Timing the FLIP</a></li><li><a href="#guardrail" class="block border-l-2 border-border py-1 pl-3 text-muted-foreground transition-colors hover:text-foreground">Scroll-owner guardrail</a></li><li><a href="#runtime" class="block border-l-2 border-border py-1 pl-3 text-muted-foreground transition-colors hover:text-foreground">Imperative runtime</a></li></ul></nav></aside></div></div></div>
+
+<!--Blazor:{"type":"webassembly","prerenderId":"854c3273890643cab5f7ac0af0f1eed3","key":{"locationHash":"F023DDA1E3B4AAC6131E5C511443036FA45AAD611F955EE2FDCE82C253183131:53","formattedComponentKey":""},"assembly":"Navius.Docs.Client","typeName":"Navius.Docs.Client.Search.SearchPalette","parameterDefinitions":"W10=","parameterValues":"W10="}--><!--Blazor:{"prerenderId":"854c3273890643cab5f7ac0af0f1eed3"}-->
+
+<div id="blazor-error-ui" style="display:none;position:fixed;bottom:0;left:0;right:0;padding:0.75rem;background:#b91c1c;color:#fff;z-index:100">
+    An unhandled error has occurred.
+    <a href class="reload" style="text-decoration:underline">Reload</a>
+    <a class="dismiss">🗙</a></div>
+        
+    <script src="_framework/blazor.web.js"></script>
+    <script>
+        // Re-run the scroll-spy + pre copy-button enhancer on first load and after
+        // each enhanced navigation.
+        naviusInitScrollSpy();
+        naviusEnhancePre();
+        try { Blazor.addEventListener('enhancedload', function () { naviusInitScrollSpy(); naviusEnhancePre(); }); } catch (e) { }
+    </script></body></html><!--Blazor-WebAssembly-Component-State:eyJfX2ludGVybmFsX19BbnRpZm9yZ2VyeVJlcXVlc3RUb2tlbiI6ImV5SjJZV3gxWlNJNklrTm1SRW80VUVzdFV6VmlPVEpGTlV0MVkxQTVaVmxzTlZNeWVHZ3hNR1ZTTWxoSVJtMDNjVGgxT0ZWTFZUVlJTSFpwVlY5UlJ6TnlRblZsUlROc1dtSTRiVkZqU1ZWa1ZYWnZXV0pHYVU4ek5IcHlkbWc1ZUhCWVJtaE1NbWg1YUcxRlduRmxSRTF3TFc4MVlXMXlkbEZIVUZaYWNsbENiVFpDZW1nell6QkxkVlJEYzNremVWZ3hkR3h4YUZOSll6UTNlRXh0U0RSUkxYRkJJaXdpWm05eWJVWnBaV3hrVG1GdFpTSTZJbDlmVW1WeGRXVnpkRlpsY21sbWFXTmhkR2x2YmxSdmEyVnVJbjA9In0=-->

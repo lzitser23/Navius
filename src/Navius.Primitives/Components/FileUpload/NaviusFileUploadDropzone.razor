@@ -1,0 +1,47 @@
+@namespace Navius.Primitives.Components.FileUpload
+@inherits FileUploadPart
+
+@*
+    A focusable drop target (react-aria DropZone: role="button"). Enter/Space open
+    the file dialog (the button path is the a11y path); drag-over toggles
+    data-dragging (mirrored from the engine's OnDraggingChange, so the attribute is
+    Blazor-owned). Drag/drop itself is pointer-only sugar wired on the root.
+*@
+
+<div role="button"
+     tabindex="@(Context.Disabled ? "-1" : "0")"
+     aria-disabled="@(Context.Disabled ? "true" : null)"
+     aria-label="@AriaLabel"
+     data-navius-file-upload-dropzone
+     data-dragging="@(Context.IsDragging ? "" : null)"
+     data-disabled="@(Context.Disabled ? "" : null)"
+     @onclick="OpenAsync"
+     @onkeydown="OnKeyDownAsync"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    /// <summary>Accessible name for the drop target.</summary>
+    [Parameter] public string? AriaLabel { get; set; } = "Drop files here or press Enter to browse";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private Task OpenAsync() => Context.Disabled ? Task.CompletedTask : Context.OpenAsync();
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Context.Disabled)
+        {
+            return;
+        }
+
+        if (e.Key == "Enter" || e.Key == " ")
+        {
+            await Context.OpenAsync();
+        }
+    }
+}

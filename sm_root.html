@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en" class="dark"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="/">
+
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('navius-theme');
+                if (t === 'light') document.documentElement.classList.remove('dark');
+                else document.documentElement.classList.add('dark');
+            } catch (e) { }
+        })();
+        // OS for the hotkey label: ⌘ on Mac, Ctrl elsewhere.
+        try {
+            document.documentElement.setAttribute('data-os',
+                /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || '') ? 'mac' : 'other');
+        } catch (e) { document.documentElement.setAttribute('data-os', 'other'); }
+        function toggleTheme() {
+            var dark = document.documentElement.classList.toggle('dark');
+            try { localStorage.setItem('navius-theme', dark ? 'dark' : 'light'); } catch (e) { }
+        }
+        // CodeBlock copy-to-clipboard (static-SSR safe; buttons call it via onclick).
+        function naviusCopyCode(btn) {
+            var root = btn.closest('[data-codeblock]') || btn.closest('pre');
+            var code = root && (root.querySelector('code') || root);
+            if (!code || !navigator.clipboard) return;
+            navigator.clipboard.writeText(code.innerText).then(function () {
+                btn.setAttribute('data-copied', '');
+                setTimeout(function () { btn.removeAttribute('data-copied'); }, 1500);
+            });
+        }
+        // In-page anchors: with <base href="/"> a bare #hash href resolves against the
+        // base and navigates to the homepage. This listener registers before
+        // blazor.web.js, so its preventDefault also stops enhanced navigation; we
+        // scroll locally and update the hash without navigating.
+        document.addEventListener('click', function (e) {
+            var a = e.target && e.target.closest && e.target.closest('a[href^="#"]');
+            if (!a) return;
+            e.preventDefault();
+            var hash = a.getAttribute('href');
+            if (hash.length > 1) {
+                var el = document.getElementById(hash.slice(1));
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth' });
+                    history.replaceState(null, '', location.pathname + location.search + hash);
+                    // TOC clicks pin the clicked chapter active: sections near the page
+                    // bottom can never scroll to the viewport top, so the position-based
+                    // spy alone could not highlight them. Cleared on user scroll intent.
+                    if (a.closest('[data-toc]')) {
+                        window.__naviusTocTarget = hash.slice(1);
+                        if (window.__naviusSpy) window.__naviusSpy();
+                    }
+                }
+            }
+        });
+        // Markdown-rendered pre blocks (no CodeBlock wrapper) get an injected copy button.
+        function naviusEnhancePre() {
+            document.querySelectorAll('.prose-navius pre').forEach(function (pre) {
+                if (pre.closest('[data-codeblock]') || pre.querySelector('.navius-pre-copy')) return;
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'navius-copy navius-pre-copy';
+                btn.setAttribute('aria-label', 'Copy code');
+                btn.innerHTML = '<svg class="navius-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="navius-check-icon text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+                btn.addEventListener('click', function () { naviusCopyCode(btn); });
+                pre.style.position = 'relative';
+                pre.appendChild(btn);
+            });
+        }
+        // Search palette: the interactive island registers its .NET ref; the header button
+        // (window.naviusOpenSearch) and ⌘K / Ctrl+K both open it.
+        window.naviusWireSearch = function (ref) {
+            window.naviusOpenSearch = function () { ref.invokeMethodAsync('Open'); };
+            document.addEventListener('keydown', function (e) {
+                if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+                    e.preventDefault();
+                    ref.invokeMethodAsync('Open');
+                }
+            });
+        };
+        // Scroll-spy: highlight the current section in the 'On this page' TOC.
+        function naviusInitScrollSpy() {
+            var links = Array.prototype.slice.call(document.querySelectorAll('[data-toc] a[href^="#"]'));
+            if (!links.length) return;
+            var sections = links
+                .map(function (l) { return document.getElementById(l.getAttribute('href').slice(1)); })
+                .filter(Boolean);
+            function onScroll() {
+                var current = null;
+                if (window.__naviusTocTarget) {
+                    current = document.getElementById(window.__naviusTocTarget);
+                }
+                if (!current) {
+                    var pos = window.scrollY + 120;
+                    sections.forEach(function (s) { if (s.offsetTop <= pos) current = s; });
+                    // At the page bottom the tail sections are as visible as they get:
+                    // clamp to the last one so it can activate at all.
+                    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4)
+                        current = sections[sections.length - 1] || current;
+                }
+                links.forEach(function (l) {
+                    if (current && l.getAttribute('href') === '#' + current.id) l.setAttribute('data-active', '');
+                    else l.removeAttribute('data-active');
+                });
+            }
+            if (window.__naviusSpy) window.removeEventListener('scroll', window.__naviusSpy);
+            window.__naviusSpy = onScroll;
+            window.addEventListener('scroll', onScroll, { passive: true });
+            if (!window.__naviusTocClear) {
+                window.__naviusTocClear = function () {
+                    if (window.__naviusTocTarget) { window.__naviusTocTarget = null; if (window.__naviusSpy) window.__naviusSpy(); }
+                };
+                ['wheel', 'touchmove', 'keydown'].forEach(function (ev) { window.addEventListener(ev, window.__naviusTocClear, { passive: true }); });
+            }
+            window.__naviusTocTarget = null;
+            onScroll();
+        }
+    </script>
+
+    <link href="app.css?v=639186973242205284" rel="stylesheet" />
+    <link href="_content/Navius.Motion/navius-motion.css" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <style>
+        /* Brand type (Navius design system): Helvetica Neue 400/500, system mono for
+           meta and code. No webfonts. */
+        html, body { margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, ui-sans-serif, system-ui, sans-serif; }
+        .navius-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+        /* Long unbreakable tokens in inline code (paths, identifiers) must wrap on
+           small screens instead of forcing horizontal page overflow. Code inside
+           pre keeps its own horizontal scroll. */
+        :not(pre) > code { overflow-wrap: anywhere; }
+        /* Dark code surface used across docs. */
+        .navius-surface { background: #201f1c; }
+        ::selection { background: color-mix(in oklch, var(--primary) 30%, transparent); }
+
+        /* Slim themed scrollbars. Chromium/WebKit get the custom pill thumb; Firefox
+           (which ignores the webkit-scrollbar pseudos) gets the standard thin themed
+           scrollbar, scoped to Firefox so it doesn't disable the WebKit styling. */
+        @supports (-moz-appearance: none) {
+            * {
+                scrollbar-width: thin;
+                scrollbar-color: color-mix(in oklch, var(--foreground) 25%, transparent) transparent;
+            }
+        }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            border-radius: 9999px;
+            background: color-mix(in oklch, var(--foreground) 20%, transparent);
+            border: 3px solid var(--background);
+        }
+        ::-webkit-scrollbar-thumb:hover { background: color-mix(in oklch, var(--foreground) 35%, transparent); }
+        ::-webkit-scrollbar-corner { background: transparent; }
+
+        /* Hotkey label: ⌘ on Mac, Ctrl elsewhere (default to non-Mac before JS runs). */
+        .navius-mac { display: none; }
+        [data-os="mac"] .navius-mac { display: inline; }
+        [data-os="mac"] .navius-other { display: none; }
+        /* Scroll-spy: active section in the 'On this page' TOC (clerk-style rail). */
+        [data-toc] a[data-active] { color: var(--primary); border-color: var(--primary); font-weight: 500; }
+
+        /* Code copy buttons: swap icons while the copied state is set; markdown-rendered
+           pre blocks get an injected button (naviusEnhancePre) shown on hover. */
+        .navius-copy .navius-check-icon { display: none; }
+        .navius-copy[data-copied] .navius-check-icon { display: block; }
+        .navius-copy[data-copied] .navius-copy-icon { display: none; }
+        .navius-pre-copy { position: absolute; right: .5rem; top: .5rem; display: grid; place-items: center; height: 1.5rem; width: 1.5rem; color: var(--muted-foreground); background: transparent; border: 0; cursor: pointer; opacity: 0; transition: opacity .15s, color .15s; border-radius: .375rem; }
+        .navius-pre-copy svg { height: .875rem; width: .875rem; }
+        pre:hover > .navius-pre-copy, .navius-pre-copy:focus-visible { opacity: 1; }
+        .navius-pre-copy:hover { color: var(--foreground); }
+
+        /* Markdown (Markdig) output: a compact technical prose style. */
+        .prose-navius { color: var(--foreground); line-height: 1.7; }
+        .prose-navius h1 { font-size: 2.25rem; font-weight: 700; letter-spacing: -.02em; margin: 0 0 .5rem; }
+        .prose-navius h2 { font-size: 1.4rem; font-weight: 600; letter-spacing: -.01em; margin: 2.5rem 0 .75rem; scroll-margin-top: 5rem; }
+        .prose-navius h3 { font-size: 1.1rem; font-weight: 600; margin: 1.75rem 0 .5rem; }
+        .prose-navius p { margin: .85rem 0; color: color-mix(in oklch, var(--foreground) 75%, var(--muted-foreground)); }
+        .prose-navius a { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
+        .prose-navius ul { list-style: disc; padding-left: 1.4rem; margin: .85rem 0; }
+        .prose-navius ol { list-style: decimal; padding-left: 1.4rem; margin: .85rem 0; }
+        .prose-navius li { margin: .35rem 0; color: var(--muted-foreground); }
+        .prose-navius strong { color: var(--foreground); font-weight: 600; }
+        .prose-navius code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85em; background: color-mix(in oklch, var(--muted) 60%, transparent); padding: .1rem .35rem; border-radius: 4px; }
+        .prose-navius pre { background: oklch(.16 0 0); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 1.25rem 0; }
+        .prose-navius pre code { background: none; padding: 0; font-size: .8125rem; color: #e4e4e7; }
+        .prose-navius blockquote { border-left: 2px solid var(--border); padding-left: 1rem; color: var(--muted-foreground); margin: 1rem 0; }
+        .prose-navius hr { border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }
+    </style>
+
+    <title>Navius: headless, accessible primitives for Blazor</title></head>
+
+<body class="bg-background text-foreground antialiased"><div class="flex min-h-screen flex-col"><header class="sticky top-0 z-40 w-full border-b border-border bg-background/70 backdrop-blur-xl"><div class="mx-auto flex h-14 max-w-screen-2xl items-center gap-4 px-4 sm:px-6"><a href="/" class="flex items-center text-foreground transition-opacity hover:opacity-80" style="gap:10px"><svg viewBox="0 0 64 64" fill="none" style="height:22px;width:22px;flex:none" aria-hidden="true"><circle cx="10" cy="10" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="24.7" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="39.3" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="54" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="24.7" cy="24.7" r="6" fill="currentColor" fill-opacity="0.6"></circle>
+        <circle cx="39.3" cy="39.3" r="6" fill="currentColor" fill-opacity="0.8"></circle>
+        <circle cx="54" cy="10" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="24.7" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="39.3" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="54" r="6" fill="currentColor"></circle></svg>
+                <span class="text-[18px] font-medium leading-none tracking-[-0.02em]">navius</span>
+                <span class="rounded border border-border px-1.5 py-0.5 navius-code text-[10px] text-muted-foreground">primitives</span></a>
+            <nav class="ml-3 hidden items-center gap-5 text-sm text-muted-foreground md:flex"><a href="/docs/introduction" class="transition-colors hover:text-foreground">Documentation</a>
+                <a href="/docs/components/dialog" class="transition-colors hover:text-foreground">Components</a>
+                <a href="/docs/composition" class="transition-colors hover:text-foreground">Composition</a>
+                <a href="/docs/server-side-rendering" class="transition-colors hover:text-foreground">Engine</a></nav>
+            <div class="ml-auto flex items-center gap-3"><button type="button" onclick="(window.naviusOpenSearch||function(){})()" aria-label="Search" class="hidden h-8 items-center gap-2 rounded-md border border-border bg-background/50 px-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground sm:flex"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                    <span>Search</span>
+                    <kbd class="navius-code rounded border border-border px-1 py-0.5 text-[10px]"><span class="navius-mac">⌘</span><span class="navius-other">Ctrl </span>K</kbd></button>
+                <button type="button" onclick="toggleTheme()" aria-label="Toggle theme" class="grid h-8 w-8 place-items-center rounded-md border border-border text-muted-foreground transition-colors hover:text-foreground"><svg class="h-4 w-4 dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+                    <svg class="hidden h-4 w-4 dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg></button>
+                <a href="https://github.com/lzitser23/Navius" class="navius-code text-xs text-muted-foreground transition-colors hover:text-foreground">GitHub</a></div></div></header>
+
+    <div class="flex-1">
+
+<section class="relative overflow-hidden border-b border-border"><div class="mx-auto max-w-screen-2xl px-6 py-20 sm:py-28"><div class="max-w-3xl space-y-6"><span class="inline-flex items-center gap-2 rounded-full border border-border bg-background/40 px-3 py-1 navius-code text-xs text-muted-foreground"><span class="h-1.5 w-1.5 rounded-full bg-primary"></span>
+                Blazor · the headless brain behind zits/ui
+            </span>
+            <h1 class="text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl">
+                Unstyled, accessible<br>primitives for Blazor.
+            </h1>
+            <p class="max-w-2xl text-lg leading-relaxed text-muted-foreground">
+                Navius is a low-level component library of accessible primitives (ARIA roles,
+                keyboard interaction, focus management, and a <code class="navius-code text-foreground">data-*</code>
+                state contract) with <span class="text-foreground">zero styling</span>. The behaviour
+                lives in C# driving a small JavaScript engine, because in Blazor a correct focus trap or
+                popover <em>can't</em> be pure C#. Bring your own styles. <span class="text-foreground">Own the markup.</span></p>
+            <div class="flex flex-wrap items-center gap-3 pt-1"><a href="/docs/introduction" class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">Get started</a>
+                <a href="/docs/components/dialog" class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">Browse components</a></div>
+            <div class="max-w-sm pt-2"><div data-codeblock class="group relative my-5 overflow-hidden rounded-lg border border-border navius-surface"><div class="flex items-center justify-between border-b border-white/[0.06] px-4 py-2"><span class="navius-code text-xs text-muted-foreground">Terminal</span>
+            <span class="flex items-center gap-2"><span class="navius-code text-[10px] uppercase tracking-widest text-muted-foreground/60">bash</span><button type="button" onclick="naviusCopyCode(this)" aria-label="Copy code" class="navius-copy grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground relative"><svg class="navius-copy-icon h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+        <svg class="navius-check-icon h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></span></div><pre class="overflow-x-auto p-4 text-[13px] leading-relaxed navius-code text-zinc-200"><code>dotnet add package Navius.Primitives</code></pre></div></div></div></div></section>
+
+<section class="mx-auto max-w-screen-2xl px-6 py-16"><div class="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3"><div class="bg-background p-6"><p class="navius-code text-xs uppercase tracking-widest text-muted-foreground/60">01 · Accessible</p>
+            <h3 class="mt-2 font-semibold">WAI-ARIA, done right</h3>
+            <p class="mt-1.5 text-sm text-muted-foreground">Each primitive mirrors the WAI-ARIA APG: roles, states, focus order and keyboard, verified in a real browser.</p></div>
+        <div class="bg-background p-6"><p class="navius-code text-xs uppercase tracking-widest text-muted-foreground/60">02 · Unstyled</p>
+            <h3 class="mt-2 font-semibold">Every class is yours</h3>
+            <p class="mt-1.5 text-sm text-muted-foreground">Primitives forward all attributes via <code class="navius-code text-foreground">@attributes</code>. Style with Tailwind, plain CSS, anything, keyed off the <code class="navius-code text-foreground">data-*</code> contract.</p></div>
+        <div class="bg-background p-6"><p class="navius-code text-xs uppercase tracking-widest text-muted-foreground/60">03 · An open engine</p>
+            <h3 class="mt-2 font-semibold">C# driving JavaScript</h3>
+            <p class="mt-1.5 text-sm text-muted-foreground">Focus-trap, scroll-lock, anchored positioning and roving focus live in a small JS engine, built in the open, not skipped.</p></div></div></section>
+
+<section class="mx-auto max-w-screen-2xl px-6 pb-16"><div class="grid items-stretch gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-2"><div class="flex items-center justify-center bg-background px-6 py-16 sm:py-20" style="--navius-mark-ease:linear(0, 0.0144, 0.0522, 0.1068, 0.1723, 0.2443, 0.3192, 0.3943, 0.4674, 0.537, 0.6021, 0.662, 0.7163, 0.765, 0.8081, 0.8457, 0.8783, 0.9062, 0.9297, 0.9493, 0.9655, 0.9786, 0.9891, 0.9972, 1.0034, 1.008, 1.0112, 1.0134, 1.0146, 1.0151, 1.0151, 1.0147, 1.0139, 1.013, 1.012, 1.0108, 1.0097, 1.0086, 1.0075, 1.0065, 1.0055, 1.0047, 1.0039, 1.0032, 1.0026, 1.0021, 1.0016, 1.0012, 1.0009, 1.0006, 1.0004, 1.0002, 1.0001, 1);--navius-mark-dur:540ms"><svg viewBox="0 0 64 64" fill="none" class="navius-mark-animate text-foreground" style="height:132px;width:132px;flex:none" aria-hidden="true"><circle cx="10" cy="10" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="24.7" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="39.3" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="54" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="24.7" cy="24.7" r="6" fill="currentColor" fill-opacity="0.6"></circle>
+        <circle cx="39.3" cy="39.3" r="6" fill="currentColor" fill-opacity="0.8"></circle>
+        <circle cx="54" cy="10" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="24.7" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="39.3" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="54" r="6" fill="currentColor"></circle></svg></div>
+        <div class="flex flex-col justify-center bg-background p-8 sm:p-10"><p class="navius-code text-xs uppercase tracking-widest text-muted-foreground/60">04 · Motion</p>
+            <h3 class="mt-2 text-2xl font-semibold tracking-tight">Composed in time, not just space</h3>
+            <p class="mt-3 max-w-md text-muted-foreground">The mark is Navius in miniature: dots composed into an N, now composing in time. Each dot enters on its own spring, staggered along the stroke.</p>
+            <p class="mt-4 max-w-md text-sm text-foreground">Springs computed in C#, compiled to CSS <code class="navius-code">linear()</code>, rendered on the compositor. The first motion engine built for Blazor, not wrapped for it.</p>
+            <div class="pt-6"><a href="/docs/motion" class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">Explore Navius.Motion</a></div></div></div></section>
+
+<section class="mx-auto max-w-screen-2xl px-6 pb-24"><div class="mb-6"><p class="navius-code text-xs uppercase tracking-widest text-muted-foreground/60">Anatomy</p>
+        <h2 class="mt-1 text-2xl font-semibold tracking-tight">Compose primitives from parts</h2></div>
+    <div data-codeblock class="group relative my-5 overflow-hidden rounded-lg border border-border navius-surface"><div class="flex items-center justify-between border-b border-white/[0.06] px-4 py-2"><span class="navius-code text-xs text-muted-foreground"></span>
+            <span class="flex items-center gap-2"><span class="navius-code text-[10px] uppercase tracking-widest text-muted-foreground/60">razor</span><button type="button" onclick="naviusCopyCode(this)" aria-label="Copy code" class="navius-copy grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground relative"><svg class="navius-copy-icon h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+        <svg class="navius-check-icon h-3.5 w-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></button></span></div><pre class="overflow-x-auto p-4 text-[13px] leading-relaxed navius-code text-zinc-200"><code>&lt;NaviusDialog&gt;&#xA;    &lt;NaviusDialogTrigger&gt;Open&lt;/NaviusDialogTrigger&gt;&#xA;    &lt;NaviusDialogPortal&gt;&#xA;        &lt;NaviusDialogBackdrop /&gt;&#xA;        &lt;NaviusDialogPopup&gt;&#xA;            &lt;NaviusDialogTitle&gt;Title&lt;/NaviusDialogTitle&gt;&#xA;            &lt;NaviusDialogDescription&gt;Description&lt;/NaviusDialogDescription&gt;&#xA;            &lt;NaviusDialogClose&gt;Close&lt;/NaviusDialogClose&gt;&#xA;        &lt;/NaviusDialogPopup&gt;&#xA;    &lt;/NaviusDialogPortal&gt;&#xA;&lt;/NaviusDialog&gt;</code></pre></div></section></div>
+
+    <footer class="border-t border-border"><div class="mx-auto flex max-w-screen-2xl flex-col gap-2 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6"><p class="flex items-center gap-2.5"><svg viewBox="0 0 64 64" fill="none" class="text-foreground" style="height:18px;width:18px;flex:none" aria-hidden="true"><circle cx="10" cy="10" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="24.7" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="39.3" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="10" cy="54" r="6" fill="currentColor" fill-opacity="0.35"></circle>
+        <circle cx="24.7" cy="24.7" r="6" fill="currentColor" fill-opacity="0.6"></circle>
+        <circle cx="39.3" cy="39.3" r="6" fill="currentColor" fill-opacity="0.8"></circle>
+        <circle cx="54" cy="10" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="24.7" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="39.3" r="6" fill="currentColor"></circle>
+        <circle cx="54" cy="54" r="6" fill="currentColor"></circle></svg>
+                <span><span class="text-foreground">navius</span>: a headless, accessible primitive engine for Blazor. The brain behind <a href="https://github.com/lzitser23/Zits-helm" class="underline underline-offset-4 hover:text-foreground">zits/ui</a>.</span></p>
+            <p class="navius-code text-xs"><a href="/acknowledgements" class="underline underline-offset-4 hover:text-foreground">Acknowledgements</a> · MIT · Open Source · Open Code</p></div></footer></div>
+
+<!--Blazor:{"type":"webassembly","prerenderId":"9d027b5b25d54fbd95c92ed79e677c75","key":{"locationHash":"F023DDA1E3B4AAC6131E5C511443036FA45AAD611F955EE2FDCE82C253183131:37","formattedComponentKey":""},"assembly":"Navius.Docs.Client","typeName":"Navius.Docs.Client.Search.SearchPalette","parameterDefinitions":"W10=","parameterValues":"W10="}--><!--Blazor:{"prerenderId":"9d027b5b25d54fbd95c92ed79e677c75"}-->
+
+<div id="blazor-error-ui" style="display:none;position:fixed;bottom:0;left:0;right:0;padding:0.75rem;background:#b91c1c;color:#fff">
+    An unhandled error has occurred.
+    <a href class="reload" style="text-decoration:underline">Reload</a>
+    <a class="dismiss">🗙</a></div>
+        
+    <script src="_framework/blazor.web.js"></script>
+    <script>
+        // Re-run the scroll-spy + pre copy-button enhancer on first load and after
+        // each enhanced navigation.
+        naviusInitScrollSpy();
+        naviusEnhancePre();
+        try { Blazor.addEventListener('enhancedload', function () { naviusInitScrollSpy(); naviusEnhancePre(); }); } catch (e) { }
+    </script></body></html><!--Blazor-WebAssembly-Component-State:eyJfX2ludGVybmFsX19BbnRpZm9yZ2VyeVJlcXVlc3RUb2tlbiI6ImV5SjJZV3gxWlNJNklrTm1SRW80VUVzdFV6VmlPVEpGTlV0MVkxQTVaVmxzTlZNeWVXMVVha3RVTmtzM1RYSjRTbGxUY1ZodE4zZEpWbGw1YVRsallreFlNVmhEVFdGa1VDMUNYMFJWWDNsRlZuZzBOalJpUzB4bWJtNXhhVTlRVEVKblZWVnljakJsV0VONFNXMTZVMk5sYUVaUmVWazRhakJpY1c5U1VWaDRObUpXVkd0amIzQTVkM2R2T0dkNFVFSnBXRGxKTjBkaWVTMTVaRkJyTUcxUFRFSlZJaXdpWm05eWJVWnBaV3hrVG1GdFpTSTZJbDlmVW1WeGRXVnpkRlpsY21sbWFXTmhkR2x2YmxSdmEyVnVJbjA9In0=-->

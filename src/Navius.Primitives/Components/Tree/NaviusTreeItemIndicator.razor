@@ -1,0 +1,27 @@
+@namespace Navius.Primitives.Components.Tree
+@inherits TreePart
+
+@*
+    The expand/collapse chevron. Purely visual (aria-hidden); the treeitem's aria-expanded is
+    the accessible truth. Carries data-state="expanded|collapsed" + data-expanded so a styled
+    chevron can rotate, and data-leaf on end nodes so it can be hidden where there is nothing to
+    expand.
+*@
+
+<span aria-hidden="true"
+      data-navius-tree-item-indicator
+      data-state="@(Item.IsExpanded ? "expanded" : "collapsed")"
+      data-expanded="@(Item.Expandable && Item.IsExpanded ? "" : null)"
+      data-leaf="@(Item.Expandable ? null : "")"
+      @attributes="Attributes">
+    @ChildContent
+</span>
+
+@code {
+    [CascadingParameter] private TreeItemContext Item { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

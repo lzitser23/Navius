@@ -1,0 +1,48 @@
+@namespace Navius.Primitives.Components.Tree
+@inherits TreePart
+
+@*
+    The child container, role="group". Its presence is what marks the parent node expandable
+    (giving the treeitem its aria-expanded); it registers that on mount and clears it on unmount,
+    independent of whether it is currently showing children. Lazy-mountable: when the node is
+    collapsed the children are removed from the DOM (KeepMounted=false, the default) or kept
+    mounted-but-hidden (KeepMounted=true). Navigation never descends into a collapsed node
+    regardless, because the visible-order walk gates on expansion, not on registration.
+*@
+
+@if (Item.IsExpanded || KeepMounted)
+{
+    <div role="group"
+         id="@Tree.GroupId(Item.Value)"
+         hidden="@(Item.IsExpanded ? null : "")"
+         data-expanded="@(Item.IsExpanded ? "" : null)"
+         data-level="@Item.Level"
+         data-navius-tree-group
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [CascadingParameter] private TreeItemContext Item { get; set; } = default!;
+
+    /// <summary>Keep the subtree mounted (hidden) while collapsed instead of removing it from the DOM.</summary>
+    [Parameter] public bool KeepMounted { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Item.SetExpandable(true); // a node with a group is a parent → gets aria-expanded
+    }
+
+    public override void Dispose()
+    {
+        Item.SetExpandable(false);
+        base.Dispose();
+    }
+}

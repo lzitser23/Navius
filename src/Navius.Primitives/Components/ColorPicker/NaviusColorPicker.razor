@@ -1,0 +1,125 @@
+@namespace Navius.Primitives.Components.ColorPicker
+@inherits ComponentBase
+
+@*
+    Root of a ColorPicker. Owns the color as HSVA (via ColorPickerContext) and
+    projects it to the Value string through Format (hex/rgb/rgba/hsl/hsla).
+    Controlled via @bind-Value or uncontrolled via DefaultValue. The area, hue and
+    alpha tracks each drive one channel; the hex field and swatches set the whole
+    color. A hidden bubble input mirrors the projected string into native form
+    submission when Name is set.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div data-navius-color-picker
+         data-disabled="@(Disabled ? "" : null)"
+         @attributes="Attributes">
+        @ChildContent
+
+        @if (!string.IsNullOrEmpty(Name))
+        {
+            <NaviusBubbleInput InputType="hidden"
+                               Name="@Name"
+                               Value="@_context.Projected"
+                               Disabled="Disabled"
+                               data-navius-color-picker-input />
+        }
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled color string. Use <c>@bind-Value</c>.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial color string.</summary>
+    [Parameter] public string? DefaultValue { get; set; }
+
+    /// <summary>Output format: hex | rgb | rgba | hsl | hsla (default hex).</summary>
+    [Parameter] public string Format { get; set; } = "hex";
+
+    /// <summary>Expose an alpha channel (an AlphaSlider + alpha in the projected string).</summary>
+    [Parameter] public bool AlphaEnabled { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; }
+
+    /// <summary>Optional form field name (hidden bubble input for native submission).</summary>
+    [Parameter] public string? Name { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ColorPickerContext _context = default!;
+    private bool _valueSet;
+    private string _internal = "#000000";
+    private string? _lastProjected;
+
+    private bool IsControlled => _valueSet;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<string?>(nameof(Value), out _))
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _context = new ColorPickerContext(CommitAsync);
+        _context.Configure(Format, AlphaEnabled, Disabled, ReadOnly);
+
+        var seed = DefaultValue ?? Value ?? "#000000";
+        if (ColorMath.TryParse(seed, out var h, out var s, out var v, out var a))
+        {
+            _context.SetHsvaInternal(h, s, v, a);
+        }
+
+        _internal = _context.Projected;
+        _lastProjected = IsControlled ? Value : _internal;
+    }
+
+    protected override void OnParametersSet()
+    {
+        _context.Configure(Format, AlphaEnabled, Disabled, ReadOnly);
+
+        // External controlled change: re-seed the model when the incoming Value is a
+        // genuinely different color from what we last projected (case-insensitive so
+        // our own #RRGGBB echo does not trigger a reparse loop).
+        if (IsControlled && !string.Equals(Value, _lastProjected, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(Value) && ColorMath.TryParse(Value, out var h, out var s, out var v, out var a))
+            {
+                _context.SetHsvaInternal(h, s, v, a);
+            }
+
+            _lastProjected = Value;
+        }
+    }
+
+    private async Task CommitAsync()
+    {
+        var projected = _context.Projected;
+
+        if (IsControlled)
+        {
+            _lastProjected = projected;
+            await ValueChanged.InvokeAsync(projected);
+        }
+        else
+        {
+            _internal = projected;
+            _lastProjected = projected;
+        }
+
+        await _context.NotifyChangedAsync();
+        StateHasChanged();
+    }
+}

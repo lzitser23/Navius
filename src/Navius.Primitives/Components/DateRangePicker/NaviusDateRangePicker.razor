@@ -1,0 +1,125 @@
+@namespace Navius.Primitives.Components.DateRangePicker
+@inherits ComponentBase
+@using Navius.Primitives.Common
+
+@*
+    Elective (not part of Base UI). DateRangePicker = a role="group" holding start + end
+    segmented DateInputs and a trigger that opens a popover with a (two-month) range calendar.
+    The range-selection grid itself is delegated to the styled layer's calendar (ZitsCalendar
+    already implements range mode with all the data-range-* attributes), so the brain owns the
+    NaviusDateRange value, the endpoint inputs, form submission and the popover, not a second
+    calendar engine. Controlled via @bind-Value (NaviusDateRange) / @bind-Open, uncontrolled via
+    DefaultValue / DefaultOpen.
+*@
+
+<CascadingValue Value="_ctx" IsFixed="true">
+    <NaviusPopover Open="@CurrentOpen" OpenChanged="RequestOpenAsync" Modal="false">
+        @ChildContent
+    </NaviusPopover>
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled value. Use <c>@bind-Value</c>.</summary>
+    [Parameter] public NaviusDateRange Value { get; set; } = NaviusDateRange.Empty;
+
+    [Parameter] public EventCallback<NaviusDateRange> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial value.</summary>
+    [Parameter] public NaviusDateRange DefaultValue { get; set; } = NaviusDateRange.Empty;
+
+    /// <summary>Controlled open state. Use <c>@bind-Open</c>.</summary>
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>Uncontrolled initial open state.</summary>
+    [Parameter] public bool DefaultOpen { get; set; }
+
+    [Parameter] public DateOnly? MinValue { get; set; }
+
+    [Parameter] public DateOnly? MaxValue { get; set; }
+
+    [Parameter] public string Granularity { get; set; } = "day";
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; }
+
+    [Parameter] public bool Required { get; set; }
+
+    [Parameter] public bool Invalid { get; set; }
+
+    /// <summary>Form field name for the start endpoint's hidden bubble input.</summary>
+    [Parameter] public string? StartName { get; set; }
+
+    /// <summary>Form field name for the end endpoint's hidden bubble input.</summary>
+    [Parameter] public string? EndName { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private readonly DateRangePickerContext _ctx = new();
+
+    private NaviusDateRange _internalValue = NaviusDateRange.Empty;
+    private bool _internalOpen;
+    private bool _valueSet;
+    private bool _openSet;
+
+    private bool IsValueControlled => _valueSet;
+    private bool IsOpenControlled => _openSet;
+    private NaviusDateRange CurrentValue => IsValueControlled ? Value : _internalValue;
+    private bool CurrentOpen => IsOpenControlled ? Open : _internalOpen;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<NaviusDateRange>(nameof(Value), out _)) _valueSet = true;
+        if (parameters.TryGetValue<bool>(nameof(Open), out _)) _openSet = true;
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _internalValue = DefaultValue;
+        _internalOpen = DefaultOpen;
+        _ctx.SetRangeImpl = ApplyRangeAsync;
+    }
+
+    protected override void OnParametersSet() => SyncContext();
+
+    private void SyncContext()
+    {
+        _ctx.Value = CurrentValue;
+        _ctx.MinValue = MinValue;
+        _ctx.MaxValue = MaxValue;
+        _ctx.Granularity = Granularity;
+        _ctx.Disabled = Disabled;
+        _ctx.ReadOnly = ReadOnly;
+        _ctx.Required = Required;
+        _ctx.Invalid = Invalid;
+        _ctx.StartName = StartName;
+        _ctx.EndName = EndName;
+    }
+
+    private async Task ApplyRangeAsync(NaviusDateRange range)
+    {
+        if (!IsValueControlled)
+        {
+            _internalValue = range;
+        }
+
+        SyncContext();
+        await ValueChanged.InvokeAsync(range);
+        await _ctx.NotifyAsync();
+        StateHasChanged();
+    }
+
+    private async Task RequestOpenAsync(bool open)
+    {
+        if (!IsOpenControlled)
+        {
+            _internalOpen = open;
+        }
+
+        await OpenChanged.InvokeAsync(open);
+        StateHasChanged();
+    }
+}

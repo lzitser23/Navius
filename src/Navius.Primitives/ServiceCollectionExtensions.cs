@@ -16,6 +16,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<PortalService>();
         services.AddScoped<ToastManager>();
+        services.AddScoped<KeyboardShortcutService>();
         return services;
     }
 }

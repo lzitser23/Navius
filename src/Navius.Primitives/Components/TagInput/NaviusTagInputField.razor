@@ -1,0 +1,133 @@
+@namespace Navius.Primitives.Components.TagInput
+@inherits ComponentBase
+
+@*
+    The text <input>. Enter/Tab commit the current text (key delimiters); a typed or pasted
+    comma/space splits and commits (char delimiters, handled on input so no per-key
+    preventDefault dance is needed). Backspace on an empty field first highlights the last chip,
+    then removes it; ArrowLeft on an empty field enters chip navigation. AddOnBlur commits on blur.
+*@
+
+<input @ref="_element"
+       value="@_text"
+       placeholder="@Placeholder"
+       data-navius-tag-input-field
+       disabled="@Context.Disabled"
+       @oninput="OnInputAsync"
+       @onkeydown="OnKeyDownAsync"
+       @onblur="OnBlurAsync"
+       @attributes="Attributes" />
+
+@code {
+    [CascadingParameter] private TagInputContext Context { get; set; } = default!;
+
+    [Parameter] public string? Placeholder { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private string _text = "";
+
+    private async Task OnInputAsync(ChangeEventArgs e)
+    {
+        var text = e.Value?.ToString() ?? "";
+
+        var delimiter = FindCharDelimiter(text);
+        if (delimiter is char d)
+        {
+            var parts = text.Split(d);
+            for (var i = 0; i < parts.Length - 1; i++)
+            {
+                await Context.AddAsync(parts[i]);
+            }
+
+            _text = parts[^1];
+        }
+        else
+        {
+            _text = text;
+            if (Context.HighlightedIndex >= 0)
+            {
+                await Context.HighlightAsync(-1, false);
+            }
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Context.Disabled)
+        {
+            return;
+        }
+
+        if (_text.Length > 0 && IsKeyDelimiter(e.Key))
+        {
+            await Context.AddAsync(_text);
+            _text = "";
+            return;
+        }
+
+        if (_text.Length > 0)
+        {
+            return;
+        }
+
+        if (e.Key == "Backspace")
+        {
+            if (Context.HighlightedIndex < 0 && !Context.Empty)
+            {
+                await Context.HighlightAsync(Context.Tags.Count - 1, false);
+            }
+            else if (Context.HighlightedIndex >= 0)
+            {
+                await Context.RemoveHighlightedAsync();
+            }
+        }
+        else if (e.Key == "ArrowLeft" && !Context.Empty)
+        {
+            await Context.HighlightAsync(Context.Tags.Count - 1, true);
+        }
+    }
+
+    private async Task OnBlurAsync()
+    {
+        if (Context.AddOnBlur && _text.Length > 0)
+        {
+            await Context.AddAsync(_text);
+            _text = "";
+        }
+    }
+
+    private bool IsKeyDelimiter(string key) => key switch
+    {
+        "Enter" => Context.Delimiters.Contains(TagDelimiter.Enter),
+        "Tab" => Context.Delimiters.Contains(TagDelimiter.Tab),
+        _ => false,
+    };
+
+    private char? FindCharDelimiter(string text)
+    {
+        if (Context.Delimiters.Contains(TagDelimiter.Comma) && text.Contains(','))
+        {
+            return ',';
+        }
+
+        if (Context.Delimiters.Contains(TagDelimiter.Space) && text.Contains(' '))
+        {
+            return ' ';
+        }
+
+        return null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Context.ConsumeFieldFocus())
+        {
+            try { await _element.FocusAsync(); }
+            catch (JSException) { }
+            catch (InvalidOperationException) { }
+        }
+    }
+}

@@ -1,0 +1,122 @@
+@namespace Navius.Primitives.Components.ColorPicker
+@inherits ColorPickerTrackPart
+
+@*
+    The hue channel: a horizontal rainbow track (engine 2D tracker, x -> hue) with
+    a role="slider" thumb. Keyboard: Left/Down decrement, Right/Up increment (1
+    degree; Shift/Page 10), Home/End jump to 0 / 360. aria-valuetext announces the
+    resulting color rather than the raw degrees. The rainbow gradient is rendered
+    inline and merged with the consumer style.
+*@
+
+<div @ref="TrackElement"
+     data-navius-color-picker-hue
+     data-orientation="horizontal"
+     data-disabled="@(Context.Disabled ? "" : null)"
+     style="@MergedStyle"
+     @attributes="Forwarded">
+    <span role="slider"
+          tabindex="@TabIndex"
+          aria-label="Hue"
+          aria-orientation="horizontal"
+          aria-valuemin="0"
+          aria-valuemax="360"
+          aria-valuenow="@Hue"
+          aria-valuetext="@Context.Description"
+          aria-disabled="@(Context.Disabled ? "true" : null)"
+          data-navius-color-picker-hue-thumb
+          data-dragging="@(Dragging ? "" : null)"
+          data-disabled="@(Context.Disabled ? "" : null)"
+          style="@ThumbStyle"
+          @onkeydown="OnKeyDownAsync"></span>
+</div>
+
+@code {
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private const double Step = 1;
+    private const double LargeStep = 10;
+
+    // Hue 360 is the same color as 0, so the shared context wraps it to 0. As a SLIDER
+    // position, though, End should sit at the max (right edge) and announce 360, not
+    // collapse to 0. Remember an End press locally and honor it while the model still
+    // reads the wrapped 0; any other hue change clears it.
+    private bool _atMax;
+
+    private double DisplayHue => _atMax && Context.H == 0 ? 360 : Context.H;
+
+    protected override Task HandleFractionAsync(double x, double y)
+    {
+        _atMax = false;
+        return Context.SetHueAsync(x * 360);
+    }
+
+    private int Hue => (int)Math.Round(DisplayHue);
+
+    private string TabIndex => Context.Disabled ? "-1" : "0";
+
+    private string ThumbStyle =>
+        $"position:absolute;left:{ThumbLeft};top:50%;transform:translate(-50%,-50%);touch-action:none;";
+
+    private string ThumbLeft =>
+        (DisplayHue / 360d * 100).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    private const string Rainbow =
+        "linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)";
+
+    private string MergedStyle
+    {
+        get
+        {
+            var baseStyle = $"position:relative;touch-action:none;background:{Rainbow};";
+            var user = UserStyle;
+            return string.IsNullOrEmpty(user) ? baseStyle : $"{baseStyle}{user}";
+        }
+    }
+
+    private string? UserStyle =>
+        Attributes is not null && Attributes.TryGetValue("style", out var s) && s is string str && str.Length > 0 ? str : null;
+
+    private IDictionary<string, object>? Forwarded
+    {
+        get
+        {
+            if (Attributes is null || !Attributes.ContainsKey("style"))
+            {
+                return Attributes;
+            }
+
+            var copy = new Dictionary<string, object>(Attributes);
+            copy.Remove("style");
+            return copy;
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Context.Disabled || Context.ReadOnly)
+        {
+            return;
+        }
+
+        var step = e.ShiftKey ? LargeStep : Step;
+        var h = Context.H;
+
+        switch (e.Key)
+        {
+            case "ArrowRight":
+            case "ArrowUp": h += step; break;
+            case "ArrowLeft":
+            case "ArrowDown": h -= step; break;
+            case "PageUp": h += LargeStep; break;
+            case "PageDown": h -= LargeStep; break;
+            case "Home": h = 0; break;
+            case "End": h = 360; break;
+            default: return;
+        }
+
+        _atMax = e.Key == "End";
+        await Context.SetHueAsync(ColorMath.Wrap360(h));
+    }
+}

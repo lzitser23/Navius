@@ -1,0 +1,123 @@
+@page "/dates"
+@using System.Globalization
+@using Navius.Primitives.Common
+@using Navius.Primitives.Components.DateInput
+@using Navius.Primitives.Components.TimeInput
+@using Navius.Primitives.Components.TimePicker
+@using Navius.Primitives.Components.DateRangePicker
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-10">
+    <h1 class="text-2xl font-semibold tracking-tight">Navius Date / Time family (elective parity)</h1>
+    <p class="max-w-2xl text-sm text-muted-foreground">
+        Segmented spinbutton fields (DateInput, TimeInput), a column TimePicker, and a two-month
+        DateRangePicker reusing ZitsCalendar's range mode. None of these exist in Base UI; they are
+        Navius elective extensions following Base UI conventions.
+    </p>
+
+    @* ---------------------------------------------------------------- DateInput *@
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">DateInput (segmented)</h2>
+
+        <div class="flex flex-wrap items-start gap-8">
+            <div data-demo="date-controlled" class="space-y-2">
+                <p class="text-xs text-muted-foreground">Controlled (@@bind-Value)</p>
+                <NaviusDateInput @bind-Value="_date"
+                                 class="@SegmentRow" />
+                <p class="text-xs text-muted-foreground">value: <span data-date-value>@(_date?.ToString("yyyy-MM-dd") ?? "null")</span></p>
+            </div>
+
+            <div data-demo="date-uncontrolled" class="space-y-2">
+                <p class="text-xs text-muted-foreground">Uncontrolled (DefaultValue)</p>
+                <NaviusDateInput DefaultValue="_dateDefault" ValueChanged="v => _dateEcho = v"
+                                 class="@SegmentRow" />
+                <p class="text-xs text-muted-foreground">last edit: <span data-date-echo>@(_dateEcho?.ToString("yyyy-MM-dd") ?? "null")</span></p>
+            </div>
+
+            <div data-demo="date-styled" class="space-y-2">
+                <p class="text-xs text-muted-foreground">Styled (ZitsDateInput)</p>
+                <ZitsDateInput @bind-Value="_dateStyled" />
+                <p class="text-xs text-muted-foreground">value: <span data-date-styled-value>@(_dateStyled?.ToString("yyyy-MM-dd") ?? "null")</span></p>
+            </div>
+
+            <div data-demo="date-month" class="space-y-2">
+                <p class="text-xs text-muted-foreground">Month granularity</p>
+                <ZitsDateInput @bind-Value="_month" Granularity="month" />
+            </div>
+        </div>
+    </section>
+
+    @* ---------------------------------------------------------------- TimeInput *@
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">TimeInput (segmented)</h2>
+        <div class="flex flex-wrap items-start gap-8">
+            <div data-demo="time-24" class="space-y-2">
+                <p class="text-xs text-muted-foreground">24-hour</p>
+                <ZitsTimeInput @bind-Value="_time" HourCycle="24" />
+                <p class="text-xs text-muted-foreground">value: <span data-time-value>@(_time?.ToString("HH:mm") ?? "null")</span></p>
+            </div>
+            <div data-demo="time-12" class="space-y-2">
+                <p class="text-xs text-muted-foreground">12-hour + seconds</p>
+                <ZitsTimeInput @bind-Value="_time12" HourCycle="12" Granularity="second" />
+                <p class="text-xs text-muted-foreground">value: <span data-time12-value>@(_time12?.ToString("HH:mm:ss") ?? "null")</span></p>
+            </div>
+        </div>
+    </section>
+
+    @* ---------------------------------------------------------------- TimePicker *@
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">TimePicker (columns)</h2>
+        <div data-demo="time-picker" class="space-y-2">
+            <ZitsTimePicker @bind-Value="_pickTime" HourCycle="24" MinuteStep="5" />
+            <p class="text-xs text-muted-foreground">value: <span data-picktime-value>@(_pickTime?.ToString("HH:mm") ?? "null")</span></p>
+        </div>
+    </section>
+
+    @* ---------------------------------------------------------------- DateRangePicker *@
+    <section class="space-y-3">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">DateRangePicker (two-month range)</h2>
+        <div data-demo="range-picker" class="space-y-2">
+            <ZitsDateRangePicker @bind-Value="_range" Presets="_presets" />
+            <p class="text-xs text-muted-foreground">
+                value: <span data-range-value>@RangeText(_range)</span>
+            </p>
+        </div>
+
+        <div data-demo="range-calendar" class="space-y-2">
+            <p class="text-xs text-muted-foreground">Standalone range calendar (fixed month)</p>
+            <ZitsCalendar Mode="range" @bind-SelectedRange="_calRange" DefaultMonth="_fixedMonth" NumberOfMonths="1" />
+            <p class="text-xs text-muted-foreground">value: <span data-cal-range-value>@RangeText(new NaviusDateRange(_calRange.Start, _calRange.End))</span></p>
+        </div>
+    </section>
+</div>
+
+@code {
+    private DateOnly? _date = new DateOnly(2026, 7, 4);
+    private readonly DateOnly _dateDefault = new(2024, 1, 15);
+    private DateOnly? _dateEcho;
+    private DateOnly? _dateStyled = new DateOnly(2026, 3, 20);
+    private DateOnly? _month = new DateOnly(2026, 5, 1);
+
+    private TimeOnly? _time = new TimeOnly(9, 30);
+    private TimeOnly? _time12 = new TimeOnly(14, 15, 45);
+    private TimeOnly? _pickTime = new TimeOnly(10, 0);
+
+    private NaviusDateRange _range = new(new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 14));
+    private (DateOnly? Start, DateOnly? End) _calRange;
+    private readonly DateOnly _fixedMonth = new(2026, 6, 1);
+
+    private readonly IReadOnlyList<ZitsDateRangePreset> _presets = new List<ZitsDateRangePreset>
+    {
+        new("This week", new NaviusDateRange(new DateOnly(2026, 6, 29), new DateOnly(2026, 7, 5))),
+        new("This month", new NaviusDateRange(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31))),
+    };
+
+    private static string RangeText(NaviusDateRange r) =>
+        $"{r.Start?.ToString("yyyy-MM-dd") ?? "-"} → {r.End?.ToString("yyyy-MM-dd") ?? "-"}";
+
+    private const string SegmentRow =
+        "inline-flex h-9 items-center gap-px rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm " +
+        "focus-within:outline-none focus-within:ring-1 focus-within:ring-ring " +
+        "[&_[role=spinbutton]]:rounded [&_[role=spinbutton]]:px-0.5 [&_[role=spinbutton]]:tabular-nums [&_[role=spinbutton]]:outline-none " +
+        "[&_[role=spinbutton]:focus]:bg-accent [&_[role=spinbutton]:focus]:text-accent-foreground " +
+        "[&_[data-placeholder]]:text-muted-foreground [&_[data-segment=literal]]:text-muted-foreground";
+}

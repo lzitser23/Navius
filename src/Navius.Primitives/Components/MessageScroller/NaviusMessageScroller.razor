@@ -1,0 +1,19 @@
+@namespace Navius.Primitives.Components.MessageScroller
+
+@*
+    The scroller frame. Positioning parent for the scroll button and the mirror
+    target for the engine's data-scrollable / data-autoscrolling attributes. Must
+    sit in a height-constrained container; the consumer styles it (typically
+    relative + flex-col + overflow-hidden filling the parent).
+*@
+
+<div data-navius-messagescroller @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

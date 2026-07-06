@@ -1,0 +1,101 @@
+@namespace Navius.Primitives.Components.Sortable
+@inherits ComponentBase
+@implements IDisposable
+@using Microsoft.AspNetCore.Components.Web
+
+@*
+    One reorderable row. It is the drag target (a direct child of the sortable container) and
+    the keyboard focus target (roving tabindex: the active key is tabindex=0, the rest -1). Its
+    Value is the stable key the root tracks order by; data-navius-sortable-id mirrors it. Pointer
+    drag visuals (data-dragging on the dragged item, data-drop-target on the hovered slot) are
+    painted by the engine directly and are NOT rendered here, so a C# re-render leaves them
+    untouched (passthrough). Keyboard grab is C#-owned via data-keyboard-grabbed. Keydown routes
+    to the root's single reorder reducer; focusin drives roving; a queued focus request follows a
+    grabbed item across a reorder.
+*@
+
+<div @ref="_element"
+     role="listitem"
+     data-navius-sortable-item
+     data-navius-sortable-id="@Value"
+     data-keyboard-grabbed="@(Grabbed ? "" : null)"
+     data-disabled="@(IsDisabled ? "" : null)"
+     aria-roledescription="sortable item"
+     aria-grabbed="@(Grabbed ? "true" : null)"
+     tabindex="@TabIndex"
+     @onkeydown="OnKeyDownAsync"
+     @onfocusin="OnFocusIn"
+     @attributes="Attributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private SortableContext Context { get; set; } = default!;
+
+    /// <summary>The stable key that identifies this item in the sortable's order (required).</summary>
+    [Parameter] public string Value { get; set; } = default!;
+
+    /// <summary>Accessible name used in live-region announcements (defaults to <see cref="Value"/>).</summary>
+    [Parameter] public string? Label { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _element;
+    private string? _registeredKey;
+
+    private bool IsDisabled => Disabled || Context.Disabled;
+
+    private bool Grabbed => Context.IsGrabbed(Value);
+
+    // Roving tabindex: exactly one enabled row is focusable; disabled rows are skipped by Tab.
+    private string TabIndex => Context.IsTabbable(Value) ? "0" : "-1";
+
+    protected override void OnInitialized() => Context.Changed += OnContextChanged;
+
+    protected override void OnParametersSet()
+    {
+        // Keep the root's label + disabled registries in sync (used for announcements and to
+        // skip disabled rows during roving nav), re-keying on a Value change.
+        if (_registeredKey is not null && _registeredKey != Value)
+        {
+            Context.RemoveLabel(_registeredKey);
+            Context.SetItemDisabled(_registeredKey, false);
+        }
+
+        Context.SetLabel(Value, Label ?? Value);
+        Context.SetItemDisabled(Value, Disabled);
+        _registeredKey = Value;
+    }
+
+    private void OnContextChanged() => InvokeAsync(StateHasChanged);
+
+    // Page-scroll suppression for the reducer's own keys is done synchronously in the JS engine
+    // (createSortable's keydown guard), so there is no Blazor render-lag on the first key and Tab
+    // stays free without a lagging preventDefault flag.
+    private Task OnKeyDownAsync(KeyboardEventArgs e) => Context.HandleKeyDownAsync(Value, e);
+
+    private void OnFocusIn() => Context.NotifyFocused(Value);
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!IsDisabled && Context.ConsumeFocus(Value))
+        {
+            _ = _element.FocusAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        Context.Changed -= OnContextChanged;
+        if (_registeredKey is not null)
+        {
+            Context.RemoveLabel(_registeredKey);
+            Context.SetItemDisabled(_registeredKey, false);
+        }
+    }
+}

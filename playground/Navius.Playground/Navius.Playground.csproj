@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Navius.Primitives\Navius.Primitives.csproj" />
+    <ProjectReference Include="..\..\src\Navius.Motion\Navius.Motion.csproj" />
     <!-- The styled helm lives in the sibling zits-helm repo (ADR-0008). -->
     <ProjectReference Include="..\..\..\zits-helm\src\Zits.Ui\Zits.Ui.csproj" />
   </ItemGroup>

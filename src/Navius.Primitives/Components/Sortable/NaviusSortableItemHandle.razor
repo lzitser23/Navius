@@ -1,0 +1,28 @@
+@namespace Navius.Primitives.Components.Sortable
+@inherits ComponentBase
+
+@*
+    Optional drag handle. Its presence scopes pointer drag to the handle: on init it flags the
+    root, which then passes a "[data-navius-sortable-handle]" selector into SortableOptions.Handle
+    so the engine only starts a drag when the press lands on this element (parity with NeoUI's
+    SortableItemHandle). It is aria-hidden by default because keyboard reordering acts on the whole
+    item, not the handle (a mouse-only affordance); the consumer can override via @attributes.
+    Place it anywhere inside a NaviusSortableItem (e.g. a grip glyph, or a cell in a data row).
+*@
+
+<span data-navius-sortable-handle
+      aria-hidden="true"
+      @attributes="Attributes">
+    @ChildContent
+</span>
+
+@code {
+    [CascadingParameter] private SortableContext Context { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnInitialized() => Context.RegisterHandle();
+}

@@ -1,0 +1,37 @@
+@namespace Navius.Primitives.Components.FileUpload
+@inherits FileUploadPart
+@using Microsoft.AspNetCore.Components.Forms
+
+@*
+    The selected-files list (role="list"). Either auto-renders one
+    NaviusFileUploadItem per file via ItemTemplate, or takes explicit children.
+    Re-renders whenever the file list changes.
+*@
+
+<ul role="list"
+    data-navius-file-upload-list
+    @attributes="Attributes">
+    @if (ItemTemplate is not null)
+    {
+        @foreach (var file in Context.Files)
+        {
+            <NaviusFileUploadItem File="file" @key="file">
+                @ItemTemplate(file)
+            </NaviusFileUploadItem>
+        }
+    }
+    else
+    {
+        @ChildContent
+    }
+</ul>
+
+@code {
+    /// <summary>Renders the inside of each item row for a file; auto-wraps it in an item.</summary>
+    [Parameter] public RenderFragment<IBrowserFile>? ItemTemplate { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

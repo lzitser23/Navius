@@ -1,0 +1,318 @@
+@namespace Navius.Primitives.Components.Tree
+@typeparam TValue
+@inherits ComponentBase
+@implements IDisposable
+
+@*
+    Root of the tree (the full WAI-APG TreeView contract). role="tree" with aria-label /
+    aria-labelledby, aria-multiselectable when SelectionMode="multiple", aria-orientation, and
+    (in FocusMode="activedescendant") tabindex=0 + aria-activedescendant. Generic over the node
+    value type; a non-generic TreeContext is cascaded so the parts stay non-generic.
+
+    Selection is controlled via @bind-SelectedValue (single) / @bind-SelectedValues (multiple)
+    or uncontrolled via DefaultSelectedValue(s). Expansion is controlled via @bind-ExpandedValues
+    or uncontrolled via DefaultExpandedValues. All keyboard handling lives on this role="tree"
+    element (it catches the bubbled keydown from the roving item, and owns focus in
+    activedescendant mode), so a single handler serves both focus models.
+
+    Two composition modes:
+      markup      : author NaviusTreeItem / NaviusTreeGroup / ... as ChildContent.
+      data-driven : pass Items (IReadOnlyList<TreeNode<TValue>>) + ItemTemplate; the tree walks
+                    the hierarchy and wires level / setsize / posinset / group roles automatically.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <CascadingValue Value="(object?)null" Name="NaviusTreeParentValue" IsFixed="true">
+        <CascadingValue Value="0" Name="NaviusTreeLevel" IsFixed="true">
+            <div role="tree"
+                 id="@_context.BaseId"
+                 aria-label="@Label"
+                 aria-labelledby="@LabelledBy"
+                 aria-multiselectable="@(_context.IsMulti ? "true" : null)"
+                 aria-orientation="vertical"
+                 aria-activedescendant="@_context.ActiveDescendantId"
+                 tabindex="@(_context.IsActiveDescendant ? "0" : null)"
+                 dir="@(EffectiveDir == "ltr" ? null : EffectiveDir)"
+                 data-orientation="@Orientation"
+                 data-disabled="@(Disabled ? "" : null)"
+                 data-navius-tree
+                 @onkeydown="OnKeyDownAsync"
+                 @onkeydown:preventDefault="_preventKeyDefault"
+                 @attributes="Attributes">
+                @if (Items is not null)
+                {
+                    <NaviusTreeItems TValue="TValue" Nodes="Items" ItemTemplate="ItemTemplate!" />
+                }
+                else
+                {
+                    @ChildContent
+                }
+            </div>
+        </CascadingValue>
+    </CascadingValue>
+</CascadingValue>
+
+@code {
+    /// <summary>"none" | "single" (default) | "multiple".</summary>
+    [Parameter] public string SelectionMode { get; set; } = "single";
+
+    /// <summary>"roving" (default) | "activedescendant" (for virtualized trees).</summary>
+    [Parameter] public string FocusMode { get; set; } = "roving";
+
+    /// <summary>Controlled single-select value. Two-way via <c>@bind-SelectedValue</c>.</summary>
+    [Parameter] public TValue? SelectedValue { get; set; }
+
+    [Parameter] public EventCallback<TValue?> SelectedValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial single-select value.</summary>
+    [Parameter] public TValue? DefaultSelectedValue { get; set; }
+
+    /// <summary>Controlled multi-select values. Two-way via <c>@bind-SelectedValues</c>.</summary>
+    [Parameter] public IReadOnlyList<TValue>? SelectedValues { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<TValue>> SelectedValuesChanged { get; set; }
+
+    /// <summary>Uncontrolled initial multi-select values.</summary>
+    [Parameter] public IReadOnlyList<TValue>? DefaultSelectedValues { get; set; }
+
+    /// <summary>Controlled expanded values. Two-way via <c>@bind-ExpandedValues</c>.</summary>
+    [Parameter] public IReadOnlyCollection<TValue>? ExpandedValues { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyCollection<TValue>> ExpandedValuesChanged { get; set; }
+
+    /// <summary>Uncontrolled initial expanded values.</summary>
+    [Parameter] public IReadOnlyCollection<TValue>? DefaultExpandedValues { get; set; }
+
+    /// <summary>Disables the whole tree (cascades to every node).</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>"vertical" (default) or "horizontal"; drives data-orientation for styling. The WAI-APG
+    /// tree keyboard model is vertical, so aria-orientation stays "vertical" (it never contradicts the keys).</summary>
+    [Parameter] public string Orientation { get; set; } = "vertical";
+
+    /// <summary>"ltr" | "rtl". Under rtl the horizontal expand/collapse arrows mirror. Falls back to the cascaded direction.</summary>
+    [Parameter] public string? Dir { get; set; }
+
+    /// <summary>Accessible name (aria-label).</summary>
+    [Parameter] public string? Label { get; set; }
+
+    /// <summary>Accessible name by reference (aria-labelledby).</summary>
+    [Parameter] public string? LabelledBy { get; set; }
+
+    /// <summary>Data-driven mode: the hierarchical node set. When set, ChildContent is ignored.</summary>
+    [Parameter] public IReadOnlyList<TreeNode<TValue>>? Items { get; set; }
+
+    /// <summary>Data-driven mode: renders each node's label row (Content / Trigger / ...); the tree auto-wires the group + recursion.</summary>
+    [Parameter] public RenderFragment<TreeNode<TValue>>? ItemTemplate { get; set; }
+
+    /// <summary>Fires with the full selection whenever it changes (controlled or not).</summary>
+    [Parameter] public EventCallback<IReadOnlyList<TValue>> OnSelectionChange { get; set; }
+
+    /// <summary>Fires with the full expanded set whenever it changes (controlled or not).</summary>
+    [Parameter] public EventCallback<IReadOnlyList<TValue>> OnExpandedChange { get; set; }
+
+    [CascadingParameter(Name = "NaviusDirection")] public string? CascadedDir { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private TreeContext _context = default!;
+    private HashSet<object> _internalSelected = new();
+    private HashSet<object> _internalExpanded = new();
+    private bool _selValueSet;
+    private bool _selValuesSet;
+    private bool _expandedSet;
+    private Func<Task>? _rootOnChange;
+
+    private bool IsMulti => SelectionMode == "multiple";
+
+    private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    private bool SelectionControlled => IsMulti ? _selValuesSet : _selValueSet;
+
+    public override async Task SetParametersAsync(ParameterView parameters)
+    {
+        // Controlled only when a NON-NULL value is supplied (an unbound wrapper forwarding
+        // a null @bind must stay uncontrolled), mirroring the Accordion controlled-ness rule.
+        if (parameters.TryGetValue<TValue?>(nameof(SelectedValue), out var sv) && sv is not null)
+        {
+            _selValueSet = true;
+        }
+
+        if (parameters.TryGetValue<IReadOnlyList<TValue>?>(nameof(SelectedValues), out var svs) && svs is not null)
+        {
+            _selValuesSet = true;
+        }
+
+        if (parameters.TryGetValue<IReadOnlyCollection<TValue>?>(nameof(ExpandedValues), out var ev) && ev is not null)
+        {
+            _expandedSet = true;
+        }
+
+        await base.SetParametersAsync(parameters);
+    }
+
+    private IEnumerable<object> CurrentSelection
+    {
+        get
+        {
+            if (IsMulti)
+            {
+                return _selValuesSet
+                    ? (SelectedValues ?? Array.Empty<TValue>()).Cast<object>()
+                    : _internalSelected;
+            }
+
+            if (_selValueSet)
+            {
+                return SelectedValue is null ? Array.Empty<object>() : new object[] { SelectedValue };
+            }
+
+            return _internalSelected;
+        }
+    }
+
+    private IEnumerable<object> CurrentExpanded =>
+        _expandedSet ? (ExpandedValues ?? Array.Empty<TValue>()).Cast<object>() : _internalExpanded;
+
+    protected override void OnInitialized()
+    {
+        if (IsMulti)
+        {
+            if (DefaultSelectedValues is not null)
+            {
+                foreach (var v in DefaultSelectedValues)
+                {
+                    if (v is not null)
+                    {
+                        _internalSelected.Add(v);
+                    }
+                }
+            }
+        }
+        else if (DefaultSelectedValue is not null)
+        {
+            _internalSelected.Add(DefaultSelectedValue);
+        }
+
+        if (DefaultExpandedValues is not null)
+        {
+            foreach (var v in DefaultExpandedValues)
+            {
+                if (v is not null)
+                {
+                    _internalExpanded.Add(v);
+                }
+            }
+        }
+
+        _context = new TreeContext(RequestSelectionChangeAsync, RequestExpandedChangeAsync);
+        _context.UpdateRoot(SelectionMode, FocusMode, Disabled, Orientation, EffectiveDir);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _context.UpdateRoot(SelectionMode, FocusMode, Disabled, Orientation, EffectiveDir);
+        await _context.SetSelectionInternalAsync(CurrentSelection);
+        await _context.SetExpandedInternalAsync(CurrentExpanded);
+        ManageRootSubscription();
+    }
+
+    private bool _preventKeyDefault;
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        // Suppress page scroll for the navigation keys the tree owns (the dynamic-bool
+        // preventDefault pattern, as on Sortable); Tab and typing keep their defaults.
+        _preventKeyDefault = e.Key is "ArrowUp" or "ArrowDown" or "ArrowLeft" or "ArrowRight"
+            or "Home" or "End" or " ";
+        await _context.HandleKeyDownAsync(e);
+    }
+
+    private async Task RequestSelectionChangeAsync(IReadOnlyCollection<object> next)
+    {
+        var typed = next.Cast<TValue>().ToList();
+
+        if (SelectionControlled)
+        {
+            if (IsMulti)
+            {
+                await SelectedValuesChanged.InvokeAsync(typed);
+            }
+            else
+            {
+                await SelectedValueChanged.InvokeAsync(typed.FirstOrDefault());
+            }
+
+            await OnSelectionChange.InvokeAsync(typed);
+        }
+        else
+        {
+            _internalSelected = new HashSet<object>(next);
+            await _context.SetSelectionInternalAsync(_internalSelected);
+
+            if (IsMulti && SelectedValuesChanged.HasDelegate)
+            {
+                await SelectedValuesChanged.InvokeAsync(typed);
+            }
+            else if (!IsMulti && SelectedValueChanged.HasDelegate)
+            {
+                await SelectedValueChanged.InvokeAsync(typed.FirstOrDefault());
+            }
+
+            await OnSelectionChange.InvokeAsync(typed);
+            StateHasChanged();
+        }
+    }
+
+    private async Task RequestExpandedChangeAsync(IReadOnlyCollection<object> next)
+    {
+        var typed = next.Cast<TValue>().ToList();
+
+        if (_expandedSet)
+        {
+            await ExpandedValuesChanged.InvokeAsync(typed);
+            await OnExpandedChange.InvokeAsync(typed);
+        }
+        else
+        {
+            _internalExpanded = new HashSet<object>(next);
+            await _context.SetExpandedInternalAsync(_internalExpanded);
+
+            if (ExpandedValuesChanged.HasDelegate)
+            {
+                await ExpandedValuesChanged.InvokeAsync(typed);
+            }
+
+            await OnExpandedChange.InvokeAsync(typed);
+            StateHasChanged();
+        }
+    }
+
+    private void ManageRootSubscription()
+    {
+        // Only the activedescendant container's own attributes (aria-activedescendant) depend on
+        // the active node; roving mode leaves per-item re-render to the parts (no whole-tree churn).
+        if (_context.IsActiveDescendant && _rootOnChange is null)
+        {
+            _rootOnChange = () => InvokeAsync(StateHasChanged);
+            _context.Changed += _rootOnChange;
+        }
+        else if (!_context.IsActiveDescendant && _rootOnChange is not null)
+        {
+            _context.Changed -= _rootOnChange;
+            _rootOnChange = null;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_rootOnChange is not null)
+        {
+            _context.Changed -= _rootOnChange;
+            _rootOnChange = null;
+        }
+    }
+}

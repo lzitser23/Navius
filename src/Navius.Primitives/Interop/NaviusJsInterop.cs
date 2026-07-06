@@ -386,6 +386,23 @@ public sealed class NaviusJsInterop : IAsyncDisposable
     }
 
     /// <summary>
+    /// A single document-level keydown listener that matches canonical chord strings
+    /// against a table pushed from C# (via <see cref="ShortcutListener.UpdateChordsAsync"/>)
+    /// and invokes <c>OnShortcut(chord)</c> on <paramref name="callback"/>. The
+    /// preventDefault decision is made JS-side off that table (synchronously, before any
+    /// round trip); handler execution dispatches back to C#. For
+    /// <c>KeyboardShortcutService</c>.
+    /// </summary>
+    public async Task<ShortcutListener> CreateShortcutListenerAsync<T>(
+        DotNetObjectReference<T> callback) where T : class
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createShortcutListener", callback, new { });
+        return new ShortcutListener(handle);
+    }
+
+    /// <summary>
     /// Pointer/touch drag carousel rooted at <paramref name="viewport"/> (whose first
     /// child is the slide track). Invokes <c>OnSelect</c>/<c>OnSettle</c>/
     /// <c>OnCanScrollChange</c> on <paramref name="callback"/>. Keyboard + autoplay
@@ -412,6 +429,86 @@ public sealed class NaviusJsInterop : IAsyncDisposable
         var handle = await module.InvokeAsync<IJSObjectReference>(
             "createSheetSwipe", content, callback, options);
         return new SheetSwipe(handle);
+    }
+
+    /// <summary>
+    /// Conversation-transcript scroll manager rooted at <paramref name="viewport"/>:
+    /// anchored turns, streamed-reply follow, prepend scroll preservation, edge state
+    /// (<c>OnScrollableChange</c>) and lazy visibility tracking
+    /// (<c>OnVisibilityChange</c>) on <paramref name="callback"/>. For MessageScroller.
+    /// </summary>
+    public async Task<MessageScroller> CreateMessageScrollerAsync<T>(
+        ElementReference viewport, DotNetObjectReference<T> callback, MessageScrollerOptions options) where T : class
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createMessageScroller", viewport, callback, options);
+        return new MessageScroller(handle);
+    }
+
+    /// <summary>
+    /// Pointer-capture tracker over <paramref name="element"/> that streams a
+    /// normalized <c>{ x, y }</c> pair (each 0..1, x mirrored under RTL) to
+    /// <c>OnFraction2D</c> on <paramref name="callback"/> during a drag and
+    /// <c>OnCommit2D</c> on release. The 2D sibling of the slider drag tracker; C#
+    /// owns the channel mapping. For the ColorPicker area thumb.
+    /// </summary>
+    public async Task<PointerTracker2D> CreatePointerTracker2DAsync<T>(
+        ElementReference element, DotNetObjectReference<T> callback) where T : class
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createPointerTracker2D", element, callback);
+        return new PointerTracker2D(handle);
+    }
+
+    /// <summary>
+    /// Wire drag/drop on <paramref name="element"/> to relay dropped files into the
+    /// real hidden <paramref name="inputElement"/> (<c>&lt;input type="file"&gt;</c>)
+    /// and dispatch a change event so Blazor's <c>InputFile</c> sees them, toggling
+    /// <c>data-dragging</c> on the element and reporting it via
+    /// <c>OnDraggingChange</c> on <paramref name="callback"/>. The handle's
+    /// <see cref="FileDropzone.ClickToOpenAsync"/> opens the native file dialog. For FileUpload.
+    /// </summary>
+    public async Task<FileDropzone> CreateFileDropzoneAsync<T>(
+        ElementReference element, ElementReference inputElement, DotNetObjectReference<T> callback) where T : class
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createFileDropzone", element, inputElement, callback);
+        return new FileDropzone(handle);
+    }
+
+    /// <summary>
+    /// Atomic read/write over a text <paramref name="input"/>'s value + selection for
+    /// the caret-stable masking pipeline: <see cref="MaskedSelection.GetStateAsync"/>
+    /// snapshots value + selection bounds, <see cref="MaskedSelection.SetStateAsync"/>
+    /// writes value + <c>setSelectionRange</c> in one call. No callback. For
+    /// MaskedInput / CurrencyInput.
+    /// </summary>
+    public async Task<MaskedSelection> CreateMaskedSelectionAsync(ElementReference input)
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createMaskedSelection", input);
+        return new MaskedSelection(handle);
+    }
+
+    /// <summary>
+    /// Pointer-driven drag-to-reorder over the direct children of
+    /// <paramref name="container"/>. Emits <c>OnDragStart</c>/<c>OnDragOver</c>/
+    /// <c>OnDrop</c>/<c>OnCancel</c> on <paramref name="callback"/> with list indices
+    /// and paints <c>data-dragging</c>/<c>data-drop-target</c> hooks; C# owns the
+    /// collection and commits the reorder on re-render (Escape cancels). Keyboard
+    /// reordering stays in C#. For Sortable.
+    /// </summary>
+    public async Task<Sortable> CreateSortableAsync<T>(
+        ElementReference container, SortableOptions options, DotNetObjectReference<T> callback) where T : class
+    {
+        var module = await _module.Value;
+        var handle = await module.InvokeAsync<IJSObjectReference>(
+            "createSortable", container, options, callback);
+        return new Sortable(handle);
     }
 
     public async ValueTask DisposeAsync()
@@ -757,6 +854,45 @@ public sealed class ToastHotkey : IAsyncDisposable
 }
 
 /// <summary>
+/// A live global keyboard-shortcut listener. <see cref="UpdateChordsAsync"/> replaces the
+/// JS-side chord table (the source of the synchronous preventDefault decision); dispose to
+/// remove the document keydown handler.
+/// </summary>
+public sealed class ShortcutListener : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal ShortcutListener(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>
+    /// Push the current effective chord table. <paramref name="entries"/> serializes to
+    /// <c>{ chord, preventDefault, allowInInputs, repeat }[]</c> (camelCase).
+    /// </summary>
+    public async Task UpdateChordsAsync(object entries)
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("updateChords", entries);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
 /// A live pointer/touch carousel. Drive it with <see cref="ScrollNextAsync"/>/
 /// <see cref="ScrollPrevAsync"/>/<see cref="ScrollToAsync"/>, re-measure with
 /// <see cref="ReInitAsync"/>, and dispose to detach its pointer handlers.
@@ -834,6 +970,229 @@ public sealed class SheetSwipe : IAsyncDisposable
     private readonly IJSObjectReference _handle;
 
     internal SheetSwipe(IJSObjectReference handle) => _handle = handle;
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// A live conversation-transcript scroll manager. Drive it with
+/// <see cref="ScrollToMessageAsync"/>/<see cref="ScrollToStartAsync"/>/
+/// <see cref="ScrollToEndAsync"/>, push option changes with <see cref="UpdateAsync"/>,
+/// gate visibility reporting with <see cref="SetVisibilityTrackingAsync"/>, and
+/// dispose to detach its observers and listeners.
+/// </summary>
+public sealed class MessageScroller : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal MessageScroller(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>
+    /// Scroll the row with <paramref name="messageId"/> into view. Queues the target
+    /// when called before any rows exist; returns false for an id missing from a
+    /// mounted transcript.
+    /// </summary>
+    public async Task<bool> ScrollToMessageAsync(string messageId, MessageScrollerScrollOptions? options = null)
+    {
+        try
+        {
+            return await _handle.InvokeAsync<bool>("scrollToMessage", messageId, options);
+        }
+        catch (JSDisconnectedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Scroll to the start of the transcript (releases any streamed-reply follow).</summary>
+    public async Task<bool> ScrollToStartAsync(MessageScrollerScrollOptions? options = null)
+    {
+        try
+        {
+            return await _handle.InvokeAsync<bool>("scrollToStart", options);
+        }
+        catch (JSDisconnectedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Scroll to the live edge (re-engages follow when autoScroll is enabled).</summary>
+    public async Task<bool> ScrollToEndAsync(MessageScrollerScrollOptions? options = null)
+    {
+        try
+        {
+            return await _handle.InvokeAsync<bool>("scrollToEnd", options);
+        }
+        catch (JSDisconnectedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Push changed provider options into the engine.</summary>
+    public async Task UpdateAsync(MessageScrollerOptions options)
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("update", options);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>Start or stop visibility tracking (it costs nothing while stopped).</summary>
+    public async Task SetVisibilityTrackingAsync(bool enabled)
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("setVisibilityTracking", enabled);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// A live 2D pointer tracker (ColorPicker area thumb). Streams <c>OnFraction2D</c>
+/// during a drag and <c>OnCommit2D</c> on release to the callback it was created
+/// with. Dispose to detach its pointer handlers.
+/// </summary>
+public sealed class PointerTracker2D : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal PointerTracker2D(IJSObjectReference handle) => _handle = handle;
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// A live file dropzone (FileUpload). Relays dropped files into the hidden native
+/// input; <see cref="ClickToOpenAsync"/> opens the native file dialog. Dispose to
+/// detach its drag/drop handlers.
+/// </summary>
+public sealed class FileDropzone : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal FileDropzone(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>Forward a Trigger/Dropzone activation to the hidden input's <c>click()</c> (opens the OS file dialog).</summary>
+    public async Task ClickToOpenAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("clickToOpen");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// Atomic value + selection access over a text input for the caret-stable masking
+/// pipeline. <see cref="GetStateAsync"/> snapshots the live value and selection;
+/// <see cref="SetStateAsync"/> writes value + <c>setSelectionRange</c> in one call.
+/// Dispose to release the JS handle (there are no listeners to detach).
+/// </summary>
+public sealed class MaskedSelection : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal MaskedSelection(IJSObjectReference handle) => _handle = handle;
+
+    /// <summary>Read the input's live value and selection bounds.</summary>
+    public async Task<MaskedSelectionState> GetStateAsync()
+        => await _handle.InvokeAsync<MaskedSelectionState>("getState");
+
+    /// <summary>
+    /// Write <paramref name="value"/> and set the selection to
+    /// [<paramref name="selectionStart"/>, <paramref name="selectionEnd"/>] in one
+    /// synchronous call. Pass equal bounds for a collapsed caret.
+    /// </summary>
+    public async Task SetStateAsync(string value, int selectionStart, int selectionEnd)
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("setState", value, selectionStart, selectionEnd);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await _handle.InvokeVoidAsync("destroy");
+            await _handle.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}
+
+/// <summary>
+/// A live pointer-driven sortable (drag-to-reorder). Emits <c>OnDragStart</c>/
+/// <c>OnDragOver</c>/<c>OnDrop</c>/<c>OnCancel</c> to the callback it was created
+/// with; C# owns the collection and commits reorders on re-render. Dispose to
+/// detach its pointer + Escape handlers.
+/// </summary>
+public sealed class Sortable : IAsyncDisposable
+{
+    private readonly IJSObjectReference _handle;
+
+    internal Sortable(IJSObjectReference handle) => _handle = handle;
 
     public async ValueTask DisposeAsync()
     {
@@ -938,3 +1297,60 @@ public sealed record CarouselOptions(
 public sealed record SheetSwipeOptions(
     string Side = "bottom",
     double DismissThreshold = 0.25);
+
+/// <summary>
+/// Options for <see cref="NaviusJsInterop.CreateMessageScrollerAsync"/> (serialized
+/// to camelCase). <see cref="DefaultScrollPosition"/> is one of
+/// <c>start</c>/<c>end</c>/<c>last-anchor</c>; <see cref="ScrollEdgeThreshold"/> is
+/// how many pixels from an edge still count as being at it;
+/// <see cref="ScrollPreviousItemPeek"/> is added to <see cref="ScrollMargin"/> when
+/// an appended anchor row is positioned so part of the previous item stays visible.
+/// </summary>
+public sealed record MessageScrollerOptions(
+    bool AutoScroll = false,
+    string DefaultScrollPosition = "end",
+    double ScrollEdgeThreshold = 8,
+    double ScrollMargin = 0,
+    double ScrollPreviousItemPeek = 64,
+    bool PreserveScrollOnPrepend = true);
+
+/// <summary>
+/// Per-call options for the <see cref="MessageScroller"/> scroll methods (serialized
+/// to camelCase). <see cref="Align"/> is one of
+/// <c>start</c>/<c>center</c>/<c>end</c>/<c>nearest</c>; a null
+/// <see cref="ScrollMargin"/> falls back to the provider's margin.
+/// </summary>
+public sealed record MessageScrollerScrollOptions(
+    string Align = "start",
+    string Behavior = "auto",
+    double? ScrollMargin = null);
+
+/// <summary>
+/// The normalized 2D pointer fraction streamed by <c>createPointerTracker2D</c> to
+/// <c>OnFraction2D</c>/<c>OnCommit2D</c>. Both fields are 0..1; <see cref="X"/> is
+/// mirrored under RTL, <see cref="Y"/> grows downward (top edge = 0). Use this as
+/// the <c>[JSInvokable]</c> parameter type on the consuming component.
+/// </summary>
+public sealed record PointerFraction2D(
+    double X,
+    double Y);
+
+/// <summary>
+/// The value + selection snapshot returned by <see cref="MaskedSelection.GetStateAsync"/>
+/// (deserialized from the engine's camelCase <c>{ value, selectionStart, selectionEnd }</c>).
+/// </summary>
+public sealed record MaskedSelectionState(
+    string Value,
+    int SelectionStart,
+    int SelectionEnd);
+
+/// <summary>
+/// Options for <see cref="NaviusJsInterop.CreateSortableAsync"/> (serialized to
+/// camelCase). <see cref="Axis"/> is one of <c>vertical</c>/<c>horizontal</c>/
+/// <c>grid</c> and selects how the target index is computed from item midpoints; a
+/// non-null <see cref="Handle"/> is a CSS selector that must contain the press
+/// target for a drag to start (otherwise the whole item is the drag handle).
+/// </summary>
+public sealed record SortableOptions(
+    string Axis = "vertical",
+    string? Handle = null);

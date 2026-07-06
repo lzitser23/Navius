@@ -1,0 +1,28 @@
+@namespace Navius.Primitives.Components.MessageScroller
+
+@*
+    The transcript container: a live region (role="log", aria-relevant="additions")
+    so appended rows announce without narrating every streamed token. Pass
+    aria-busy through the attribute seam while a turn streams if announcements
+    should wait for the completed row. Every direct child must be a
+    NaviusMessageScrollerItem. The trailing spacer element is engine-sized to make
+    room for anchored rows; style it via SpacerClass if it should be visible.
+*@
+
+<div role="log"
+     aria-relevant="additions"
+     data-navius-messagescroller-content
+     @attributes="Attributes">
+    @ChildContent
+    <div data-navius-messagescroller-spacer aria-hidden="true" class="@SpacerClass"></div>
+</div>
+
+@code {
+    /// <summary>Class for the internal spacer element that makes room for anchored rows.</summary>
+    [Parameter] public string? SpacerClass { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

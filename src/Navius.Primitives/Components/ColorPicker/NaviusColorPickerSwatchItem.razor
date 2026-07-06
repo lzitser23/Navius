@@ -1,0 +1,116 @@
+@namespace Navius.Primitives.Components.ColorPicker
+@inherits ColorPickerPart
+
+@*
+    One preset swatch (role="option") inside a NaviusColorPickerSwatches listbox.
+    Roving tabindex: the option matching the current color is focusable (or the
+    first when none match). Click / Space / Enter applies it; Left/Right/Up/Down
+    move focus among options. Its color is the accessible name.
+*@
+
+<button @ref="_element"
+        type="button"
+        role="option"
+        aria-selected="@(Selected ? "true" : "false")"
+        aria-label="@Value"
+        tabindex="@TabIndex"
+        disabled="@Context.Disabled"
+        data-navius-color-picker-swatch-item
+        data-selected="@(Selected ? "" : null)"
+        data-disabled="@(Context.Disabled ? "" : null)"
+        style="@MergedStyle"
+        @onclick="SelectAsync"
+        @onkeydown="OnKeyDownAsync"
+        @attributes="Forwarded">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    [CascadingParameter] private SwatchesContext Swatches { get; set; } = default!;
+
+    private ElementReference _element;
+    private int _index;
+
+    private string ItemHex => SwatchesContext.HexOf(Value);
+
+    private bool Selected => string.Equals(ItemHex, Swatches.CurrentHex, StringComparison.OrdinalIgnoreCase);
+
+    private string TabIndex
+    {
+        get
+        {
+            if (Context.Disabled)
+            {
+                return "-1";
+            }
+
+            if (Selected)
+            {
+                return "0";
+            }
+
+            return Swatches.IsFirst(_index) && !Swatches.AnySelected() ? "0" : "-1";
+        }
+    }
+
+    private const string Checkerboard =
+        "conic-gradient(#ccc 25%, transparent 0 50%, #ccc 0 75%, transparent 0) 0 0 / 6px 6px #fff";
+
+    private string MergedStyle
+    {
+        get
+        {
+            var baseStyle = $"background:linear-gradient({Value}, {Value}), {Checkerboard};";
+            var user = UserStyle;
+            return string.IsNullOrEmpty(user) ? baseStyle : $"{baseStyle}{user}";
+        }
+    }
+
+    private string? UserStyle =>
+        Attributes is not null && Attributes.TryGetValue("style", out var s) && s is string str && str.Length > 0 ? str : null;
+
+    private IDictionary<string, object>? Forwarded
+    {
+        get
+        {
+            if (Attributes is null || !Attributes.ContainsKey("style"))
+            {
+                return Attributes;
+            }
+
+            var copy = new Dictionary<string, object>(Attributes);
+            copy.Remove("style");
+            return copy;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _index = Swatches.Register(Value, () => _element);
+    }
+
+    private Task SelectAsync() => Swatches.SelectAsync(Value);
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowRight":
+            case "ArrowDown":
+                await Swatches.MoveAsync(_index, 1);
+                break;
+            case "ArrowLeft":
+            case "ArrowUp":
+                await Swatches.MoveAsync(_index, -1);
+                break;
+        }
+    }
+}

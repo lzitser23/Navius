@@ -1,0 +1,90 @@
+@namespace Navius.Motion
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@*
+    A standalone spring-animated selection marker (Tabs/NavigationMenu indicator math,
+    generalized). Place it inside the container it should track (give that container
+    position:relative), pass the container's @ref, and change the Active token whenever the
+    active element changes: the marker slides to the element matching ActiveSelector on a
+    C#-baked spring. Position rides a compositor transform; size animates so it tracks
+    items of differing size. Renders one div (ADR-0003 limits); style it via splat.
+*@
+
+<div @ref="_marker" data-navius-selection-indicator @attributes="Attributes"></div>
+
+@code {
+    private ElementReference _marker;
+    private MotionJsInterop? _interop;
+    private SelectionIndicatorMotion? _indicator;
+    private object? _lastActive;
+    private bool _created;
+
+    /// <summary>The container to search within (its @ref). The marker is placed inside it.</summary>
+    [Parameter, EditorRequired] public ElementReference Container { get; set; }
+
+    /// <summary>CSS selector for the active item within the container.</summary>
+    [Parameter] public string ActiveSelector { get; set; } = "[data-active]";
+
+    /// <summary>The spring the marker moves with.</summary>
+    [Parameter] public Spring Spring { get; set; } = Spring.Snappy;
+
+    /// <summary>Which axes to track: <c>x</c>, <c>y</c> or <c>both</c>.</summary>
+    [Parameter] public string Axis { get; set; } = "both";
+
+    /// <summary>Reduced-motion policy: user, always or never (reduced motion snaps instead of sliding).</summary>
+    [Parameter] public string ReduceMotion { get; set; } = "user";
+
+    /// <summary>A token that, when it changes, moves the marker to the new active element.</summary>
+    [Parameter] public object? Active { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_created)
+        {
+            // A parent's @ref is still empty on ITS first render (captured only after
+            // BuildRenderTree), so we cannot create until Container is populated. The
+            // parent re-renders once the ref is captured, which brings us back here.
+            if (Container.Id is null)
+            {
+                return;
+            }
+            try
+            {
+                _interop = new MotionJsInterop(JS);
+                var options = MotionPrograms.SelectionIndicator(Spring, ActiveSelector, Axis, ReduceMotion);
+                _indicator = await _interop.CreateSelectionIndicatorAsync(Container, _marker, options);
+                _created = true;
+                _lastActive = Active;
+            }
+            catch (JSException)
+            {
+                // Engine unavailable (prerender edge): the marker simply does not move.
+            }
+            return;
+        }
+
+        if (_indicator is not null && !Equals(Active, _lastActive))
+        {
+            _lastActive = Active;
+            await _indicator.UpdateAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_indicator is not null)
+        {
+            await _indicator.DisposeAsync();
+            _indicator = null;
+        }
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+            _interop = null;
+        }
+        GC.SuppressFinalize(this);
+    }
+}

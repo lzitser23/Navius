@@ -1,0 +1,46 @@
+@namespace Navius.Primitives.Components.TagInput
+@inherits ComponentBase
+
+@*
+    A button inside a Tag that removes that chip. tabindex=-1 so it stays out of the tab order;
+    give it an aria-label via the splat (e.g. aria-label="Remove design"). Reads the cascaded
+    TagValueContext for its value.
+*@
+
+<button type="button"
+        tabindex="-1"
+        aria-label="@RemoveLabel"
+        data-navius-tag-remove
+        @onclick="OnClickAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [CascadingParameter] private TagInputContext Context { get; set; } = default!;
+
+    [CascadingParameter] private TagValueContext? TagContext { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    // Spec default: a bare <Navius.TagRemove /> still names itself "Remove {value}". A
+    // consumer-supplied aria-label (e.g. the helm's) overrides this via the later splat.
+    private string? RemoveLabel => TagContext is null ? null : $"Remove {TagContext.Value}";
+
+    private async Task OnClickAsync()
+    {
+        if (Context.Disabled || TagContext is null)
+        {
+            return;
+        }
+
+        var index = Context.IndexOf(TagContext.Value);
+        if (index >= 0)
+        {
+            await Context.RemoveAtAsync(index);
+        }
+    }
+}

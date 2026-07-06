@@ -1,0 +1,25 @@
+@namespace Navius.Primitives.Components.TimePicker
+@inherits ComponentBase
+@using Navius.Primitives.Components.TimeInput
+
+@*
+    The typed, segmented surface of the TimePicker: an embedded NaviusTimeInput bound to the
+    picker's shared value. Keyboard entry here works whether or not the popup is open.
+*@
+
+<NaviusTimeInput Value="@Ctx.Value"
+                 ValueChanged="Ctx.SetValueAsync"
+                 Granularity="@Ctx.Granularity"
+                 HourCycle="Ctx.HourCycle"
+                 MinuteStep="Ctx.MinuteStep"
+                 SecondStep="Ctx.SecondStep"
+                 Disabled="Ctx.Disabled"
+                 data-navius-time-picker-input
+                 @attributes="Attributes" />
+
+@code {
+    [CascadingParameter] public TimePickerContext Ctx { get; set; } = default!;
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

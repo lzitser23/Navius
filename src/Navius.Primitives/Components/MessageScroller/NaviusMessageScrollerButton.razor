@@ -1,0 +1,41 @@
+@namespace Navius.Primitives.Components.MessageScroller
+@inherits MessageScrollerPart
+
+@*
+    The scroll-to-start/end control. Context-aware: active only while the viewport
+    can still scroll in its direction; when inactive it goes inert with
+    tabindex="-1" so it never becomes a ghost focus stop. Pressing it scrolls in
+    the configured direction, and toward the end it re-engages the streamed-reply
+    follow when the provider enables AutoScroll. The consumer supplies the label
+    or icon content and the positioning classes.
+*@
+
+<button type="button"
+        data-navius-messagescroller-button
+        data-direction="@Direction"
+        data-active="@(Active ? "true" : "false")"
+        tabindex="@(Active ? null : "-1")"
+        inert="@(Active ? null : "")"
+        @onclick="OnClickAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    /// <summary>Which edge the button scrolls toward: "end" (default) or "start".</summary>
+    [Parameter] public string Direction { get; set; } = "end";
+
+    /// <summary>Scroll behavior for the jump: "smooth" (default) or "auto".</summary>
+    [Parameter] public string Behavior { get; set; } = "smooth";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private bool Active => Direction == "start" ? Context.ScrollableStart : Context.ScrollableEnd;
+
+    private Task OnClickAsync() => Direction == "start"
+        ? Context.ScrollToStartAsync(new MessageScrollerScrollOptions(Behavior: Behavior))
+        : Context.ScrollToEndAsync(new MessageScrollerScrollOptions(Behavior: Behavior));
+}

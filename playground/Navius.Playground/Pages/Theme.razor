@@ -1,0 +1,74 @@
+@page "/theme"
+
+<main class="min-h-screen bg-background p-8 text-foreground">
+    <div class="mx-auto flex max-w-5xl flex-col gap-8">
+        <header class="flex flex-wrap items-start justify-between gap-4">
+            <div class="space-y-2">
+                <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">zits/ui theme engine</p>
+                <h1 class="text-3xl font-semibold tracking-tight">Runtime theming</h1>
+                <p class="max-w-2xl text-sm text-muted-foreground">
+                    Generated OKLCH tokens switched through data attributes, with scoped themes and CSS export.
+                </p>
+            </div>
+
+            <ZitsThemeSwitcher />
+        </header>
+
+        <section class="grid gap-4 md:grid-cols-[1fr_18rem]">
+            <div class="rounded-lg border bg-card p-5 text-card-foreground shadow-sm">
+                <div class="flex flex-wrap items-center gap-3">
+                    <button data-testid="theme-sample-button"
+                            class="inline-flex h-10 items-center justify-center bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            style="border-radius:var(--radius-md)">
+                        Sample button
+                    </button>
+                    <span class="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
+                        Primary, radius, font, and style update live.
+                    </span>
+                </div>
+
+                <div class="mt-6 grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-md border bg-background p-4">
+                        <p class="text-sm font-medium">Surface</p>
+                        <p class="mt-1 text-xs text-muted-foreground">background / foreground</p>
+                    </div>
+                    <div class="rounded-md border bg-secondary p-4 text-secondary-foreground">
+                        <p class="text-sm font-medium">Secondary</p>
+                        <p class="mt-1 text-xs opacity-70">recipe token pair</p>
+                    </div>
+                    <div class="rounded-md border bg-accent p-4 text-accent-foreground">
+                        <p class="text-sm font-medium">Accent</p>
+                        <p class="mt-1 text-xs opacity-70">style dependent</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-lg border bg-card p-5 text-card-foreground shadow-sm">
+                <p class="text-sm font-medium">Current CSS export</p>
+                <p class="mt-2 text-xs text-muted-foreground">
+                    The switcher panel exposes a resolved :root + .dark block for the selected theme.
+                </p>
+            </div>
+        </section>
+
+        <section class="grid gap-4 md:grid-cols-2">
+            <ZitsThemeScope Mode="light" Base="neutral" Primary="blue" Radius="md" Font="system" Style="standard"
+                            data-testid="theme-scope-light"
+                            class="rounded-lg border p-5 shadow-sm">
+                <p class="text-sm font-semibold">Forced light scope</p>
+                <p class="mt-2 text-sm text-muted-foreground">
+                    This subtree stays light even when the page root is dark.
+                </p>
+            </ZitsThemeScope>
+
+            <ZitsThemeScope Mode="dark" Base="neutral" Primary="blue" Radius="md" Font="system" Style="standard"
+                            data-testid="theme-scope-dark"
+                            class="rounded-lg border p-5 shadow-sm">
+                <p class="text-sm font-semibold">Forced dark scope</p>
+                <p class="mt-2 text-sm text-muted-foreground">
+                    This subtree stays dark even when the page root is light.
+                </p>
+            </ZitsThemeScope>
+        </section>
+    </div>
+</main>

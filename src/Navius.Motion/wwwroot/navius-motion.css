@@ -1,0 +1,605 @@
+/*
+ * navius-motion.css (GENERATED, do not edit by hand)
+ *
+ * Spring physics computed in C# (Navius.Motion.SpringSolver) and baked into
+ * CSS linear() easings, so animation runs entirely on the compositor with
+ * zero JavaScript. Presence classes (.motion-*) key off the Navius discrete
+ * state attributes; enter classes (.motion-enter-*) use @starting-style and
+ * work on any element. Regenerate with:
+ *
+ *   dotnet run --project src/Navius.Motion.CssGen
+ */
+
+/* Baked spring easings. The duration variable is the real settle duration the
+ * curve was sampled over; the multiplier comment is real / perceived duration. */
+:root {
+  --navius-spring-default: linear(0, 0.0144, 0.0522, 0.1068, 0.1723, 0.2443, 0.3192, 0.3943, 0.4674, 0.537, 0.6021, 0.662, 0.7163, 0.765, 0.8081, 0.8457, 0.8783, 0.9062, 0.9297, 0.9493, 0.9655, 0.9786, 0.9891, 0.9972, 1.0034, 1.008, 1.0112, 1.0134, 1.0146, 1.0151, 1.0151, 1.0147, 1.0139, 1.013, 1.012, 1.0108, 1.0097, 1.0086, 1.0075, 1.0065, 1.0055, 1.0047, 1.0039, 1.0032, 1.0026, 1.0021, 1.0016, 1.0012, 1.0009, 1.0006, 1.0004, 1.0002, 1.0001, 1);
+  --navius-spring-default-duration: 540ms; /* perceptual multiplier 1.8 */
+  --navius-spring-smooth: linear(0, 0.0104, 0.0378, 0.0771, 0.1245, 0.1769, 0.2319, 0.2877, 0.3431, 0.397, 0.4488, 0.4979, 0.5442, 0.5874, 0.6274, 0.6644, 0.6984, 0.7294, 0.7577, 0.7834, 0.8067, 0.8277, 0.8466, 0.8636, 0.8789, 0.8926, 0.9048, 0.9157, 0.9254, 0.9341, 0.9418, 0.9486, 0.9547, 0.9601, 0.9648, 0.9691, 0.9728, 0.9761, 0.979, 0.9815, 0.9838, 0.9858, 0.9875, 0.9891, 0.9904, 0.9916, 0.9926, 0.9936, 0.9944, 0.9951, 0.9957, 0.9962, 0.9967, 0.9971, 0.9975, 0.9978, 0.9981, 0.9983, 0.9985, 0.9987, 0.9989, 0.999, 0.9992, 1);
+  --navius-spring-smooth-duration: 640ms; /* perceptual multiplier 1.829 */
+  --navius-spring-snappy: linear(0, 0.0314, 0.1069, 0.2051, 0.3115, 0.4167, 0.515, 0.6035, 0.6808, 0.7467, 0.8018, 0.8471, 0.8838, 0.913, 0.936, 0.9538, 0.9674, 0.9776, 0.9852, 0.9907, 0.9946, 0.9973, 0.9991, 1.0003, 1.001, 1.0014, 1);
+  --navius-spring-snappy-duration: 270ms; /* perceptual multiplier 1.35 */
+  --navius-spring-bouncy: linear(0, 0.0109, 0.041, 0.0867, 0.1448, 0.212, 0.2855, 0.3628, 0.4418, 0.5204, 0.597, 0.6704, 0.7395, 0.8035, 0.8618, 0.9141, 0.9602, 1, 1.0337, 1.0615, 1.0837, 1.1008, 1.1131, 1.1211, 1.1253, 1.1263, 1.1244, 1.1202, 1.114, 1.1065, 1.0978, 1.0884, 1.0786, 1.0686, 1.0587, 1.0491, 1.0399, 1.0313, 1.0233, 1.0161, 1.0097, 1.004, 0.9991, 0.995, 0.9916, 0.989, 0.9869, 0.9855, 0.9846, 0.9841, 0.9841, 0.9844, 0.985, 0.9858, 0.9868, 0.9879, 0.9891, 0.9903, 0.9916, 0.9928, 0.994, 0.9952, 0.9963, 0.9972, 0.9981, 0.9989, 0.9996, 1.0002, 1.0007, 1.0011, 1.0015, 1.0017, 1.0019, 1);
+  --navius-spring-bouncy-duration: 740ms; /* perceptual multiplier 2.114 */
+}
+
+/* Presence presets: pair with elements that carry data-open / data-closed /
+ * data-starting-style / data-ending-style (every Navius primitive part). */
+.motion-fade {
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+}
+.motion-fade[data-open] {
+  opacity: 1;
+  transform: none;
+}
+.motion-fade[data-starting-style],
+.motion-fade[data-closed] {
+  opacity: 0;
+}
+.motion-fade[data-ending-style] {
+  transition-duration: var(--navius-spring-snappy-duration);
+  transition-timing-function: var(--navius-spring-snappy);
+}
+
+.motion-fade-up {
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+}
+.motion-fade-up[data-open] {
+  opacity: 1;
+  transform: none;
+}
+.motion-fade-up[data-starting-style],
+.motion-fade-up[data-closed] {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.motion-fade-up[data-ending-style] {
+  transition-duration: var(--navius-spring-snappy-duration);
+  transition-timing-function: var(--navius-spring-snappy);
+}
+
+.motion-fade-down {
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+}
+.motion-fade-down[data-open] {
+  opacity: 1;
+  transform: none;
+}
+.motion-fade-down[data-starting-style],
+.motion-fade-down[data-closed] {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+.motion-fade-down[data-ending-style] {
+  transition-duration: var(--navius-spring-snappy-duration);
+  transition-timing-function: var(--navius-spring-snappy);
+}
+
+.motion-zoom {
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+}
+.motion-zoom[data-open] {
+  opacity: 1;
+  transform: none;
+}
+.motion-zoom[data-starting-style],
+.motion-zoom[data-closed] {
+  opacity: 0;
+  transform: scale(0.95);
+}
+.motion-zoom[data-ending-style] {
+  transition-duration: var(--navius-spring-snappy-duration);
+  transition-timing-function: var(--navius-spring-snappy);
+}
+
+.motion-pop {
+  transition:
+    opacity var(--navius-spring-bouncy-duration) var(--navius-spring-bouncy),
+    transform var(--navius-spring-bouncy-duration) var(--navius-spring-bouncy);
+}
+.motion-pop[data-open] {
+  opacity: 1;
+  transform: none;
+}
+.motion-pop[data-starting-style],
+.motion-pop[data-closed] {
+  opacity: 0;
+  transform: scale(0.9);
+}
+.motion-pop[data-ending-style] {
+  transition-duration: var(--navius-spring-snappy-duration);
+  transition-timing-function: var(--navius-spring-snappy);
+}
+
+.motion-slide-up {
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+}
+.motion-slide-up[data-open] {
+  opacity: 1;
+  transform: none;
+}
+.motion-slide-up[data-starting-style],
+.motion-slide-up[data-closed] {
+  opacity: 0;
+  transform: translateY(24px);
+}
+.motion-slide-up[data-ending-style] {
+  transition-duration: var(--navius-spring-snappy-duration);
+  transition-timing-function: var(--navius-spring-snappy);
+}
+
+.motion-slide-down {
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+}
+.motion-slide-down[data-open] {
+  opacity: 1;
+  transform: none;
+}
+.motion-slide-down[data-starting-style],
+.motion-slide-down[data-closed] {
+  opacity: 0;
+  transform: translateY(-24px);
+}
+.motion-slide-down[data-ending-style] {
+  transition-duration: var(--navius-spring-snappy-duration);
+  transition-timing-function: var(--navius-spring-snappy);
+}
+
+.motion-slide-left {
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+}
+.motion-slide-left[data-open] {
+  opacity: 1;
+  transform: none;
+}
+.motion-slide-left[data-starting-style],
+.motion-slide-left[data-closed] {
+  opacity: 0;
+  transform: translateX(24px);
+}
+.motion-slide-left[data-ending-style] {
+  transition-duration: var(--navius-spring-snappy-duration);
+  transition-timing-function: var(--navius-spring-snappy);
+}
+
+.motion-slide-right {
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+}
+.motion-slide-right[data-open] {
+  opacity: 1;
+  transform: none;
+}
+.motion-slide-right[data-starting-style],
+.motion-slide-right[data-closed] {
+  opacity: 0;
+  transform: translateX(-24px);
+}
+.motion-slide-right[data-ending-style] {
+  transition-duration: var(--navius-spring-snappy-duration);
+  transition-timing-function: var(--navius-spring-snappy);
+}
+
+/* Insert-only enter presets: animate once when the element enters the DOM
+ * (via @starting-style), no state attributes required. Delay with
+ * --navius-motion-delay. */
+.motion-enter-fade {
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+@starting-style {
+  .motion-enter-fade {
+    opacity: 0;
+  }
+}
+
+.motion-enter-fade-up {
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+@starting-style {
+  .motion-enter-fade-up {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.motion-enter-fade-down {
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+@starting-style {
+  .motion-enter-fade-down {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.motion-enter-zoom {
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+@starting-style {
+  .motion-enter-zoom {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+.motion-enter-pop {
+  transition:
+    opacity var(--navius-spring-bouncy-duration) var(--navius-spring-bouncy),
+    transform var(--navius-spring-bouncy-duration) var(--navius-spring-bouncy);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+@starting-style {
+  .motion-enter-pop {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+.motion-enter-slide-up {
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+@starting-style {
+  .motion-enter-slide-up {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+.motion-enter-slide-down {
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+@starting-style {
+  .motion-enter-slide-down {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+}
+
+.motion-enter-slide-left {
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+@starting-style {
+  .motion-enter-slide-left {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+.motion-enter-slide-right {
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+@starting-style {
+  .motion-enter-slide-right {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+
+/* Scroll-reveal presets: start hidden, transition to visible when the observer
+ * sets [data-in-view] (see navius-motion.js createInView). Stagger a group by
+ * setting --navius-motion-delay per child (createStagger / the stagger option). */
+.motion-in-view-fade {
+  opacity: 0;
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-fade[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-fade-up {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-fade-up[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-fade-down {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition:
+    opacity var(--navius-spring-smooth-duration) var(--navius-spring-smooth),
+    transform var(--navius-spring-smooth-duration) var(--navius-spring-smooth);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-fade-down[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-zoom {
+  opacity: 0;
+  transform: scale(0.95);
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-zoom[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-pop {
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity var(--navius-spring-bouncy-duration) var(--navius-spring-bouncy),
+    transform var(--navius-spring-bouncy-duration) var(--navius-spring-bouncy);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-pop[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-slide-up {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-slide-up[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-slide-down {
+  opacity: 0;
+  transform: translateY(-24px);
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-slide-down[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-slide-left {
+  opacity: 0;
+  transform: translateX(24px);
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-slide-left[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+.motion-in-view-slide-right {
+  opacity: 0;
+  transform: translateX(-24px);
+  transition:
+    opacity var(--navius-spring-default-duration) var(--navius-spring-default),
+    transform var(--navius-spring-default-duration) var(--navius-spring-default);
+  transition-delay: var(--navius-motion-delay, 0ms);
+}
+.motion-in-view-slide-right[data-in-view] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Gesture micro-interactions (CSS tier). :active also covers keyboard
+ * activation on buttons; the hover media query filters emulated touch hover. */
+.motion-press {
+  transition: transform var(--navius-spring-snappy-duration) var(--navius-spring-snappy);
+}
+.motion-press:active {
+  transform: scale(var(--navius-motion-press-scale, 0.97));
+}
+@media (hover: hover) {
+  .motion-hover {
+    transition: transform var(--navius-spring-snappy-duration) var(--navius-spring-snappy);
+  }
+  .motion-hover:hover {
+    transform: translateY(calc(-1px * var(--navius-motion-hover-lift, 2)));
+  }
+}
+
+/* Micro pack (attention & ambient) keyframes. Authored once in
+ * Navius.Motion.MicroPresets; the same presets feed the WAAPI runtime via
+ * MotionPrograms.Micro, so both tiers animate identically. */
+@keyframes navius-shake {
+  0% { transform: translateX(0); }
+  15% { transform: translateX(-6px); }
+  30% { transform: translateX(5px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(3px); }
+  75% { transform: translateX(-2px); }
+  90% { transform: translateX(1px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes navius-pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.85); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes navius-pulse-reduced {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+@keyframes navius-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes navius-focus-glow {
+  0% { box-shadow: 0 0 0 0 var(--navius-motion-glow-color, rgba(115, 115, 115, 0.5)); }
+  70% { box-shadow: 0 0 0 6px var(--navius-motion-glow-color-fade, rgba(115, 115, 115, 0)); }
+  100% { box-shadow: 0 0 0 0 var(--navius-motion-glow-color-fade, rgba(115, 115, 115, 0)); }
+}
+
+/* Micro pack classes. Splat the matching Motion helper (Motion.Shake(),
+ * Motion.Pulse(), Motion.Shimmer(), Motion.FocusGlow()) or add the class. */
+.motion-shake {
+  animation: navius-shake 450ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+.motion-pulse {
+  animation: navius-pulse 1600ms ease-in-out infinite;
+}
+
+.motion-shimmer {
+  background-image: linear-gradient(100deg, transparent 20%, var(--navius-motion-shimmer-tint, rgba(128, 128, 128, 0.18)) 50%, transparent 80%);
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: navius-shimmer 1600ms linear infinite;
+}
+
+.motion-focus-glow {
+  box-shadow: 0 0 0 1px var(--navius-motion-glow-ring, rgba(115, 115, 115, 0.35));
+  animation: navius-focus-glow 1800ms ease-out infinite;
+}
+
+/* prefers-reduced-motion: collapse every transform animation to opacity only
+ * (the state selectors are repeated so this later block wins the cascade). */
+@media (prefers-reduced-motion: reduce) {
+  .motion-fade,
+  .motion-fade[data-starting-style],
+  .motion-fade[data-closed],
+  .motion-fade[data-ending-style],
+  .motion-in-view-fade,
+  .motion-enter-fade,
+  .motion-fade-up,
+  .motion-fade-up[data-starting-style],
+  .motion-fade-up[data-closed],
+  .motion-fade-up[data-ending-style],
+  .motion-in-view-fade-up,
+  .motion-enter-fade-up,
+  .motion-fade-down,
+  .motion-fade-down[data-starting-style],
+  .motion-fade-down[data-closed],
+  .motion-fade-down[data-ending-style],
+  .motion-in-view-fade-down,
+  .motion-enter-fade-down,
+  .motion-zoom,
+  .motion-zoom[data-starting-style],
+  .motion-zoom[data-closed],
+  .motion-zoom[data-ending-style],
+  .motion-in-view-zoom,
+  .motion-enter-zoom,
+  .motion-pop,
+  .motion-pop[data-starting-style],
+  .motion-pop[data-closed],
+  .motion-pop[data-ending-style],
+  .motion-in-view-pop,
+  .motion-enter-pop,
+  .motion-slide-up,
+  .motion-slide-up[data-starting-style],
+  .motion-slide-up[data-closed],
+  .motion-slide-up[data-ending-style],
+  .motion-in-view-slide-up,
+  .motion-enter-slide-up,
+  .motion-slide-down,
+  .motion-slide-down[data-starting-style],
+  .motion-slide-down[data-closed],
+  .motion-slide-down[data-ending-style],
+  .motion-in-view-slide-down,
+  .motion-enter-slide-down,
+  .motion-slide-left,
+  .motion-slide-left[data-starting-style],
+  .motion-slide-left[data-closed],
+  .motion-slide-left[data-ending-style],
+  .motion-in-view-slide-left,
+  .motion-enter-slide-left,
+  .motion-slide-right,
+  .motion-slide-right[data-starting-style],
+  .motion-slide-right[data-closed],
+  .motion-slide-right[data-ending-style],
+  .motion-in-view-slide-right,
+  .motion-enter-slide-right {
+    transition-property: opacity;
+    transform: none;
+  }
+  @starting-style {
+    .motion-enter-fade,
+    .motion-enter-fade-up,
+    .motion-enter-fade-down,
+    .motion-enter-zoom,
+    .motion-enter-pop,
+    .motion-enter-slide-up,
+    .motion-enter-slide-down,
+    .motion-enter-slide-left,
+    .motion-enter-slide-right {
+      transform: none;
+    }
+  }
+  .motion-press:active,
+  .motion-hover:hover {
+    transform: none;
+  }
+
+  /* Micro pack: transform-driven attention effects rest (shake,
+   * focus-glow, shimmer); pulse keeps only its opacity beat. Shimmer's
+   * documented fallback is a static placeholder: the sweep stops but the
+   * gradient surface remains. */
+  .motion-shake {
+    animation: none;
+  }
+  .motion-pulse {
+    animation-name: navius-pulse-reduced;
+  }
+  .motion-shimmer {
+    animation: none;
+  }
+  .motion-focus-glow {
+    animation: none;
+  }
+}

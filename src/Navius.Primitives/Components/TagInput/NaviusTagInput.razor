@@ -1,0 +1,230 @@
+@namespace Navius.Primitives.Components.TagInput
+@inherits ComponentBase
+
+@*
+    TagInput: materializes free text into removable chips. Root owns the tag collection,
+    the chip-navigation highlight and the one-shot focus requests, and cascades the context
+    (non-fixed, so parts re-render when it mutates). Controlled via @bind-Value (IList<string>)
+    or uncontrolled via DefaultValue. Commit rules (transform → validate → duplicate → max)
+    live here; blocked adds raise OnInvalid. Renders a wrapper <div> so the field + chips lay
+    out together; emits data-disabled / data-empty.
+*@
+
+<CascadingValue Value="_context" IsFixed="true">
+    <div data-navius-tag-input
+         data-disabled="@(Disabled ? "" : null)"
+         data-empty="@(_tags.Count == 0 ? "" : null)"
+         @attributes="Attributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>Controlled tag list. Use <c>@bind-Value</c>.</summary>
+    [Parameter] public IList<string>? Value { get; set; }
+
+    [Parameter] public EventCallback<IList<string>> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial tags.</summary>
+    [Parameter] public IList<string>? DefaultValue { get; set; }
+
+    /// <summary>Which keys/chars commit a chip. Defaults to Enter + Comma.</summary>
+    [Parameter] public IReadOnlyList<TagDelimiter>? Delimiters { get; set; }
+
+    [Parameter] public bool AllowDuplicates { get; set; }
+
+    [Parameter] public int? MaxTags { get; set; }
+
+    /// <summary>Reject a candidate tag (return false blocks it and raises OnInvalid).</summary>
+    [Parameter] public Func<string, bool>? Validate { get; set; }
+
+    /// <summary>Normalize a candidate before commit (e.g. lowercase). Applied after a trim.</summary>
+    [Parameter] public Func<string, string>? Transform { get; set; }
+
+    /// <summary>Commit the field text on blur.</summary>
+    [Parameter] public bool AddOnBlur { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public EventCallback<string> OnAdd { get; set; }
+
+    [Parameter] public EventCallback<string> OnRemove { get; set; }
+
+    [Parameter] public EventCallback<string> OnInvalid { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private TagInputContext _context = default!;
+    private List<string> _tags = new();
+    private bool _valueSet;
+    private bool _initialized;
+
+    internal IReadOnlyList<TagDelimiter> EffectiveDelimiters =>
+        Delimiters ?? new[] { TagDelimiter.Enter, TagDelimiter.Comma };
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<IList<string>?>(nameof(Value), out _))
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnInitialized()
+    {
+        _context = new TagInputContext(HandleAddAsync, HandleRemoveAtAsync, HandleRemoveHighlightedAsync, HandleHighlightAsync);
+        _tags = new List<string>((_valueSet ? Value : DefaultValue) ?? Array.Empty<string>());
+        _initialized = true;
+        SyncContext();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_initialized && _valueSet && !SameTags(Value, _tags))
+        {
+            _tags = new List<string>(Value ?? Array.Empty<string>());
+            if (_context.HighlightedIndex >= _tags.Count)
+            {
+                _context.HighlightedIndex = _tags.Count - 1;
+            }
+        }
+
+        SyncContext();
+    }
+
+    private void SyncContext()
+    {
+        _context.Tags = _tags;
+        _context.Disabled = Disabled;
+        _context.AddOnBlur = AddOnBlur;
+        _context.Delimiters = EffectiveDelimiters;
+    }
+
+    private async Task HandleAddAsync(string raw)
+    {
+        var text = Transform is not null ? Transform(raw.Trim()) : raw.Trim();
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        if (!AllowDuplicates && _tags.Contains(text))
+        {
+            await OnInvalid.InvokeAsync(text);
+            return;
+        }
+
+        if (MaxTags is int max && _tags.Count >= max)
+        {
+            await OnInvalid.InvokeAsync(text);
+            return;
+        }
+
+        if (Validate is not null && !Validate(text))
+        {
+            await OnInvalid.InvokeAsync(text);
+            return;
+        }
+
+        var list = new List<string>(_tags) { text };
+        await CommitAsync(list);
+        await OnAdd.InvokeAsync(text);
+    }
+
+    private async Task HandleRemoveAtAsync(int index)
+    {
+        if (index < 0 || index >= _tags.Count)
+        {
+            return;
+        }
+
+        var removed = _tags[index];
+        var list = new List<string>(_tags);
+        list.RemoveAt(index);
+        await CommitAsync(list);
+
+        if (list.Count == 0)
+        {
+            _context.HighlightedIndex = -1;
+            _context.PendingFieldFocus = true;
+        }
+        else
+        {
+            var next = Math.Min(index, list.Count - 1);
+            _context.HighlightedIndex = next;
+            _context.PendingChipFocus = next;
+        }
+
+        await OnRemove.InvokeAsync(removed);
+    }
+
+    private async Task HandleRemoveHighlightedAsync()
+    {
+        var index = _context.HighlightedIndex;
+        if (index < 0 || index >= _tags.Count)
+        {
+            return;
+        }
+
+        var removed = _tags[index];
+        var list = new List<string>(_tags);
+        list.RemoveAt(index);
+        await CommitAsync(list);
+
+        _context.HighlightedIndex = -1;
+        _context.PendingFieldFocus = true;
+        await OnRemove.InvokeAsync(removed);
+    }
+
+    private Task HandleHighlightAsync(int index, bool focus)
+    {
+        _context.HighlightedIndex = index;
+        if (focus)
+        {
+            if (index >= 0)
+            {
+                _context.PendingChipFocus = index;
+            }
+            else
+            {
+                _context.PendingFieldFocus = true;
+            }
+        }
+
+        _context.RaiseChanged();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task CommitAsync(List<string> list)
+    {
+        _tags = list;
+        SyncContext();
+        await ValueChanged.InvokeAsync(list);
+        _context.RaiseChanged();
+        StateHasChanged();
+    }
+
+    private static bool SameTags(IList<string>? a, IList<string> b)
+    {
+        if (a is null || a.Count != b.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < b.Count; i++)
+        {
+            if (a[i] != b[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}

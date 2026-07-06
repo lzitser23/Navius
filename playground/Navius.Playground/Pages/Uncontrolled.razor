@@ -1,0 +1,84 @@
+@page "/uncontrolled"
+
+@*
+    Uncontrolled (Default*) usage of the styled helm form wrappers.
+
+    Each demo drives the wrapper with ONLY its Default* parameter (no @@bind-),
+    exercising the internal-state path that the always-controlled wart used to kill.
+    Every interactive element carries a stable data-testid for uncontrolled.spec.ts.
+*@
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-8" data-uncontrolled-showcase>
+    <header class="space-y-1">
+        <h1 class="text-2xl font-semibold tracking-tight">Uncontrolled wrappers</h1>
+        <p class="text-sm text-muted-foreground">Default*-only usage of the styled form wrappers. No two-way binding, internal state only.</p>
+    </header>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Switch (DefaultChecked)</h2>
+        <div class="flex items-center gap-2">
+            <ZitsSwitch DefaultChecked="true" data-testid="u-switch" />
+            <ZitsLabel>Starts on, toggles freely</ZitsLabel>
+        </div>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Checkbox (DefaultChecked)</h2>
+        <div class="flex items-center gap-2">
+            <ZitsCheckbox DefaultChecked="true" data-testid="u-checkbox" />
+            <ZitsLabel>Starts checked, toggles freely</ZitsLabel>
+        </div>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">RadioGroup (DefaultValue)</h2>
+        <ZitsRadioGroup DefaultValue="b" data-testid="u-radio">
+            <div class="flex items-center gap-2">
+                <ZitsRadioGroupItem Value="a" data-testid="u-radio-a" />
+                <ZitsLabel>Option A</ZitsLabel>
+            </div>
+            <div class="flex items-center gap-2">
+                <ZitsRadioGroupItem Value="b" data-testid="u-radio-b" />
+                <ZitsLabel>Option B (default)</ZitsLabel>
+            </div>
+            <div class="flex items-center gap-2">
+                <ZitsRadioGroupItem Value="c" data-testid="u-radio-c" />
+                <ZitsLabel>Option C</ZitsLabel>
+            </div>
+        </ZitsRadioGroup>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Select (DefaultValue)</h2>
+        <ZitsSelect DefaultValue="banana">
+            <ZitsSelectTrigger data-testid="u-select-trigger" class="w-[180px]">
+                <ZitsSelectValue />
+            </ZitsSelectTrigger>
+            <ZitsSelectContent>
+                <ZitsSelectItem Value="apple" data-testid="u-select-apple">Apple</ZitsSelectItem>
+                <ZitsSelectItem Value="banana" data-testid="u-select-banana">Banana</ZitsSelectItem>
+                <ZitsSelectItem Value="cherry" data-testid="u-select-cherry">Cherry</ZitsSelectItem>
+            </ZitsSelectContent>
+        </ZitsSelect>
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Slider (DefaultValue)</h2>
+        <ZitsSlider DefaultValue="@(new double[] { 40 })" data-testid="u-slider" class="w-64" />
+    </section>
+
+    <section class="space-y-2">
+        <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Sheet (uncontrolled open)</h2>
+        <ZitsSheet>
+            <ZitsSheetTrigger data-testid="u-sheet-trigger" class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                Open sheet
+            </ZitsSheetTrigger>
+            <ZitsSheetContent>
+                <ZitsSheetHeader>
+                    <ZitsSheetTitle>Uncontrolled sheet</ZitsSheetTitle>
+                    <ZitsSheetDescription>Opened from internal state, no two-way binding.</ZitsSheetDescription>
+                </ZitsSheetHeader>
+            </ZitsSheetContent>
+        </ZitsSheet>
+    </section>
+</div>

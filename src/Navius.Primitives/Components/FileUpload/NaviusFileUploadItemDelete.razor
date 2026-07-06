@@ -1,0 +1,21 @@
+@namespace Navius.Primitives.Components.FileUpload
+@inherits ComponentBase
+
+@* A per-file remove button (aria-label "Remove {name}"). Native button keyboard. *@
+
+<button type="button"
+        aria-label="@($"Remove {Item.File.Name}")"
+        data-navius-file-upload-item-delete
+        @onclick="Item.RemoveAsync"
+        @attributes="Attributes">
+    @ChildContent
+</button>
+
+@code {
+    [CascadingParameter] private FileUploadItemContext Item { get; set; } = default!;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+}

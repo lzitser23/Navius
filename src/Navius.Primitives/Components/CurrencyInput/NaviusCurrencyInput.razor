@@ -1,0 +1,211 @@
+@namespace Navius.Primitives.Components.CurrencyInput
+@inherits ComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@using System.Globalization
+
+@*
+    CurrencyInput: a caret-stable currency field whose truth is a decimal? (never a string).
+    A specialization of the MaskedInput pipeline: on each input the createMaskedSelection
+    bridge reads value + caret atomically, C# parses the digits, reformats via NumberFormatInfo
+    (grouping, decimal separator, symbol) and re-lands the caret by counting digits, then writes
+    value + selection back in OnAfterRenderAsync (after Blazor rewrites the value attribute).
+    Min/Max are clamped and the fraction is padded to MinFractionDigits on blur. Emits
+    data-empty / data-negative / data-invalid.
+*@
+
+<input @ref="_input"
+       inputmode="decimal"
+       value="@_display"
+       data-navius-currency-input
+       data-empty="@(_value is null ? "" : null)"
+       data-negative="@(_value < 0 ? "" : null)"
+       data-invalid="@(Invalid ? "" : null)"
+       disabled="@Disabled"
+       @oninput="OnInputAsync"
+       @onblur="OnBlurAsync"
+       @attributes="Attributes" />
+
+@code {
+    /// <summary>Controlled value. Use <c>@bind-Value</c>.</summary>
+    [Parameter] public decimal? Value { get; set; }
+
+    [Parameter] public EventCallback<decimal?> ValueChanged { get; set; }
+
+    /// <summary>Uncontrolled initial value.</summary>
+    [Parameter] public decimal? DefaultValue { get; set; }
+
+    /// <summary>Drives symbol, grouping and decimals. Defaults to the current culture.</summary>
+    [Parameter] public CultureInfo? Culture { get; set; }
+
+    /// <summary>ISO 4217 code; overrides the culture's default currency symbol.</summary>
+    [Parameter] public string? Currency { get; set; }
+
+    /// <summary>Minimum fraction digits (blur padding). Defaults to the culture's currency decimals.</summary>
+    [Parameter] public int? MinFractionDigits { get; set; }
+
+    /// <summary>Maximum fraction digits (typing cap). Defaults to the culture's currency decimals.</summary>
+    [Parameter] public int? MaxFractionDigits { get; set; }
+
+    [Parameter] public bool AllowNegative { get; set; }
+
+    [Parameter] public decimal? Min { get; set; }
+
+    [Parameter] public decimal? Max { get; set; }
+
+    /// <summary>Render the currency symbol in the value (default true).</summary>
+    [Parameter] public bool ShowSymbol { get; set; } = true;
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Reflected as <c>data-invalid</c> for the skin.</summary>
+    [Parameter] public bool Invalid { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? Attributes { get; set; }
+
+    private ElementReference _input;
+    private NaviusJsInterop? _interop;
+    private MaskedSelection? _masked;
+    private NumberFormatInfo _nfi = CultureInfo.CurrentCulture.NumberFormat;
+    private int _minFrac;
+    private int _maxFrac;
+    private decimal? _value;
+    private string _display = "";
+    private bool _valueSet;
+    private bool _initialized;
+    private bool _hasPending;
+    private int _pendingCaret;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<decimal?>(nameof(Value), out _))
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override void OnParametersSet()
+    {
+        var culture = Culture ?? CultureInfo.CurrentCulture;
+        _nfi = (NumberFormatInfo)culture.NumberFormat.Clone();
+        if (!string.IsNullOrEmpty(Currency))
+        {
+            _nfi.CurrencySymbol = CurrencyEngine.SymbolFor(Currency);
+        }
+
+        _maxFrac = Math.Max(0, MaxFractionDigits ?? _nfi.CurrencyDecimalDigits);
+        _minFrac = Math.Clamp(MinFractionDigits ?? _nfi.CurrencyDecimalDigits, 0, _maxFrac);
+
+        if (!_initialized)
+        {
+            _value = _valueSet ? Value : DefaultValue;
+            _display = _value is decimal seed
+                ? CurrencyEngine.FormatCommitted(seed, _nfi, _minFrac, _maxFrac, ShowSymbol)
+                : "";
+            _initialized = true;
+            return;
+        }
+
+        // External (controlled) change: recommit the display.
+        if (_valueSet && Value != _value)
+        {
+            _value = Value;
+            _display = _value is decimal v
+                ? CurrencyEngine.FormatCommitted(v, _nfi, _minFrac, _maxFrac, ShowSymbol)
+                : "";
+        }
+    }
+
+    private async Task OnInputAsync()
+    {
+        if (_masked is null)
+        {
+            return;
+        }
+
+        var dom = await _masked.GetStateAsync();
+        var digitsBefore = CurrencyEngine.CountDigitsBefore(dom.Value, dom.SelectionEnd);
+
+        var (negative, intDigits, fracDigits, hadSep) =
+            CurrencyEngine.Parse(dom.Value, _nfi, AllowNegative, _maxFrac);
+
+        _value = CurrencyEngine.ToDecimal(negative, intDigits, fracDigits);
+        _display = CurrencyEngine.FormatEditing(negative, intDigits, fracDigits, hadSep, _nfi, ShowSymbol);
+        _pendingCaret = CurrencyEngine.CaretForDigits(_display, digitsBefore);
+        _hasPending = true;
+
+        await ValueChanged.InvokeAsync(_value);
+    }
+
+    private async Task OnBlurAsync()
+    {
+        if (_value is decimal v)
+        {
+            var clamped = Clamp(v);
+            _display = CurrencyEngine.FormatCommitted(clamped, _nfi, _minFrac, _maxFrac, ShowSymbol);
+            if (clamped != _value)
+            {
+                _value = clamped;
+                await ValueChanged.InvokeAsync(_value);
+            }
+        }
+        else
+        {
+            _display = "";
+        }
+
+        StateHasChanged();
+    }
+
+    private decimal Clamp(decimal v)
+    {
+        if (Min is decimal min && v < min)
+        {
+            v = min;
+        }
+
+        if (Max is decimal max && v > max)
+        {
+            v = max;
+        }
+
+        return v;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _interop = new NaviusJsInterop(JS);
+                _masked = await _interop.CreateMaskedSelectionAsync(_input);
+            }
+            catch (JSException)
+            {
+            }
+        }
+
+        if (_hasPending && _masked is not null)
+        {
+            _hasPending = false;
+            await _masked.SetStateAsync(_display, _pendingCaret, _pendingCaret);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_masked is not null)
+        {
+            await _masked.DisposeAsync();
+        }
+
+        if (_interop is not null)
+        {
+            await _interop.DisposeAsync();
+        }
+    }
+}

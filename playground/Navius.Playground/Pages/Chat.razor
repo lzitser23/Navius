@@ -1,0 +1,127 @@
+@page "/chat"
+@namespace Navius.Playground.Pages
+
+<style>
+    /* The demo disables content-visibility so this short transcript measures stably
+       (contain-intrinsic-size:10rem over-estimates these rows, which perturbs the
+       prepend math). The shipped ZitsMessageScrollerItem keeps content-visibility:auto,
+       which pays off in long threads where the intrinsic-size estimate is close. */
+    [data-chat-page] [data-navius-messagescroller-item] { content-visibility: visible; }
+</style>
+
+<div class="min-h-screen bg-background text-foreground p-10 space-y-6" data-chat-page>
+    <header class="space-y-1">
+        <h1 class="text-2xl font-semibold tracking-tight">Chat / MessageScroller</h1>
+        <p class="text-sm text-muted-foreground">
+            The shadcn chat conversation layer on the Navius brain: anchored turns, autoScroll
+            follow with disengage-on-scroll, prepend preservation, jump-to-message and visibility.
+        </p>
+    </header>
+
+    <ZitsMessageScrollerProvider AutoScroll="true"
+                                 DefaultScrollPosition="end"
+                                 ScrollPreviousItemPeek="64">
+        <div class="flex flex-wrap items-center gap-3">
+            <button type="button" data-testid="add-turn"
+                    class="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                    @onclick="AddTurn">Add turn</button>
+            <button type="button" data-testid="stream"
+                    class="inline-flex h-9 items-center rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent"
+                    @onclick="StreamChunk">Stream chunk</button>
+            <button type="button" data-testid="prepend"
+                    class="inline-flex h-9 items-center rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent"
+                    @onclick="PrependOlder">Prepend older</button>
+            <button type="button" data-testid="reset"
+                    class="inline-flex h-9 items-center rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent"
+                    @onclick="Reset">Reset</button>
+        </div>
+
+        <div class="mx-auto h-80 w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-card">
+            <ZitsMessageScroller>
+                <ZitsMessageScrollerViewport class="px-4 py-3">
+                    <ZitsMessageScrollerContent>
+                        @foreach (var m in _messages)
+                        {
+                            <ZitsMessageScrollerItem @key="m.Id" MessageId="@m.Id" ScrollAnchor="m.Anchor">
+                                <ZitsMessage Align="@(m.Role == "user" ? "end" : "start")">
+                                    <ZitsMessageContent>
+                                        <ZitsBubble Variant="@(m.Role == "user" ? "default" : "muted")"
+                                                    Align="@(m.Role == "user" ? "end" : "start")">
+                                            <ZitsBubbleContent>@m.Text</ZitsBubbleContent>
+                                        </ZitsBubble>
+                                    </ZitsMessageContent>
+                                </ZitsMessage>
+                            </ZitsMessageScrollerItem>
+                        }
+                    </ZitsMessageScrollerContent>
+                </ZitsMessageScrollerViewport>
+                <ZitsMessageScrollerButton />
+            </ZitsMessageScroller>
+        </div>
+
+        <ChatInspector FirstId="@FirstSeedId" LastId="@LastId" />
+    </ZitsMessageScrollerProvider>
+</div>
+
+@code {
+    private sealed record ChatMsg(string Id, string Role, string Text, bool Anchor);
+
+    private const string FirstSeedId = "m0";
+
+    private readonly List<ChatMsg> _messages = new();
+    private int _turn;
+    private int _prepends;
+
+    protected override void OnInitialized() => Reset();
+
+    private string LastId => _messages.Count > 0 ? _messages[^1].Id : FirstSeedId;
+
+    private void Reset()
+    {
+        _turn = 0;
+        _prepends = 0;
+        _messages.Clear();
+        // Seed an overflowing transcript: user rows are turn anchors.
+        _messages.AddRange(new[]
+        {
+            new ChatMsg("m0", "user", "How do I keep the reader's place while a reply streams in?", true),
+            new ChatMsg("m1", "assistant", "Anchor the turn near the top and let the answer grow into the screen below it.", false),
+            new ChatMsg("m2", "user", "And when I load older history?", true),
+            new ChatMsg("m3", "assistant", "Prepend with stable ids and the viewport keeps the row you were reading fixed in place.", false),
+            new ChatMsg("m4", "user", "What about jumping to a specific message?", true),
+            new ChatMsg("m5", "assistant", "Call ScrollToMessageAsync with the id; it can even queue a target before the row mounts.", false),
+            new ChatMsg("m6", "user", "Does it follow new messages automatically?", true),
+            new ChatMsg("m7", "assistant", "Only while you are already at the live edge. Scroll away and it lets new content arrive offscreen.", false),
+        });
+    }
+
+    private void AddTurn()
+    {
+        var t = _turn++;
+        _messages.Add(new ChatMsg($"t{t}-u", "user", $"Follow-up question number {t + 1}?", true));
+        _messages.Add(new ChatMsg($"t{t}-a", "assistant", "Sure. Here is the start of the reply.", false));
+    }
+
+    private void StreamChunk()
+    {
+        if (_messages.Count == 0 || _messages[^1].Role != "assistant")
+        {
+            return;
+        }
+
+        var last = _messages[^1];
+        _messages[^1] = last with { Text = last.Text + " More streamed detail arrives token by token, filling the row." };
+    }
+
+    private void PrependOlder()
+    {
+        var batch = new[]
+        {
+            new ChatMsg($"older-{_prepends}-a", "assistant", "Earlier context loaded from history.", false),
+            new ChatMsg($"older-{_prepends}-u", "user", "An older question from before.", true),
+            new ChatMsg($"older-{_prepends}-b", "assistant", "And the earlier answer that went with it.", false),
+        };
+        _prepends++;
+        _messages.InsertRange(0, batch);
+    }
+}
