@@ -1,0 +1,68 @@
+name: publish-nuget
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to publish
+        required: true
+        type: choice
+        options:
+          - Navius.Primitives
+          - Navius.Motion
+      nuget_user:
+        description: nuget.org username or organization with the trusted publishing policy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Select project
+        id: select
+        shell: bash
+        run: |
+          case "${{ inputs.package }}" in
+            Navius.Primitives)
+              echo "project=src/Navius.Primitives/Navius.Primitives.csproj" >> "$GITHUB_OUTPUT"
+              ;;
+            Navius.Motion)
+              echo "project=src/Navius.Motion/Navius.Motion.csproj" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unknown package: ${{ inputs.package }}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Build package project
+        run: dotnet build "${{ steps.select.outputs.project }}" -c Release
+
+      - name: Run unit tests
+        run: dotnet test tests/Navius.Motion.Tests/Navius.Motion.Tests.csproj -c Release
+
+      - name: Pack package
+        run: dotnet pack "${{ steps.select.outputs.project }}" -c Release --no-build -o "${{ runner.temp }}/nupkgs"
+
+      - name: NuGet login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ inputs.nuget_user }}
+
+      - name: Publish package
+        working-directory: ${{ runner.temp }}/nupkgs
+        run: dotnet nuget push "*.nupkg" --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
