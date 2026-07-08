@@ -114,11 +114,11 @@ as a dev shortcut.
 explicit preview metadata:
 
 - Package IDs/versions: `Navius.Primitives`, `Navius.Motion`, `Zits.Ui`, and the
-  dotnet tool `navius` all pack as `0.3.0-preview.1`.
+  dotnet tool `navius` pack as `0.3.0-preview.2` (`Navius.Motion` stays at `0.3.0-preview.1`, unchanged this release).
 - Package metadata now includes MIT license expressions, package readmes, repository
   URLs, tags, SourceLink, `.snupkg` symbols, and package validation on the libraries.
 - `Zits.Ui` still uses a sibling `ProjectReference` during development, but pack output
-  resolves the dependency as `Navius.Primitives 0.3.0-preview.1`.
+  resolves the dependency as `Navius.Primitives 0.3.0-preview.2`.
 - The installed `navius` tool is self-contained: if no repo-local
   `registry/registry.json` exists, it falls back to the registry and `registry-source`
   payload bundled inside the tool package. `--root` and `--registry` still support
