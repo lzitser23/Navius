@@ -54,6 +54,10 @@ jobs:
       - name: Run unit tests
         run: dotnet test tests/Navius.Motion.Tests/Navius.Motion.Tests.csproj -c Release
 
+      - name: Build playground against Navius.Primitives
+        if: inputs.package == 'Navius.Primitives'
+        run: dotnet build playground/Navius.Playground -c Release
+
       - name: Pack package
         run: dotnet pack "${{ steps.select.outputs.project }}" -c Release --no-build -o "${{ runner.temp }}/nupkgs"
 
