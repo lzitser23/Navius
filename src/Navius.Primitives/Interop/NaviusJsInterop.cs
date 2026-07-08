@@ -12,13 +12,41 @@ namespace Navius.Primitives.Interop;
 public sealed class NaviusJsInterop : IAsyncDisposable
 {
     private const string ModulePath = "./_content/Navius.Primitives/navius-interop.js";
+    private const string VendoredModulePath = "./navius-interop.js";
 
     private readonly Lazy<Task<IJSObjectReference>> _module;
 
     public NaviusJsInterop(IJSRuntime js)
     {
-        _module = new Lazy<Task<IJSObjectReference>>(
-            () => js.InvokeAsync<IJSObjectReference>("import", ModulePath).AsTask());
+        _module = new Lazy<Task<IJSObjectReference>>(() => ImportModuleAsync(js));
+    }
+
+    // Package mode serves the engine under _content/Navius.Primitives/ (the RCL static
+    // web assets). Vendored mode (the registry CLI) copies navius-interop.js into the
+    // consumer's own wwwroot, served at the app root, with no package reference. Try the
+    // package path first and fall back to the vendored path only when the import itself
+    // fails, so a real error from an imported module is never mistaken for a missing one.
+    private static async Task<IJSObjectReference> ImportModuleAsync(IJSRuntime js)
+    {
+        try
+        {
+            return await js.InvokeAsync<IJSObjectReference>("import", ModulePath);
+        }
+        catch (JSException packageImportFailed)
+        {
+            try
+            {
+                return await js.InvokeAsync<IJSObjectReference>("import", VendoredModulePath);
+            }
+            catch (JSException)
+            {
+                throw new InvalidOperationException(
+                    $"Navius could not import its JavaScript engine from '{ModulePath}' " +
+                    $"(package mode) or '{VendoredModulePath}' (vendored mode). Reference the " +
+                    "Navius.Primitives package, or vendor navius-interop.js into the app's wwwroot.",
+                    packageImportFailed);
+            }
+        }
     }
 
     /// <summary>Trap focus inside <paramref name="container"/> and focus its first focusable element.</summary>
