@@ -14,6 +14,11 @@ on:
         description: nuget.org username or organization with the trusted publishing policy
         required: true
         type: string
+      helm_ref:
+        description: lzitser23/Zits-helm ref to check out for the playground consumer build
+        required: false
+        type: string
+        default: main
 
 permissions:
   contents: read
@@ -25,6 +30,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: navius
+
+      # The playground consumes Zits.Ui from the sibling helm repo, so the
+      # consumer-build gate needs the sibling checked out next to this repo.
+      - uses: actions/checkout@v4
+        with:
+          repository: lzitser23/Zits-helm
+          ref: ${{ inputs.helm_ref }}
+          path: zits-helm
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -37,10 +52,10 @@ jobs:
         run: |
           case "${{ inputs.package }}" in
             Navius.Primitives)
-              echo "project=src/Navius.Primitives/Navius.Primitives.csproj" >> "$GITHUB_OUTPUT"
+              echo "project=navius/src/Navius.Primitives/Navius.Primitives.csproj" >> "$GITHUB_OUTPUT"
               ;;
             Navius.Motion)
-              echo "project=src/Navius.Motion/Navius.Motion.csproj" >> "$GITHUB_OUTPUT"
+              echo "project=navius/src/Navius.Motion/Navius.Motion.csproj" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "Unknown package: ${{ inputs.package }}" >&2
@@ -52,11 +67,11 @@ jobs:
         run: dotnet build "${{ steps.select.outputs.project }}" -c Release
 
       - name: Run unit tests
-        run: dotnet test tests/Navius.Motion.Tests/Navius.Motion.Tests.csproj -c Release
+        run: dotnet test navius/tests/Navius.Motion.Tests/Navius.Motion.Tests.csproj -c Release
 
       - name: Build playground against Navius.Primitives
         if: inputs.package == 'Navius.Primitives'
-        run: dotnet build playground/Navius.Playground -c Release
+        run: dotnet build navius/playground/Navius.Playground -c Release
 
       - name: Pack package
         run: dotnet pack "${{ steps.select.outputs.project }}" -c Release --no-build -o "${{ runner.temp }}/nupkgs"
