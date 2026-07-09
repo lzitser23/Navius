@@ -57,4 +57,18 @@
     // the input), so clicking it toggles the popup instead of racing an outside-dismiss.
     protected override ElementReference? DismissSecondaryReference =>
         Context.HasTriggerButton ? Context.TriggerButtonElement : null;
+
+    // Follow the virtual-focus highlight into view while the popup is open (there is no roving
+    // to do it). The active option element is always in the DOM, so scrolling it by id is enough.
+    protected override async Task EngageAsync()
+    {
+        await base.EngageAsync();
+        Context.ScrollActiveIntoView = id => Interop!.ScrollIntoViewByIdAsync(id, "nearest");
+    }
+
+    protected override async Task DisengageAsync()
+    {
+        Context.ScrollActiveIntoView = null;
+        await base.DisengageAsync();
+    }
 }

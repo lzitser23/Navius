@@ -140,6 +140,17 @@ public sealed class AutocompleteContext : IAnchoredOverlayContext
     public string? ActiveDescendantId =>
         Open && HighlightedIndex >= 0 && HighlightedIndex < ItemCount ? OptionId(HighlightedIndex) : null;
 
+    /// <summary>
+    /// Set by the Popup while open so the keyboard highlight path can follow the active option
+    /// into view (virtual focus has no roving to do it). Given the active option id; cleared on close.
+    /// </summary>
+    internal Func<string, Task>? ScrollActiveIntoView { get; set; }
+
+    private Task FollowActiveAsync() =>
+        ScrollActiveIntoView is not null && HighlightedIndex >= 0
+            ? ScrollActiveIntoView(OptionId(HighlightedIndex))
+            : Task.CompletedTask;
+
     public bool IsSelected(object value) => SelectedValues.Contains(value);
 
     /// <summary>Per-row render callback provided by the generic Root (invokes the typed template or the text fallback).</summary>
@@ -190,6 +201,7 @@ public sealed class AutocompleteContext : IAnchoredOverlayContext
 
         HighlightedIndex = next;
         await RaiseChangedAsync();
+        await FollowActiveAsync();
     }
 
     /// <summary>Highlight a specific row (pointer hover).</summary>
@@ -220,6 +232,7 @@ public sealed class AutocompleteContext : IAnchoredOverlayContext
 
         HighlightedIndex = index;
         await RaiseChangedAsync();
+        await FollowActiveAsync();
     }
 
     /// <summary>Select the highlighted row, if any (Enter).</summary>
