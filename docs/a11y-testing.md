@@ -1,19 +1,26 @@
 # Accessibility testing
 
-What "accessible" means in this repo, stated precisely so the claim is checkable:
+What this repo implements and what CI verifies on every push, stated precisely so the
+claim is checkable:
 
 | Layer | What it verifies | Where it runs |
 |---|---|---|
 | Behavioral suite (Playwright, Chromium) | Focus trapping, roving focus, keyboard maps, dismissal, ARIA state transitions per the published keyboard tables | `tests/e2e`, every push/PR in CI |
 | axe-core sweep (WCAG 2.1 A/AA) | Names, roles, states, ARIA reference validity, contrast on every playground route | `tests/e2e/specs/axe.spec.ts`, every push/PR in CI |
-| NVDA manual pass | What a screen reader actually announces and whether every flow completes eyes-free | Windows + Chrome/Firefox, per release (checklist below) |
-| VoiceOver manual pass | Same, WebKit/AT quirks | macOS + Safari, per release (checklist below) |
 
-The docs may only use the word "accessible" unqualified for components that have passed all four layers. Until then, per-component claims state which layers they passed.
+Documentation states what components implement and what CI verifies; it does not
+make conformance claims.
 
 ---
 
-## NVDA pass (Windows)
+## Optional manual passes
+
+The NVDA and VoiceOver runbooks below are reference checklists for a manual
+screen-reader pass. They are **not** part of the release process, are not run in CI,
+and have not been performed against this codebase. Treat the following sections as a
+guide for anyone who chooses to run them, not a record of results.
+
+### NVDA pass (Windows)
 
 Setup: NVDA (free, nvaccess.org), Chrome and Firefox, the playground running locally (`dotnet run --project playground/Navius.Playground`). Use speech viewer (NVDA menu > Tools > Speech Viewer) to log announcements. Test with the browser maximized and the mouse untouched: the pass is keyboard-only by definition.
 
@@ -23,7 +30,7 @@ Rules of the pass:
 - Record findings as component / step / expected announcement / actual announcement.
 - Do the pass twice: browse mode navigation (arrow keys, quick nav) and focus mode interaction (Tab, arrows, Enter, Space, Escape).
 
-### Per-family checklist
+#### Per-family checklist
 
 **Dialog / AlertDialog / Drawer**
 - Trigger announces name + "button". On open: "dialog" (or "alert dialog"), the Title as the accessible name, Description if present.
@@ -58,7 +65,7 @@ Rules of the pass:
 - Sortable keyboard reorder: grab, each move, and drop are all announced (live region).
 - Progress announces its value; indeterminate announces as busy/indeterminate, not a stuck number.
 
-## VoiceOver pass (macOS)
+### VoiceOver pass (macOS)
 
 Setup: Safari (primary; VoiceOver users predominantly use Safari), VO activated (Cmd+F5), playground running. Repeat the same per-family checklist with VO conventions: VO+Right for browse, Tab/arrows for focus mode, VO+Space to activate, rotor (VO+U) to verify landmarks, form controls, and headings enumerate correctly.
 
@@ -67,10 +74,10 @@ Safari-specific items to verify explicitly:
 - Focus return after Escape on overlays (WebKit is stricter about programmatic focus).
 - Live-region announcements for Toast and Sortable (VoiceOver coalesces rapid updates).
 
-## Automating SR checks later (optional)
+### Automating SR checks later (optional)
 
 [guidepup](https://github.com/guidepup/guidepup) can drive real NVDA (Windows) and VoiceOver (macOS) from Playwright, asserting on actual spoken output. It needs a one-time environment setup (`@guidepup/setup`) and does not run on the Linux CI runners, so it is a local/scheduled-runner layer, not part of the default suite. Candidate first targets: Dialog focus flow, Menu navigation, Combobox activedescendant announcements.
 
-## Findings log
+### Findings log
 
 Record manual-pass findings in issues labelled `a11y`, one per finding, titled `a11y(<component>): <symptom>`, with the SR/browser combo and the expected vs actual announcement.
