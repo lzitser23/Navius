@@ -1,18 +1,21 @@
 @namespace Navius.Primitives.Components.Fieldset
 @inherits ComponentBase
+@implements IDisposable
 
 @*
     Base UI Fieldset.Root — a native <fieldset> grouping related fields under a
     shared legend. When Disabled, the native fieldset disables every contained
     control for free, and a FieldsetContext cascades the disabled state so the
     legend and contained NaviusFields reflect data-disabled. Emits discrete
-    data-disabled (never data-state).
+    data-disabled (never data-state). aria-labelledby points at the legend, but only
+    while a legend is mounted (no dangling IDREF).
 *@
 
 <CascadingValue Value="_context" IsFixed="false">
     <fieldset data-navius-fieldset
               disabled="@Disabled"
               data-disabled="@(Disabled ? "" : null)"
+              aria-labelledby="@(HasLegend ? _legendId : null)"
               @attributes="Attributes">
         @ChildContent
     </fieldset>
@@ -27,13 +30,49 @@
     [Parameter(CaptureUnmatchedValues = true)]
     public IDictionary<string, object>? Attributes { get; set; }
 
-    private FieldsetContext _context = new();
+    private readonly string _legendId = $"navius-fieldset-legend-{Guid.NewGuid():N}";
+    private int _legendCount;
+    private bool _disposed;
+    private FieldsetContext _context = default!;
+
+    private bool HasLegend => _legendCount > 0;
+
+    protected override void OnInitialized() => _context = BuildContext();
 
     protected override void OnParametersSet()
     {
         if (_context.Disabled != Disabled)
         {
-            _context = new FieldsetContext { Disabled = Disabled };
+            _context = BuildContext();
         }
     }
+
+    private FieldsetContext BuildContext() => new()
+    {
+        Disabled = Disabled,
+        LegendId = _legendId,
+        RegisterLegendImpl = RegisterLegend,
+        UnregisterLegendImpl = UnregisterLegend,
+    };
+
+    // The legend registers on mount and unregisters on dispose; the root ref-counts it here
+    // (so aria-labelledby only appears while a legend exists) and re-renders to reflect it.
+    private void RegisterLegend()
+    {
+        _legendCount++;
+        RenderForLegend();
+    }
+
+    private void UnregisterLegend()
+    {
+        if (_legendCount > 0) _legendCount--;
+        RenderForLegend();
+    }
+
+    private void RenderForLegend()
+    {
+        if (!_disposed) StateHasChanged();
+    }
+
+    public void Dispose() => _disposed = true;
 }

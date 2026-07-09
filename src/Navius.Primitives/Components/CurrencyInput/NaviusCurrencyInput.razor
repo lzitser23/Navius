@@ -17,6 +17,7 @@
 <input @ref="_input"
        inputmode="decimal"
        value="@_display"
+       aria-invalid="@(Invalid ? "true" : null)"
        data-navius-currency-input
        data-empty="@(_value is null ? "" : null)"
        data-negative="@(_value < 0 ? "" : null)"

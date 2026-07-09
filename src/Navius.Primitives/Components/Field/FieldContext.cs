@@ -47,6 +47,24 @@ public sealed class FieldContext
     /// <summary>The id wired onto the control and referenced by the label's <c>for</c>.</summary>
     public string ControlId { get; } = $"navius-field-control-{Guid.NewGuid():N}";
 
+    /// <summary>
+    /// Stable id the label renders. Native controls use the label's <c>for</c>, but a
+    /// group-style control (role="group" over a div) is not labelable, so it points
+    /// <c>aria-labelledby</c> at this id instead (only while a label is mounted).
+    /// </summary>
+    public string LabelId { get; } = $"navius-field-label-{Guid.NewGuid():N}";
+
+    private int _labelCount;
+
+    /// <summary>Whether a label is currently mounted (drives group controls' <c>aria-labelledby</c>).</summary>
+    public bool HasLabel => _labelCount > 0;
+
+    /// <summary>Registers a mounted label (ref-counted for fast remounts).</summary>
+    public void RegisterLabel() => _labelCount++;
+
+    /// <summary>Unregisters the label on dispose.</summary>
+    public void UnregisterLabel() { if (_labelCount > 0) _labelCount--; }
+
     /// <summary>When the field surfaces its validity. Set by <see cref="NaviusField"/>.</summary>
     public FieldValidationMode ValidationMode { get; internal set; } = FieldValidationMode.OnSubmit;
 
