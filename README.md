@@ -65,7 +65,9 @@ accessible) or hides it. navius builds it in the open.
   toast interactions, and more.
 - **Accessible by construction.** ARIA roles, keyboard maps, focus management, and
   dismissal semantics are owned by the primitives. Delete every class and the
-  behaviour still works.
+  behaviour still works. The one deliberate exception is `NaviusDataGrid`, a headless
+  state engine that renders no markup of its own and delegates all table semantics,
+  including `aria-sort`, to the consumer or styled layer.
 - **Zero CSS shipped.** Every primitive forwards unmatched attributes via the
   `@attributes` splat; all visible classes live in your markup. Style with Tailwind,
   plain CSS, or nothing.

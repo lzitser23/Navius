@@ -22,6 +22,12 @@ public sealed class ProgressContext
     public string? DataIndeterminate => IsIndeterminate ? "" : null;
     public string? DataProgressing => !IsIndeterminate && Value < Max ? "" : null;
 
+    // Value attrs (not boolean-presence): data-value carries the current value and is
+    // omitted while indeterminate (consistent with aria-valuenow); data-max is always present.
+    public string? DataValue =>
+        IsIndeterminate ? null : Value!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    public string DataMax => Max.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>0..1 fraction of completion (0 when indeterminate).</summary>
     public double Fraction =>
         IsIndeterminate || Max <= 0 ? 0 : Math.Clamp(Value!.Value / Max, 0, 1);
