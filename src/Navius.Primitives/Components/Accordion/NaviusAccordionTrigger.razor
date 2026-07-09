@@ -21,6 +21,7 @@
         data-navius-accordion-trigger
         @onclick="OnClickAsync"
         @onkeydown="OnKeyDownAsync"
+        @onkeydown:preventDefault="_preventNextKey"
         @attributes="Attributes">
     @ChildContent
 </button>
@@ -39,6 +40,10 @@
 
     private ElementReference _element;
 
+    // Bound to @onkeydown:preventDefault. Set for the navigation keys this trigger handles
+    // (per orientation) so they don't also scroll the page; Tab and typing keep their defaults.
+    private bool _preventNextKey;
+
     private bool IsOpen => Context.IsOpen(Value);
     private bool IsDisabled => Context.IsItemDisabled(ItemDisabled);
 
@@ -52,6 +57,17 @@
 
     private async Task OnKeyDownAsync(KeyboardEventArgs e)
     {
+        // Only the orientation-appropriate arrows (plus Home/End) are handled + scroll-suppressed;
+        // the cross-axis arrows fall through so they keep their native behaviour.
+        var horizontal = Context.Orientation == "horizontal";
+        _preventNextKey = e.Key switch
+        {
+            "Home" or "End" => true,
+            "ArrowUp" or "ArrowDown" => !horizontal,
+            "ArrowLeft" or "ArrowRight" => horizontal,
+            _ => false,
+        };
+
         switch (e.Key)
         {
             case "ArrowUp":

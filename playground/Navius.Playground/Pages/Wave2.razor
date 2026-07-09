@@ -51,6 +51,11 @@
             <NaviusToolbarButton class="inline-flex h-8 items-center rounded-sm px-2 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Bold</NaviusToolbarButton>
             <NaviusToolbarButton class="inline-flex h-8 items-center rounded-sm px-2 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Italic</NaviusToolbarButton>
             <NaviusToolbarSeparator class="mx-1 h-6 w-px bg-border" />
+            <NaviusToolbarToggleGroup Type="multiple" DefaultValue="@(Array.Empty<string>())" class="flex items-center gap-1">
+                <NaviusToolbarToggleItem Value="bold" aria-label="Bold" class="inline-flex h-8 w-8 items-center justify-center rounded-sm text-sm hover:bg-accent data-[pressed]:bg-accent data-[pressed]:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">B</NaviusToolbarToggleItem>
+                <NaviusToolbarToggleItem Value="italic" aria-label="Italic" class="inline-flex h-8 w-8 items-center justify-center rounded-sm text-sm hover:bg-accent data-[pressed]:bg-accent data-[pressed]:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">I</NaviusToolbarToggleItem>
+            </NaviusToolbarToggleGroup>
+            <NaviusToolbarSeparator class="mx-1 h-6 w-px bg-border" />
             <NaviusToolbarLink href="#" class="inline-flex h-8 items-center rounded-sm px-2 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Help</NaviusToolbarLink>
         </NaviusToolbar>
     </section>

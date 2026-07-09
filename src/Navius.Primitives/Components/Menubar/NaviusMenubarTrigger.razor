@@ -80,7 +80,7 @@
 
         if (!MenuContext.Open && isOpenKey)
         {
-            await MenuContext.RequestOpenAsync();
+            await MenuContext.RequestOpenWithFocusAsync(e.Key == "ArrowUp" ? "last" : "first");
         }
     }
 

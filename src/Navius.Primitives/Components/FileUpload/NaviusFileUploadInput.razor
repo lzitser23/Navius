@@ -33,6 +33,10 @@
             {
                 ["multiple"] = Context.Multiple,
                 ["disabled"] = Context.Disabled,
+                // The Dropzone (role=button) and Trigger are the real accessible controls; this
+                // visually hidden native input stays out of the tab order and the a11y tree.
+                ["tabindex"] = "-1",
+                ["aria-hidden"] = "true",
                 ["data-navius-file-upload-input"] = string.Empty,
             };
 

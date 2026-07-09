@@ -30,6 +30,12 @@ public sealed class MenubarMenuContext : IAnchoredOverlayContext
     /// <summary>True when this menu is the open one.</summary>
     public bool Open => _root.IsOpen(Value);
 
+    /// <summary>
+    /// Initial-focus mode passed to roving focus when this menu opens: "first" (click /
+    /// ArrowDown / Enter / Space, the default) or "last" (ArrowUp on the closed trigger).
+    /// </summary>
+    public string OpenFocusMode { get; private set; } = "first";
+
     /// <summary>Stable id wired from trigger (<c>aria-controls</c>) to content.</summary>
     public string ContentId { get; } = $"navius-menubar-menu-{Guid.NewGuid():N}";
 
@@ -121,11 +127,26 @@ public sealed class MenubarMenuContext : IAnchoredOverlayContext
         return false;
     }
 
-    public Task RequestOpenAsync() => _root.RequestOpenAsync(Value);
+    public Task RequestOpenAsync()
+    {
+        OpenFocusMode = "first";
+        return _root.RequestOpenAsync(Value);
+    }
+
+    /// <summary>Open this menu with an explicit initial-focus mode ("first" | "last").</summary>
+    public Task RequestOpenWithFocusAsync(string mode)
+    {
+        OpenFocusMode = mode;
+        return _root.RequestOpenAsync(Value);
+    }
 
     public Task RequestCloseAsync() => _root.RequestCloseAsync(Value);
 
-    public Task RequestToggleAsync() => _root.RequestToggleAsync(Value);
+    public Task RequestToggleAsync()
+    {
+        OpenFocusMode = "first";
+        return _root.RequestToggleAsync(Value);
+    }
 
     /// <summary>Open the menu adjacent to this one (+1 next / -1 prev), honouring loop.</summary>
     public Task MoveToAdjacentAsync(int direction) => _root.MoveToAdjacentAsync(direction);
