@@ -7,7 +7,7 @@
     <section class="space-y-2" data-section="masked">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">MaskedInput (caret-stable)</h2>
         <div class="w-64">
-            <ZitsMaskedInput @bind-Value="_phone" Mask="(000) 000-0000" />
+            <ZitsMaskedInput @bind-Value="_phone" Mask="(000) 000-0000" aria-label="Phone number" />
         </div>
         <p class="text-xs text-muted-foreground">value: <span data-mask-value>@_phone</span></p>
     </section>
@@ -16,11 +16,11 @@
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">CurrencyInput (culture formatting)</h2>
         <div class="flex gap-4">
             <div class="w-56">
-                <ZitsCurrencyInput @bind-Value="_priceUsd" Culture="_usCulture" data-currency="usd" />
+                <ZitsCurrencyInput @bind-Value="_priceUsd" Culture="_usCulture" aria-label="Price in US dollars" data-currency="usd" />
                 <p class="mt-1 text-xs text-muted-foreground">USD: <span data-usd-value>@(_priceUsd?.ToString(CultureInfo.InvariantCulture) ?? "-")</span></p>
             </div>
             <div class="w-56">
-                <ZitsCurrencyInput @bind-Value="_priceEur" Culture="_euCulture" data-currency="eur" />
+                <ZitsCurrencyInput @bind-Value="_priceEur" Culture="_euCulture" aria-label="Price in euros" data-currency="eur" />
                 <p class="mt-1 text-xs text-muted-foreground">EUR: <span data-eur-value>@(_priceEur?.ToString(CultureInfo.InvariantCulture) ?? "-")</span></p>
             </div>
         </div>

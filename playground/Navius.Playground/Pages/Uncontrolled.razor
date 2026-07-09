@@ -17,7 +17,7 @@
     <section class="space-y-2">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Switch (DefaultChecked)</h2>
         <div class="flex items-center gap-2">
-            <ZitsSwitch DefaultChecked="true" data-testid="u-switch" />
+            <ZitsSwitch DefaultChecked="true" aria-label="Starts on, toggles freely" data-testid="u-switch" />
             <ZitsLabel>Starts on, toggles freely</ZitsLabel>
         </div>
     </section>
@@ -25,7 +25,7 @@
     <section class="space-y-2">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Checkbox (DefaultChecked)</h2>
         <div class="flex items-center gap-2">
-            <ZitsCheckbox DefaultChecked="true" data-testid="u-checkbox" />
+            <ZitsCheckbox DefaultChecked="true" aria-label="Starts checked, toggles freely" data-testid="u-checkbox" />
             <ZitsLabel>Starts checked, toggles freely</ZitsLabel>
         </div>
     </section>
@@ -34,15 +34,15 @@
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">RadioGroup (DefaultValue)</h2>
         <ZitsRadioGroup DefaultValue="b" data-testid="u-radio">
             <div class="flex items-center gap-2">
-                <ZitsRadioGroupItem Value="a" data-testid="u-radio-a" />
+                <ZitsRadioGroupItem Value="a" aria-label="Option A" data-testid="u-radio-a" />
                 <ZitsLabel>Option A</ZitsLabel>
             </div>
             <div class="flex items-center gap-2">
-                <ZitsRadioGroupItem Value="b" data-testid="u-radio-b" />
+                <ZitsRadioGroupItem Value="b" aria-label="Option B (default)" data-testid="u-radio-b" />
                 <ZitsLabel>Option B (default)</ZitsLabel>
             </div>
             <div class="flex items-center gap-2">
-                <ZitsRadioGroupItem Value="c" data-testid="u-radio-c" />
+                <ZitsRadioGroupItem Value="c" aria-label="Option C" data-testid="u-radio-c" />
                 <ZitsLabel>Option C</ZitsLabel>
             </div>
         </ZitsRadioGroup>
@@ -51,7 +51,7 @@
     <section class="space-y-2">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Select (DefaultValue)</h2>
         <ZitsSelect DefaultValue="banana">
-            <ZitsSelectTrigger data-testid="u-select-trigger" class="w-[180px]">
+            <ZitsSelectTrigger aria-label="Fruit" data-testid="u-select-trigger" class="w-[180px]">
                 <ZitsSelectValue />
             </ZitsSelectTrigger>
             <ZitsSelectContent>
@@ -64,7 +64,7 @@
 
     <section class="space-y-2">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Slider (DefaultValue)</h2>
-        <ZitsSlider DefaultValue="@(new double[] { 40 })" data-testid="u-slider" class="w-64" />
+        <ZitsSlider DefaultValue="@(new double[] { 40 })" ThumbLabel="Value" data-testid="u-slider" class="w-64" />
     </section>
 
     <section class="space-y-2">
