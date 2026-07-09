@@ -465,7 +465,18 @@ export function createRovingFocus(container, options) {
       e.preventDefault();
       focusAt(list, list.length - 1);
     } else if (e.key === ' ') {
-      e.preventDefault(); // activation is handled by the item; just stop page scroll
+      // A focused native control (button/link/field) activates on Space and never scrolls
+      // the page, so calling preventDefault here would cancel that native activation
+      // (browser-verified: it kills a native <button>'s synthesized click). Only stop the
+      // scroll for non-native items (e.g. the div-based menu/option items whose activation
+      // lives in a C# keydown handler); native-button consumers own their own preventDefault.
+      const nativeTarget =
+        e.target &&
+        e.target.closest &&
+        e.target.closest('button, a, input, select, textarea, [contenteditable]');
+      if (!nativeTarget) {
+        e.preventDefault();
+      }
     } else if (horizontal && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
       // Menubar/Toolbar triggers: the open key is handled by the component; just
       // stop the page from scrolling so the menu can open in place.

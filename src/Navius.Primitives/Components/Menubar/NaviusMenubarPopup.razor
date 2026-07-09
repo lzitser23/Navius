@@ -70,7 +70,9 @@
                 Loop: Loop,
                 AutoFocus: !OpenAutoFocusPrevented,
                 DataHighlight: true,
-                Dir: Context.Dir));
+                Dir: Context.Dir,
+                // ArrowDown/Enter/Space open focused on the first item; ArrowUp on the last.
+                InitialFocus: Context.OpenFocusMode));
     }
 
     protected override async Task DisengageAsync()

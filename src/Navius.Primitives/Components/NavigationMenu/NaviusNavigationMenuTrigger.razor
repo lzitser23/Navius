@@ -37,6 +37,7 @@
         data-navius-navigationmenu-rovable
         @onclick="OnClickAsync"
         @onkeydown="OnKeyDownAsync"
+        @onkeydown:preventDefault="_preventNativeClick"
         @onkeyup="OnKeyUp"
         @onpointerdown="() => _pressed = true"
         @onpointerup="() => _pressed = false"
@@ -63,6 +64,12 @@
     private ElementReference _element;
     private bool _registered;
     private bool _pressed;
+
+    // Bound to @onkeydown:preventDefault. Set just before a Space/Enter toggle so the native
+    // <button> does NOT also synthesize a click (which would double-toggle now that the shared
+    // roving handler no longer blanket-prevents Space on native controls). Mirrors the Menubar
+    // trigger, which owns its own preventDefault the same way.
+    private bool _preventNativeClick;
 
     private string ItemValue => Item?.Value ?? "";
 
@@ -108,6 +115,10 @@
 
     private async Task OnKeyDownAsync(KeyboardEventArgs e)
     {
+        // Suppress the native button's synthesized Space/Enter click so the C# toggle below
+        // fires exactly once; other keys keep their defaults (Tab, roving arrows, typing).
+        _preventNativeClick = e.Key is " " or "Enter";
+
         if (Disabled || string.IsNullOrEmpty(ItemValue))
         {
             return;
