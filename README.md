@@ -10,6 +10,7 @@
 **Headless UI primitives for Blazor: ARIA roles, keyboard maps, and focus management built in. The brain, not the paint.**
 
 [Overview](#overview) ·
+[Documentation](#documentation) ·
 [Features](#features) ·
 [Installation](#installation) ·
 [Quick start](#quick-start) ·
@@ -45,6 +46,18 @@ builds it in the open.
 
 > Named after **Attus Navius**, the Roman augur who sliced a whetstone with a razor
 > before King Tarquin. (Razor, meet .NET **Razor**.)
+
+---
+
+## Documentation
+
+- **[naviusui.dev](https://naviusui.dev)**: component documentation site, per-component
+  anatomy, API reference, `data-*` attribute contracts, keyboard tables, and live
+  demos.
+- **[docs.naviusui.dev](https://docs.naviusui.dev)**: agent-first documentation, one
+  structured markdown manifest per component (frontmatter contract, API/data/keyboard
+  tables, ARIA mechanism), served as raw markdown with an `llms.txt` index, for AI
+  agents and tooling that consume the library.
 
 ---
 
@@ -242,7 +255,10 @@ Three layers with a hard boundary, spread across four sibling repos:
 | **engine** | `src/Navius.Primitives/wwwroot/navius-interop.js` | The DOM-touching behaviour C# cannot do synchronously, driven over JS interop. |
 | **helm** | [`Zits-helm`](https://github.com/lzitser23/Zits-helm) | zits/ui: styled `Zits*` components on the brain, plus the `navius` CLI and copy-paste registry. |
 
-Companion docs/showcase sites are maintained in private sibling repositories.
+Companion docs/showcase sites are maintained in private sibling repositories; the
+built documentation is published at [naviusui.dev](https://naviusui.dev) (component
+docs and live demos) and [docs.naviusui.dev](https://docs.naviusui.dev) (agent-first
+markdown manifests for the primitives).
 The open-source technology surface is this repository plus
 [`Zits-helm`](https://github.com/lzitser23/Zits-helm).
 
