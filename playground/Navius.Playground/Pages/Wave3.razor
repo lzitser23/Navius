@@ -11,7 +11,7 @@
                 <NaviusSliderTrack class="relative h-1.5 w-full grow overflow-hidden rounded-full bg-muted">
                     <NaviusSliderRange class="absolute h-full bg-primary" />
                 </NaviusSliderTrack>
-                <NaviusSliderThumb class="block h-4 w-4 -translate-x-1/2 rounded-full border border-primary/50 bg-background shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                <NaviusSliderThumb aria-label="Value" class="block h-4 w-4 -translate-x-1/2 rounded-full border border-primary/50 bg-background shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             </NaviusSlider>
             <p class="mt-3 text-sm text-muted-foreground">Value: <span data-slider-value>@_volume[0]</span></p>
         </div>
@@ -20,7 +20,7 @@
     <section class="space-y-2">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">ScrollArea</h2>
         <NaviusScrollArea Type="always" class="relative h-48 w-64 overflow-hidden rounded-md border border-border bg-card text-card-foreground">
-            <NaviusScrollAreaViewport class="h-full w-full overflow-auto">
+            <NaviusScrollAreaViewport tabindex="0" class="h-full w-full overflow-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 <div class="p-4">
                     @foreach (var i in Enumerable.Range(1, 40))
                     {
@@ -171,7 +171,7 @@
             </NaviusFieldset>
 
             <div class="w-72">
-                <NaviusInput DefaultValue="hello" data-navius-standalone-input
+                <NaviusInput DefaultValue="hello" aria-label="Standalone input" data-navius-standalone-input
                              class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm data-[filled]:border-primary data-[focused]:ring-2 data-[focused]:ring-ring focus-visible:outline-none" />
             </div>
         </div>
@@ -183,7 +183,7 @@
             <NaviusNumberFieldGroup class="inline-flex items-center overflow-hidden rounded-md border border-input">
                 <NaviusNumberFieldDecrement data-navius-numfield-dec
                                             class="grid h-9 w-9 place-items-center text-sm hover:bg-accent disabled:opacity-40">−</NaviusNumberFieldDecrement>
-                <NaviusNumberFieldInput data-navius-numfield-input
+                <NaviusNumberFieldInput aria-label="Quantity" data-navius-numfield-input
                                         class="h-9 w-16 border-x border-input bg-background px-2 text-center text-sm tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" />
                 <NaviusNumberFieldIncrement data-navius-numfield-inc
                                             class="grid h-9 w-9 place-items-center text-sm hover:bg-accent disabled:opacity-40">+</NaviusNumberFieldIncrement>

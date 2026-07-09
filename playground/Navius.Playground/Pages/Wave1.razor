@@ -44,7 +44,7 @@
 
     <section class="space-y-2">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Progress</h2>
-        <NaviusProgress Value="60" Max="100" class="relative h-3 w-64 overflow-hidden rounded-full bg-muted">
+        <NaviusProgress Value="60" Max="100" aria-label="Demo progress" class="relative h-3 w-64 overflow-hidden rounded-full bg-muted">
             <NaviusProgressIndicator class="h-full w-full rounded-full bg-primary transition-transform" style="transform: translateX(-40%)" />
         </NaviusProgress>
     </section>
@@ -59,7 +59,7 @@
 
     <section class="space-y-2" data-demo="meter">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Meter (role=meter, determinate)</h2>
-        <NaviusMeter Value="72" class="block w-64">
+        <NaviusMeter Value="72" aria-label="Storage used" class="block w-64">
             <NaviusMeterTrack class="relative h-3 w-full overflow-hidden rounded-full bg-muted">
                 <NaviusMeterIndicator class="h-full rounded-full bg-primary" style="width:72%" />
             </NaviusMeterTrack>

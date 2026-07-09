@@ -102,7 +102,7 @@
 
     <div class="flex items-center gap-8">
         <div class="flex items-center gap-2 text-sm">
-            <NaviusSwitch class="group inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors data-[checked]:bg-primary data-[unchecked]:bg-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50">
+            <NaviusSwitch aria-label="Notifications" class="group inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors data-[checked]:bg-primary data-[unchecked]:bg-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50">
                 <span class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg transition-transform group-data-[checked]:translate-x-5 group-data-[unchecked]:translate-x-0"></span>
             </NaviusSwitch>
             <span>Notifications</span>
@@ -110,6 +110,7 @@
 
         <div class="flex items-center gap-2 text-sm">
             <NaviusCheckbox DefaultChecked="true"
+                           aria-label="Accept terms"
                            class="group flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded border border-primary shadow transition-colors data-[checked]:bg-primary data-[checked]:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50">
                 <svg class="h-3.5 w-3.5 opacity-0 transition-opacity group-data-[checked]:opacity-100"
                      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
@@ -220,7 +221,7 @@
     </div>
 
     <NaviusSelect @bind-Value="_selectedFruit" Placeholder="Select a fruit…">
-        <NaviusSelectTrigger class="inline-flex h-10 w-64 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[popup-open]:ring-2 data-[popup-open]:ring-ring">
+        <NaviusSelectTrigger aria-label="Fruit" class="inline-flex h-10 w-64 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[popup-open]:ring-2 data-[popup-open]:ring-ring">
             <NaviusSelectValue class="data-[placeholder]:text-muted-foreground" />
             <span aria-hidden="true" class="text-muted-foreground">▾</span>
         </NaviusSelectTrigger>
@@ -235,7 +236,7 @@
     </NaviusSelect>
 
     <NaviusSelect Multiple @bind-Values="_selectedFruits" Placeholder="Pick fruits…">
-        <NaviusSelectTrigger class="inline-flex h-10 w-64 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[popup-open]:ring-2 data-[popup-open]:ring-ring">
+        <NaviusSelectTrigger aria-label="Fruits" class="inline-flex h-10 w-64 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[popup-open]:ring-2 data-[popup-open]:ring-ring">
             <NaviusSelectValue class="truncate data-[placeholder]:text-muted-foreground" />
             <span aria-hidden="true" class="text-muted-foreground">▾</span>
         </NaviusSelectTrigger>
