@@ -7,7 +7,7 @@
 
 # navius
 
-**Headless, accessible UI primitives for Blazor. The brain, not the paint.**
+**Headless UI primitives for Blazor: ARIA roles, keyboard maps, and focus management built in. The brain, not the paint.**
 
 [Overview](#overview) ·
 [Features](#features) ·
@@ -31,17 +31,17 @@
 
 ## Overview
 
-navius is an unstyled, accessible primitive library for Blazor: the headless "brain"
+navius is an unstyled primitive library for Blazor: the headless "brain"
 that owns behaviour so a styled layer does not have to re-solve it. Each primitive
-implements the anatomy, ARIA, keyboard, and discrete `data-*` contracts of accessible
-UI, mirroring [Base UI](https://base-ui.com) 1:1, expressed natively in Razor.
+implements the anatomy, ARIA roles, keyboard maps, and discrete `data-*` contracts
+of the [Base UI](https://base-ui.com) pattern it mirrors 1:1, expressed natively in Razor.
 
 The bet: the styled-component look for Blazor is commoditized, but nobody ships the
 part that makes it actually work. In Blazor, a correct focus trap, scroll lock, or
 anchored popover **cannot be pure C#** (WebAssembly has no DOM; Server marshals interop
 async over SignalR), so that behaviour lives in a small JavaScript engine driven from
-C#. Every other Blazor component kit either skips this (so it is not really
-accessible) or hides it. navius builds it in the open.
+C#. Every other Blazor component kit either skips this behaviour or hides it. navius
+builds it in the open.
 
 > Named after **Attus Navius**, the Roman augur who sliced a whetstone with a razor
 > before King Tarquin. (Razor, meet .NET **Razor**.)
@@ -63,10 +63,11 @@ accessible) or hides it. navius builds it in the open.
   flip, clamp, RTL-aware alignment and auto-update (no Floating-UI), dismissable
   layers, roving focus with type-ahead, presence timing, focus-preserving teleport,
   toast interactions, and more.
-- **Accessible by construction.** ARIA roles, keyboard maps, focus management, and
-  dismissal semantics are owned by the primitives. Delete every class and the
-  behaviour still works. The one deliberate exception is `NaviusDataGrid`, a headless
-  state engine that renders no markup of its own and delegates all table semantics,
+- **ARIA roles, keyboard maps, and focus management, owned by the primitives.**
+  Dismissal semantics work the same way: delete every class and the behaviour still
+  works, and the 183-test Playwright suite plus the axe-core WCAG gate verify it on
+  every push. The one deliberate exception is `NaviusDataGrid`, a headless state
+  engine that renders no markup of its own and delegates all table semantics,
   including `aria-sort`, to the consumer or styled layer.
 - **Zero CSS shipped.** Every primitive forwards unmatched attributes via the
   `@attributes` splat; all visible classes live in your markup. Style with Tailwind,
@@ -237,7 +238,7 @@ Three layers with a hard boundary, spread across four sibling repos:
 
 | Layer | Where | Role |
 | --- | --- | --- |
-| **brain** | `src/Navius.Primitives` (this repo) | Headless `Navius*` primitives. Behaviour, accessibility, state contracts. |
+| **brain** | `src/Navius.Primitives` (this repo) | Headless `Navius*` primitives. Behaviour, ARIA wiring, focus management, state contracts. |
 | **engine** | `src/Navius.Primitives/wwwroot/navius-interop.js` | The DOM-touching behaviour C# cannot do synchronously, driven over JS interop. |
 | **helm** | [`Zits-helm`](https://github.com/lzitser23/Zits-helm) | zits/ui: styled `Zits*` components on the brain, plus the `navius` CLI and copy-paste registry. |
 

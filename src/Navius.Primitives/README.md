@@ -1,6 +1,6 @@
 # Navius.Primitives
 
-Headless Blazor primitives for accessible UI behavior. The package contains the engine layer for overlays, menus, dialogs, fields, date/time controls, sliders, sortable lists, toast state, keyboard shortcuts, and shared interop.
+Headless Blazor primitives that implement ARIA roles, keyboard behavior, and focus management. The package contains the engine layer for overlays, menus, dialogs, fields, date/time controls, sliders, sortable lists, toast state, keyboard shortcuts, and shared interop.
 
 ## Install
 

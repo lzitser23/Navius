@@ -8,9 +8,9 @@ component contracts depend on.
 
 A two-layer Blazor UI system:
 
-- **Navius** — the **brain**: a headless, accessible primitive library (no styling).
-  Each primitive owns ARIA roles, keyboard interaction, focus management, and a
-  `data-*` state contract. This is the hard, stable half.
+- **Navius** — the **brain**: a headless primitive library (no styling) that
+  implements ARIA roles, keyboard interaction, focus management, and a `data-*` state
+  contract for every component. This is the hard, stable half.
 - **zits/ui** — the **helm**: the styled layer (Tailwind + a token theme) built on
   top of the brain, distributed copy-paste so consumers own their markup.
 
@@ -26,7 +26,7 @@ repos are private sibling repos and should not be presented as public GitHub sur
 
 | Layer | Project | Role |
 |---|---|---|
-| **brain** | `src/Navius.Primitives` | Headless primitives (`Navius*` components). Owns behaviour + accessibility. Razor Class Library, packable. |
+| **brain** | `src/Navius.Primitives` | Headless primitives (`Navius*` components). Owns behaviour, ARIA wiring, and focus management. Razor Class Library, packable. |
 | **engine** | `src/Navius.Primitives/wwwroot/navius-interop.js` (+ `Interop/NaviusJsInterop.cs`) | The DOM-touching behaviour C# can't do synchronously. Driven from C# over JS interop. |
 | **helm** | `../zits-helm/src/Zits.Ui` (sibling repo, ADR-0008) | Styled `Zits*` components wrapping the brain with Tailwind + the OKLCH token theme. |
 
