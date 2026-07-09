@@ -22,6 +22,9 @@ public sealed class MenuContext : IAnchoredOverlayContext
 
     public string ContentId { get; } = $"navius-menu-{Guid.NewGuid():N}";
 
+    /// <summary>Stable id of the trigger, referenced by the popup's <c>aria-labelledby</c>.</summary>
+    public string TriggerId { get; } = $"navius-menu-trigger-{Guid.NewGuid():N}";
+
     /// <summary>The trigger element — set after first render, read by the popup to position against.</summary>
     public ElementReference TriggerElement { get; set; }
     public bool HasTrigger { get; set; }

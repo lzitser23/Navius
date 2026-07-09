@@ -3,10 +3,13 @@
 
 @*
     Base UI Field.Label — a native <label for> pointing at the control id, so
-    clicking the label focuses the control. Reflects the field's discrete state.
+    clicking the label focuses the control. Also carries a stable id so group-style
+    controls (which a <label for> cannot target) can point aria-labelledby at it.
+    Reflects the field's discrete state.
 *@
 
-<label for="@Field.ControlId"
+<label id="@Field.LabelId"
+       for="@Field.ControlId"
        data-navius-field-label
        @attributes="Field.MergeState(Attributes)">
     @ChildContent
@@ -17,4 +20,16 @@
 
     [Parameter(CaptureUnmatchedValues = true)]
     public IDictionary<string, object>? Attributes { get; set; }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Field.RegisterLabel();
+    }
+
+    public override void Dispose()
+    {
+        Field.UnregisterLabel();
+        base.Dispose();
+    }
 }

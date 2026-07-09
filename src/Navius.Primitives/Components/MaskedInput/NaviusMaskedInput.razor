@@ -16,6 +16,7 @@
 
 <input @ref="_input"
        value="@_display"
+       aria-invalid="@(Invalid ? "true" : null)"
        data-navius-masked-input
        data-empty="@(string.IsNullOrEmpty(_unmasked) ? "" : null)"
        data-disabled="@(Disabled ? "" : null)"

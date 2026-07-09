@@ -17,6 +17,9 @@ public sealed class MenuSubContext
 
     public string ContentId { get; } = $"navius-submenu-{Guid.NewGuid():N}";
 
+    /// <summary>Stable id of the SubTrigger, referenced by the SubContent's <c>aria-labelledby</c>.</summary>
+    public string TriggerId { get; } = $"navius-submenu-trigger-{Guid.NewGuid():N}";
+
     public ElementReference TriggerElement { get; set; }
     public bool HasTrigger { get; set; }
 

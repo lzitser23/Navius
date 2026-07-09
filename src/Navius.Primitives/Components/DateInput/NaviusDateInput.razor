@@ -17,6 +17,7 @@
 
 <div role="group"
      id="@GroupId"
+     aria-labelledby="@LabelledBy"
      aria-describedby="@Field?.DescribedBy"
      aria-invalid="@(IsInvalid ? "true" : null)"
      data-navius-date-input
@@ -115,6 +116,7 @@
     private bool IsControlled => _valueSet;
     private DateOnly? CurrentValue => IsControlled ? Value : _internal;
     private string GroupId => Field?.ControlId ?? _id;
+    private string? LabelledBy => Field is { HasLabel: true } ? Field.LabelId : null;
     private bool IsInvalid => Field?.IsInvalid ?? (Invalid || IsOutOfRange);
     private bool IsOutOfRange => Compose() is { } c && ((MinValue is { } mn && c < mn) || (MaxValue is { } mx && c > mx));
     private CultureInfo ResolvedCulture => Culture ?? CultureInfo.CurrentCulture;

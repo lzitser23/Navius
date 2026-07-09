@@ -1,13 +1,16 @@
 @namespace Navius.Primitives.Components.DateRangePicker
 @inherits ComponentBase
+@using Navius.Primitives.Components.Field
 
 @*
     The labelled group wrapping the two endpoint inputs, the separator and the trigger
     (role="group"). Also hosts the two hidden bubble inputs that submit the ISO start/end
-    under StartName / EndName. Emits the discrete field-state attributes.
+    under StartName / EndName. Emits the discrete field-state attributes. Inside a Field it
+    points aria-labelledby at the field's label (a role="group" div is not labelable via for).
 *@
 
 <div role="group"
+     aria-labelledby="@LabelledBy"
      data-navius-date-range-picker
      data-disabled="@(Ctx.Disabled ? "" : null)"
      data-readonly="@(Ctx.ReadOnly ? "" : null)"
@@ -23,8 +26,13 @@
 @code {
     [CascadingParameter] public DateRangePickerContext Ctx { get; set; } = default!;
 
+    /// <summary>Optional enclosing field, used only to label this group when a label is mounted.</summary>
+    [CascadingParameter] private FieldContext? Field { get; set; }
+
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     [Parameter(CaptureUnmatchedValues = true)]
     public IDictionary<string, object>? Attributes { get; set; }
+
+    private string? LabelledBy => Field is { HasLabel: true } ? Field.LabelId : null;
 }
