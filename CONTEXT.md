@@ -71,6 +71,14 @@ keyboard-shortcut listener, and small DOM readers.
   `ValueChanged`/`OpenChanged` `EventCallback` (for `@bind-`). Uncontrolled =
   `DefaultValue`/`DefaultOpen`. Controlled-ness is determined by whether the parameter
   was set (tracked in `SetParametersAsync`), NOT by `EventCallback.HasDelegate`.
+  Nullable value parameters (`string? Value` and friends) refine this to
+  present-AND-non-null: a supplied-but-null `Value` acts uncontrolled, because Blazor
+  wrappers and `@bind-Value` chains supply the attribute unconditionally, so a null
+  default would silently force controlled mode ecosystem-wide (this is the bug the
+  2026-06-25 parity audit fixed on Accordion, and the deliberate delta from Base UI,
+  where a supplied null IS controlled-empty). Boolean and boolean-nullable state
+  where null is a real value (`bool? Checked`, indeterminate) use plain
+  present-detection.
 - **State contract (Base UI, per ADR-0007).** Reproduce Base UI's discrete
   boolean-presence attributes — `data-open`/`data-closed`, `data-checked`/
   `data-unchecked`/`data-indeterminate`, `data-pressed`, `data-popup-open`,
