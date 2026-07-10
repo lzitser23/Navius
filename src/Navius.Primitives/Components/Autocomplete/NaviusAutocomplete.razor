@@ -51,9 +51,27 @@
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
-    private bool IsOpenControlled => OpenChanged.HasDelegate;
+    // Controlled-ness is determined by whether the value/open param was explicitly supplied
+    // (tracked in SetParametersAsync), NOT by EventCallback.HasDelegate.
+    private bool _openSet;
+    private bool _valueSet;
+    private bool IsOpenControlled => _openSet;
+    private bool IsValueControlled => _valueSet;
 
-    private bool IsValueControlled => ValueChanged.HasDelegate;
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<bool>(nameof(Open), out _))
+        {
+            _openSet = true;
+        }
+
+        if (parameters.TryGetValue<string?>(nameof(Value), out var v) && v is not null)
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
 
     private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
 
@@ -140,6 +158,7 @@
 
     private async Task SetQueryAsync(string query)
     {
+        var wasOpen = _context.Open;
         _context.SetQueryValue(query);
         _context.SetHighlightedIndex(0);
         _context.SetOpen(true);
@@ -157,9 +176,18 @@
         else
         {
             _internalQuery = query;
+            // Surface the change to observers even when uncontrolled (the spec's onValueChange).
+            if (ValueChanged.HasDelegate)
+            {
+                await ValueChanged.InvokeAsync(query);
+            }
         }
 
         if (IsOpenControlled)
+        {
+            await OpenChanged.InvokeAsync(true);
+        }
+        else if (!wasOpen && OpenChanged.HasDelegate)
         {
             await OpenChanged.InvokeAsync(true);
         }
@@ -171,6 +199,7 @@
     private async Task SelectAsync(object value)
     {
         var text = ToText((TItem)value);
+        var wasOpen = _context.Open;
 
         _context.SetQueryValue(text);
         _context.SetSelectedValues(new[] { value });
@@ -189,9 +218,18 @@
         else
         {
             _internalQuery = text;
+            // Surface the change to observers even when uncontrolled (the spec's onValueChange).
+            if (ValueChanged.HasDelegate)
+            {
+                await ValueChanged.InvokeAsync(text);
+            }
         }
 
         if (IsOpenControlled)
+        {
+            await OpenChanged.InvokeAsync(false);
+        }
+        else if (wasOpen && OpenChanged.HasDelegate)
         {
             await OpenChanged.InvokeAsync(false);
         }
@@ -202,11 +240,17 @@
 
     private async Task RequestSetOpenAsync(bool open)
     {
+        var wasOpen = _context.Open;
         _context.SetOpen(open);
 
         if (!IsOpenControlled)
         {
             _internalOpen = open;
+            // Surface the change to observers even when uncontrolled (the spec's onOpenChange).
+            if (wasOpen != open && OpenChanged.HasDelegate)
+            {
+                await OpenChanged.InvokeAsync(open);
+            }
         }
         else
         {

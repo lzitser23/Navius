@@ -47,7 +47,20 @@
     private string? _internal;
     private CancellationTokenSource? _hoverCts;
 
-    private bool IsControlled => ValueChanged.HasDelegate;
+    // Controlled-ness is determined by whether a non-null Value was explicitly supplied
+    // (tracked in SetParametersAsync), NOT by ValueChanged.HasDelegate.
+    private bool _valueSet;
+    private bool IsControlled => _valueSet;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<string?>(nameof(Value), out var v) && v is not null)
+        {
+            _valueSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
 
     protected override void OnInitialized()
     {
@@ -74,6 +87,11 @@
         {
             _internal = value;
             await _context.SetValueInternalAsync(value);
+            if (ValueChanged.HasDelegate)
+            {
+                // Surface the change to observers even when uncontrolled (the spec's onValueChange).
+                await ValueChanged.InvokeAsync(value);
+            }
             StateHasChanged();
         }
     }

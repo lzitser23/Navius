@@ -77,12 +77,47 @@
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
-    private bool IsOpenControlled => OpenChanged.HasDelegate;
-    private bool IsValueControlled => ValueChanged.HasDelegate;
-    private bool IsValuesControlled => ValuesChanged.HasDelegate;
-    private bool IsInputControlled => InputValueChanged.HasDelegate;
+    // Controlled-ness is determined by whether each value/open param was explicitly supplied
+    // (tracked in SetParametersAsync), NOT by EventCallback.HasDelegate.
+    private bool _openSet;
+    private bool _valueSet;
+    private bool _valuesSet;
+    private bool _inputSet;
+    private bool IsOpenControlled => _openSet;
+    private bool IsValueControlled => _valueSet;
+    private bool IsValuesControlled => _valuesSet;
+    private bool IsInputControlled => _inputSet;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<bool>(nameof(Open), out _))
+        {
+            _openSet = true;
+        }
+
+        if (parameters.TryGetValue<TItem?>(nameof(Value), out var v) && v is not null)
+        {
+            _valueSet = true;
+        }
+
+        if (parameters.TryGetValue<IReadOnlyList<TItem>>(nameof(Values), out var vs) && vs is not null)
+        {
+            _valuesSet = true;
+        }
+
+        if (parameters.TryGetValue<string?>(nameof(InputValue), out var iv) && iv is not null)
+        {
+            _inputSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
 
     private string EffectiveDir => Dir ?? CascadedDir ?? "ltr";
+
+    /// <summary>Fires InputValueChanged so a controlled @bind-InputValue AND an uncontrolled observer both see the filter text.</summary>
+    private Task RaiseInputChangedAsync(string? value) =>
+        InputValueChanged.HasDelegate ? InputValueChanged.InvokeAsync(value) : Task.CompletedTask;
 
     private TItem? EffectiveValue => IsValueControlled ? Value : _internalValue;
 
@@ -239,6 +274,7 @@
 
     private async Task SetQueryAsync(string query)
     {
+        var wasOpen = _context.Open;
         _query = query;
         _context.SetQueryValue(query);
         _context.SetHighlightedIndex(0);
@@ -250,13 +286,15 @@
             _internalOpen = true;
         }
 
-        if (IsInputControlled)
-        {
-            await InputValueChanged.InvokeAsync(query);
-        }
+        await RaiseInputChangedAsync(query);
 
         if (IsOpenControlled)
         {
+            await OpenChanged.InvokeAsync(true);
+        }
+        else if (!wasOpen && OpenChanged.HasDelegate)
+        {
+            // Surface the change to observers even when uncontrolled (the spec's onOpenChange).
             await OpenChanged.InvokeAsync(true);
         }
 
@@ -290,13 +328,11 @@
             _context.SetHighlightedIndex(0);
             Recompute();
 
-            if (IsInputControlled)
-            {
-                await InputValueChanged.InvokeAsync("");
-            }
+            await RaiseInputChangedAsync("");
         }
         else
         {
+            var wasOpen = _context.Open;
             await CommitValueAsync(value);
             SetSelectionFromValue(value);
 
@@ -308,14 +344,16 @@
 
             // Keep a controlled @bind-InputValue in sync with the committed label, else
             // OnParametersSetAsync would re-inject the stale filter text over the label.
-            if (IsInputControlled)
-            {
-                await InputValueChanged.InvokeAsync(_query);
-            }
+            await RaiseInputChangedAsync(_query);
 
             if (!IsOpenControlled)
             {
                 _internalOpen = false;
+                // Surface the change to observers even when uncontrolled (the spec's onOpenChange).
+                if (wasOpen && OpenChanged.HasDelegate)
+                {
+                    await OpenChanged.InvokeAsync(false);
+                }
             }
             else
             {
@@ -344,10 +382,7 @@
             SetSelectionFromValue(default);
             _query = "";
             _context.SetQueryValue("");
-            if (IsInputControlled)
-            {
-                await InputValueChanged.InvokeAsync("");
-            }
+            await RaiseInputChangedAsync("");
         }
 
         Recompute();
@@ -394,10 +429,7 @@
         _context.SetHighlightedIndex(0);
         Recompute();
 
-        if (IsInputControlled)
-        {
-            await InputValueChanged.InvokeAsync("");
-        }
+        await RaiseInputChangedAsync("");
 
         await _context.RaiseChangedAsync();
         StateHasChanged();
@@ -405,6 +437,7 @@
 
     private async Task RequestSetOpenAsync(bool open)
     {
+        var wasOpen = _context.Open;
         _context.SetOpen(open);
 
         // Closing without a selection reverts the filter box to the committed value, so the
@@ -419,16 +452,18 @@
                 Recompute();
                 // Propagate the revert to a controlled @bind-InputValue, else the stray filter
                 // text would be re-injected by OnParametersSetAsync on the next parent render.
-                if (IsInputControlled)
-                {
-                    await InputValueChanged.InvokeAsync(_query);
-                }
+                await RaiseInputChangedAsync(_query);
             }
         }
 
         if (!IsOpenControlled)
         {
             _internalOpen = open;
+            // Surface the change to observers even when uncontrolled (the spec's onOpenChange).
+            if (wasOpen != open && OpenChanged.HasDelegate)
+            {
+                await OpenChanged.InvokeAsync(open);
+            }
         }
         else
         {
@@ -448,6 +483,11 @@
         else
         {
             _internalValue = value;
+            // Surface the change to observers even when uncontrolled (the spec's onValueChange).
+            if (ValueChanged.HasDelegate)
+            {
+                await ValueChanged.InvokeAsync(value);
+            }
         }
     }
 
@@ -460,6 +500,11 @@
         else
         {
             _internalValues = values;
+            // Surface the change to observers even when uncontrolled (the spec's onValuesChange).
+            if (ValuesChanged.HasDelegate)
+            {
+                await ValuesChanged.InvokeAsync(values);
+            }
         }
     }
 }

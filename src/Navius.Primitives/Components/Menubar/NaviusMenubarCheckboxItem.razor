@@ -56,8 +56,22 @@
     private MenubarItemIndicatorContext _indicatorContext = default!;
     private bool? _internalChecked;
 
-    private bool IsControlled => CheckedChanged.HasDelegate;
+    // Controlled-ness is determined by whether Checked was explicitly supplied (tracked in
+    // SetParametersAsync), NOT by CheckedChanged.HasDelegate. Checked is bool? where null is a
+    // legitimate controlled (indeterminate) value, so mere presence marks it controlled.
+    private bool _checkedSet;
+    private bool IsControlled => _checkedSet;
     private bool? CurrentChecked => IsControlled ? Checked : _internalChecked;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<bool?>(nameof(Checked), out _))
+        {
+            _checkedSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
 
     private string AriaChecked => CurrentChecked switch
     {
@@ -89,6 +103,11 @@
         else
         {
             _internalChecked = next;
+            // Surface the change to observers even when uncontrolled (the spec's onCheckedChange).
+            if (CheckedChanged.HasDelegate)
+            {
+                await CheckedChanged.InvokeAsync(next);
+            }
         }
 
         var args = new NaviusSelectEventArgs();
