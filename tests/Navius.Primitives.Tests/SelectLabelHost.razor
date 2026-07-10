@@ -1,0 +1,24 @@
+@namespace Navius.Primitives.Tests
+@using Navius.Primitives.Components.Select
+
+@*
+    Test host for the select label-persistence regression: the options live in a block
+    that can be unmounted (ShowItems=false) to simulate the popup closing and its items
+    disposing, exactly as happens in a real portaled listbox. The probe captures the
+    SelectContext so the test can raise a Changed re-render after the items dispose (the
+    real close path fires Changed once the items are gone).
+*@
+
+<NaviusSelect>
+    <NaviusSelectValue />
+    <CascadedContextProbe TContext="SelectContext" />
+    @if (ShowItems)
+    {
+        <NaviusSelectItem Value="customer_42" TextValue="Ada Lovelace" />
+        <NaviusSelectItem Value="customer_7" TextValue="Alan Turing" />
+    }
+</NaviusSelect>
+
+@code {
+    [Parameter] public bool ShowItems { get; set; } = true;
+}

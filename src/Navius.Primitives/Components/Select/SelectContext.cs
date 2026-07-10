@@ -25,6 +25,11 @@ public sealed class SelectContext : IAnchoredOverlayContext
 
     // value -> rendered display text (label), populated by NaviusSelectItem /
     // NaviusSelectItemText so the trigger can show the human label for the key.
+    //
+    // This is a PERSISTENT cache: entries are overwritten on (re)registration but are
+    // deliberately NOT dropped when an item unmounts (e.g. the popup closes and its
+    // options dispose). Otherwise the closed trigger would lose the selected item's label
+    // and fall back to rendering the raw value key (e.g. "customer_42").
     private readonly Dictionary<string, string?> _textByValue = new();
 
     public SelectContext(Func<bool, Task> setOpen, Func<string, Task> selectValue)
@@ -192,9 +197,9 @@ public sealed class SelectContext : IAnchoredOverlayContext
 
     public void UnregisterText(string value)
     {
-        // Only drop the mapping if it still belongs to this value (avoids races
-        // when an item is rekeyed and re-registers before the old one disposes).
-        _textByValue.Remove(value);
+        // Intentionally a no-op: the label must SURVIVE the item's unmount so that a
+        // closed select (whose options have disposed) still renders the selected label
+        // instead of the raw value key. Re-registration overwrites the entry.
     }
 
     /// <summary>The display label for the current value, or null if none registered.</summary>
