@@ -18,8 +18,21 @@
     private CollapsibleContext _context = default!;
     private bool _internalOpen;
 
-    private bool IsControlled => OpenChanged.HasDelegate;
+    // Controlled-ness is determined by whether Open was explicitly supplied (tracked in
+    // SetParametersAsync), NOT by OpenChanged.HasDelegate.
+    private bool _openSet;
+    private bool IsControlled => _openSet;
     private bool CurrentOpen => IsControlled ? Open : _internalOpen;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<bool>(nameof(Open), out _))
+        {
+            _openSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
 
     protected override void OnInitialized()
     {
@@ -45,6 +58,11 @@
         {
             _internalOpen = open;
             await _context.SetOpenInternalAsync(open);
+            if (OpenChanged.HasDelegate)
+            {
+                // Surface the change to observers even when uncontrolled (the spec's onOpenChange).
+                await OpenChanged.InvokeAsync(open);
+            }
             StateHasChanged();
         }
     }

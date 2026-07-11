@@ -1,0 +1,12 @@
+@namespace Navius.Primitives.Tests
+@typeparam TContext
+
+@*
+    A test probe: captures a cascaded context of type TContext so a test can drive
+    the root component's state exactly as a real part would (calling the context's
+    public Request*/Select* methods), without mounting the JS-engaging popup parts.
+*@
+
+@code {
+    [CascadingParameter] public TContext? Context { get; set; }
+}

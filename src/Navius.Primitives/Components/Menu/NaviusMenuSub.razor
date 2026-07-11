@@ -23,7 +23,20 @@
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
-    private bool IsControlled => OpenChanged.HasDelegate;
+    // Controlled-ness is determined by whether Open was explicitly supplied (tracked in
+    // SetParametersAsync), NOT by OpenChanged.HasDelegate.
+    private bool _openSet;
+    private bool IsControlled => _openSet;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<bool>(nameof(Open), out _))
+        {
+            _openSet = true;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
 
     protected override void OnInitialized()
     {
@@ -46,6 +59,11 @@
         {
             _internalOpen = value;
             await _subContext.SetOpenInternalAsync(value);
+            if (OpenChanged.HasDelegate)
+            {
+                // Surface the change to observers even when uncontrolled (the spec's onOpenChange).
+                await OpenChanged.InvokeAsync(value);
+            }
             StateHasChanged();
         }
     }
