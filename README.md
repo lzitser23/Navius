@@ -104,7 +104,7 @@ builds it in the open.
 
 ## Installation
 
-Preview packages are published to NuGet as `0.3.0-preview.3`. Install the brain with:
+`Navius.Primitives` is published to NuGet as `0.3.0-preview.4`. Install the brain with:
 
 ```bash
 dotnet add package Navius.Primitives --prerelease
