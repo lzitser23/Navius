@@ -1,5 +1,16 @@
 name: publish-nuget
 
+# Publishes in two ways, sharing one workflow file so the nuget.org trusted
+# publishing policy (which pins this filename) covers both:
+#   - workflow_dispatch: publish one named package on demand.
+#   - push to main touching a package csproj: publish every package whose
+#     <Version> is not yet on nuget.org. The check is against the live
+#     flat-container index, not the diff, so a bump that slipped through
+#     unpublished is picked up by the next qualifying push, and re-runs are
+#     harmless (`dotnet nuget push --skip-duplicate`).
+# The push path reads the nuget.org account from the NUGET_USER repository
+# variable; dispatch runs take it as an input.
+
 on:
   workflow_dispatch:
     inputs:
@@ -19,14 +30,77 @@ on:
         required: false
         type: string
         default: main
+  push:
+    branches:
+      - main
+    paths:
+      - src/Navius.Primitives/Navius.Primitives.csproj
+      - src/Navius.Motion/Navius.Motion.csproj
+      # The workflow itself: merging a change to it reconciles any pending,
+      # not-yet-published version bumps.
+      - .github/workflows/publish-nuget.yml
 
 permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: publish-nuget
+  cancel-in-progress: false
+
 jobs:
-  publish:
+  detect:
     if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.detect.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect packages to publish
+        id: detect
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo 'packages=["${{ inputs.package }}"]' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          names=(Navius.Primitives Navius.Motion)
+          paths=(src/Navius.Primitives/Navius.Primitives.csproj
+                 src/Navius.Motion/Navius.Motion.csproj)
+          ids=(navius.primitives navius.motion)
+
+          pending=()
+          for i in "${!names[@]}"; do
+            # tr strips the \r a CRLF checkout would leave on the captured group.
+            version=$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' "${paths[$i]}" | tr -d '\r')
+            if [ -z "$version" ]; then
+              echo "No <Version> found in ${paths[$i]}" >&2
+              exit 1
+            fi
+            # A curl failure (404 for a never-published id, or a transient
+            # error) falls through to "publish"; --skip-duplicate makes a
+            # false positive a no-op.
+            published=$(curl -sf "https://api.nuget.org/v3-flatcontainer/${ids[$i]}/index.json" || echo '{"versions":[]}')
+            if echo "$published" | grep -q "\"$version\""; then
+              echo "${names[$i]} $version is already on nuget.org"
+            else
+              echo "${names[$i]} $version is not on nuget.org: queueing publish"
+              pending+=("\"${names[$i]}\"")
+            fi
+          done
+
+          list=$(IFS=,; echo "${pending[*]}")
+          echo "packages=[$list]" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: detect
+    if: needs.detect.outputs.packages != '[]'
+    strategy:
+      max-parallel: 1
+      matrix:
+        package: ${{ fromJSON(needs.detect.outputs.packages) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +112,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: lzitser23/Zits-helm
-          ref: ${{ inputs.helm_ref }}
+          ref: ${{ inputs.helm_ref || 'main' }}
           path: zits-helm
 
       - name: Setup .NET
@@ -50,7 +124,7 @@ jobs:
         id: select
         shell: bash
         run: |
-          case "${{ inputs.package }}" in
+          case "${{ matrix.package }}" in
             Navius.Primitives)
               echo "project=navius/src/Navius.Primitives/Navius.Primitives.csproj" >> "$GITHUB_OUTPUT"
               ;;
@@ -58,7 +132,7 @@ jobs:
               echo "project=navius/src/Navius.Motion/Navius.Motion.csproj" >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo "Unknown package: ${{ inputs.package }}" >&2
+              echo "Unknown package: ${{ matrix.package }}" >&2
               exit 1
               ;;
           esac
@@ -70,7 +144,7 @@ jobs:
         run: dotnet test navius/tests/Navius.Motion.Tests/Navius.Motion.Tests.csproj -c Release
 
       - name: Build playground against Navius.Primitives
-        if: inputs.package == 'Navius.Primitives'
+        if: matrix.package == 'Navius.Primitives'
         run: dotnet build navius/playground/Navius.Playground -c Release
 
       - name: Pack package
@@ -80,7 +154,7 @@ jobs:
         uses: NuGet/login@v1
         id: login
         with:
-          user: ${{ inputs.nuget_user }}
+          user: ${{ inputs.nuget_user || vars.NUGET_USER }}
 
       - name: Publish package
         working-directory: ${{ runner.temp }}/nupkgs
