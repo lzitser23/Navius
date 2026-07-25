@@ -3,8 +3,11 @@
 @inject IJSRuntime JS
 
 @*
-    The actual scroll container: overflow:auto so content scrolls natively (keyboard,
-    wheel, touch, trackpad all work for free). After first render it asks the engine
+    The actual scroll container: overflow:auto so content scrolls natively (wheel,
+    touch, trackpad). It emits tabindex="0" so the container is keyboard-focusable and
+    arrow/PageUp/PageDown/Home/End scroll it in every browser (not only the ones that
+    auto-focus scroll containers); a consumer can override via the attribute splat.
+    After first render it asks the engine
     to observe this element and report {scrollTop,scrollHeight,clientHeight,...} on
     every scroll and resize, which the root turns into thumb geometry. The inner
     content wrapper is what actually overflows.
@@ -15,6 +18,7 @@
 *@
 
 <div @ref="_element"
+     tabindex="0"
      data-navius-scrollarea-viewport
      @attributes="Attributes">
     <div data-navius-scrollarea-content>
