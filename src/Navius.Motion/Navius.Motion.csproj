@@ -22,7 +22,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>blazor;motion;animation;springs;css</PackageTags>
-    <PackageReleaseNotes>Preview release of the Navius motion engine and static web asset stylesheet.</PackageReleaseNotes>
+    <PackageReleaseNotes>Preview release of the Navius motion engine and static web asset stylesheet. See CHANGELOG.md at https://github.com/lzitser23/Navius/blob/main/CHANGELOG.md for per-version notes.</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
