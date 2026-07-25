@@ -141,7 +141,9 @@ jobs:
         run: dotnet build "${{ steps.select.outputs.project }}" -c Release
 
       - name: Run unit tests
-        run: dotnet test navius/tests/Navius.Motion.Tests/Navius.Motion.Tests.csproj -c Release
+        run: |
+          dotnet test navius/tests/Navius.Motion.Tests/Navius.Motion.Tests.csproj -c Release
+          dotnet test navius/tests/Navius.Primitives.Tests/Navius.Primitives.Tests.csproj -c Release
 
       - name: Build playground against Navius.Primitives
         if: matrix.package == 'Navius.Primitives'
