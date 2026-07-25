@@ -24,7 +24,7 @@
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-171614)
 ![Blazor](https://img.shields.io/badge/Blazor-WASM%20%2B%20Server-737270)
 ![Contract](https://img.shields.io/badge/contract-Base%20UI-737270)
-![Tests](https://img.shields.io/badge/e2e-183%20Playwright-737270)
+![Tests](https://img.shields.io/badge/e2e-214%20Playwright-737270)
 
 </div>
 
@@ -78,7 +78,7 @@ builds it in the open.
   toast interactions, and more.
 - **ARIA roles, keyboard maps, and focus management, owned by the primitives.**
   Dismissal semantics work the same way: delete every class and the behaviour still
-  works, and the 183-test Playwright suite plus the axe-core WCAG gate verify it on
+  works, and the 214-test Playwright suite plus the axe-core WCAG gate verify it on
   every push. The one deliberate exception is `NaviusDataGrid`, a headless state
   engine that renders no markup of its own and delegates all table semantics,
   including `aria-sort`, to the consumer or styled layer.
@@ -94,7 +94,7 @@ builds it in the open.
   FLIP auto-animate, in-view reveals with stagger, an imperative sequence builder,
   and experimental same-document page transitions. Standalone package, zero
   references to the primitives, zero JavaScript animation library on the wire.
-- **Browser-verified.** 183 Playwright tests drive a real headless Chromium against
+- **Browser-verified.** 214 Playwright tests drive a real headless Chromium against
   the playground: focus trapping, scroll lock, positioning, dismissal, roving focus,
   exit animation, portal teleport. CI runs the full suite.
 - **CSP-clean.** No `eval` anywhere; a DOM-transparent `NaviusCspProvider` carries the
@@ -240,7 +240,7 @@ navius/
 |-- docs/          # ADRs and the Base UI parity dossier
 |-- playground/    # Blazor WebAssembly showcase for the brain and sibling helm
 |-- src/           # packable libraries: Navius.Primitives and Navius.Motion
-`-- tests/         # xUnit motion tests and Playwright e2e tests
+`-- tests/         # xUnit motion tests, bUnit primitives tests, and Playwright e2e tests
 ```
 
 ---

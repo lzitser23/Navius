@@ -31,6 +31,23 @@ public sealed class AlertDialogContext : IOverlayContext
     public string TitleId => $"{ContentId}-title";
     public string DescriptionId => $"{ContentId}-desc";
 
+    /// <summary>
+    /// Presence tracking for the labelling parts. aria-labelledby / aria-describedby
+    /// are emitted only when a Title / Description is mounted, avoiding a dangling
+    /// IDREF (a titleless alert dialog would otherwise advertise a name that does not
+    /// exist). Ref-counted so multiple parts (or fast remounts) stay correct.
+    /// </summary>
+    private int _titleCount;
+    private int _descriptionCount;
+
+    public bool HasTitle => _titleCount > 0;
+    public bool HasDescription => _descriptionCount > 0;
+
+    public void RegisterTitle() => _titleCount++;
+    public void UnregisterTitle() { if (_titleCount > 0) _titleCount--; }
+    public void RegisterDescription() => _descriptionCount++;
+    public void UnregisterDescription() { if (_descriptionCount > 0) _descriptionCount--; }
+
     /// <summary>The element that opened the dialog, so focus can be restored to it on close.</summary>
     public ElementReference TriggerElement { get; set; }
     public bool HasTrigger { get; set; }

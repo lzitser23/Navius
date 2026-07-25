@@ -44,12 +44,9 @@
     public override Task SetParametersAsync(ParameterView parameters)
     {
         _valueSet = false;
-        foreach (var p in parameters)
+        if (parameters.TryGetValue<string?>(nameof(Value), out var v) && v is not null)
         {
-            if (p.Name == nameof(Value))
-            {
-                _valueSet = true;
-            }
+            _valueSet = true;
         }
 
         return base.SetParametersAsync(parameters);

@@ -26,7 +26,9 @@ jobs:
 
       - name: Run unit tests
         working-directory: navius
-        run: dotnet test tests/Navius.Motion.Tests/Navius.Motion.Tests.csproj -c Release
+        run: |
+          dotnet test tests/Navius.Motion.Tests/Navius.Motion.Tests.csproj -c Release
+          dotnet test tests/Navius.Primitives.Tests/Navius.Primitives.Tests.csproj -c Release
 
       - name: Pack NuGet artifacts
         working-directory: navius

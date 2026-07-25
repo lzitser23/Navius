@@ -5,6 +5,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>true</IsPackable>
+    <!-- Ship the XML doc file so IDE hover summaries reach package consumers.
+         CS1591 (missing doc on a public member) is downgraded to non-blocking:
+         the summaries that exist are what we want to surface, not a mandate to
+         document every member. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <RootNamespace>Navius.Motion</RootNamespace>
     <PackageId>Navius.Motion</PackageId>
     <Version>0.3.0-preview.1</Version>
@@ -16,13 +22,16 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>blazor;motion;animation;springs;css</PackageTags>
-    <PackageReleaseNotes>Preview release of the Navius motion engine and static web asset stylesheet.</PackageReleaseNotes>
+    <PackageReleaseNotes>Preview release of the Navius motion engine and static web asset stylesheet. See CHANGELOG.md at https://github.com/lzitser23/Navius/blob/main/CHANGELOG.md for per-version notes.</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <EnablePackageValidation>true</EnablePackageValidation>
+    <!-- Package validation is intentionally off: these are 0.x pre-1.0 previews with
+         no stable baseline to diff against, and a single target framework, so there is
+         nothing for it to compare. Re-enable with <PackageValidationBaselineVersion>
+         once a stable release exists and API compatibility must be guaranteed. -->
   </PropertyGroup>
 
   <ItemGroup>
