@@ -13,7 +13,7 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <RootNamespace>Navius.Primitives</RootNamespace>
     <PackageId>Navius.Primitives</PackageId>
-    <Version>0.3.0-preview.4</Version>
+    <Version>0.3.0-preview.5</Version>
     <Authors>Navius contributors</Authors>
     <Description>Headless Blazor primitives for accessible overlays, controls, field composition, and application UI behavior.</Description>
     <PackageProjectUrl>https://github.com/lzitser23/Navius</PackageProjectUrl>
