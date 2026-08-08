@@ -13,6 +13,26 @@ preview and are not signalled by semver alone.
 
 ## Navius.Primitives
 
+### 0.3.0-preview.6
+- Fix Drawer swallowing every click inside the sheet. The swipe engine took pointer
+  capture on `pointerdown`, which retargets the compatibility mouse events — and
+  `click` with them — to the panel, so buttons, links and fields inside a drawer never
+  fired, `NaviusDrawerClose` included. Both the drawer and the carousel now claim the
+  pointer only once the press has travelled past a threshold, so a tap keeps its click
+  and a drag still engages from anywhere on the sheet or slide.
+- Fix a press inside a drawer permanently disabling its open/close animation: the tap
+  path never released the inline `transition: none` taken at `pointerdown`.
+- Fix a dismissed sheet leaking its drag transform into the next open when the popup
+  stays mounted.
+
+### 0.3.0-preview.5
+- Fix Menu and ContextMenu radio groups marking themselves controlled on a null `Value`,
+  which ignored `DefaultValue` and dropped selections.
+- Emit `tabindex="0"` from the ScrollArea viewport so keyboard scrolling works without
+  the consumer hand-adding it.
+- Gate AlertDialog `aria-labelledby` / `aria-describedby` on the Title/Description parts
+  actually being mounted, so a titleless dialog no longer advertises a dangling IDREF.
+
 ### 0.3.0-preview.4
 - Fix controlled-state detection to track whether the parameter was set, not
   `ValueChanged.HasDelegate`, so a `@bind`-less consumer no longer freezes selection.
