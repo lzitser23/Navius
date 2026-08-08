@@ -2369,9 +2369,12 @@ export function createMaskedSelection(input) {
 // Pointer-driven reorder over the direct element children of `container`. C# owns
 // the ordered collection: the engine never mutates the DOM order (Blazor commits
 // the reorder on re-render), it only tracks the pointer and reports indices +
-// paints style hooks. On press (optionally only when the press starts on a
-// `options.handle` selector inside an item) it records the item rects once, sets
-// data-dragging on the active item, and emits OnDragStart(index). As the pointer
+// paints style hooks. A press on an item (optionally only when it starts on a
+// `options.handle` selector inside it) is tracked but claims nothing; once the
+// pointer has travelled PRESS_SLOP px the drag engages — the engine takes the
+// pointer, records the item rects once, sets data-dragging on the active item, and
+// emits OnDragStart(index). Engaging on travel rather than on press is what keeps
+// buttons and links inside a row clickable and focusable. As the pointer
 // moves it computes the target index by comparing the pointer against each item's
 // midpoint (options.axis: 'vertical' uses the Y midpoint, 'horizontal' the X
 // midpoint, 'grid' the nearest 2D center), mirrors data-drop-target onto the item
@@ -2385,10 +2388,17 @@ export function createSortable(container, options, dotNetRef) {
   const axis = opts.axis; // 'vertical' | 'horizontal' | 'grid'
   const handleSelector = opts.handle || null;
 
+  const PRESS_SLOP = 5; // px of travel before a press becomes a drag
+
+  let pressing = false; // a press on an item is being tracked, but may still be a click
   let dragging = false;
   let fromIndex = -1;
   let toIndex = -1;
   let activeItem = null;
+  let pressItem = null;
+  let startX = 0;
+  let startY = 0;
+  let prevUserSelect = '';
   let rects = []; // item rects captured at drag start (DOM order is stable until commit)
   let pointerId = null;
 
@@ -2449,22 +2459,44 @@ export function createSortable(container, options, dotNetRef) {
       const h = e.target instanceof Element ? e.target.closest(handleSelector) : null;
       if (!h || !item.contains(h)) return; // press must start on a handle
     }
+    // Track the press, but claim nothing yet. Taking the pointer here would retarget the
+    // compatibility mouse events to the container, killing the click of any control
+    // inside a row, and preventDefault would stop it taking focus.
+    pressing = true;
+    dragging = false;
+    pressItem = item;
+    pointerId = e.pointerId;
+    startX = e.clientX;
+    startY = e.clientY;
+  }
+
+  // Past the slop the press is unambiguously a drag: take the pointer, snapshot the
+  // rects, and let C# know. Returns false when the item has since left the container.
+  function engage() {
     const kids = directChildren();
-    fromIndex = kids.indexOf(item);
-    if (fromIndex < 0) return;
+    fromIndex = kids.indexOf(pressItem);
+    if (fromIndex < 0) return false;
     dragging = true;
-    activeItem = item;
+    activeItem = pressItem;
     toIndex = fromIndex;
     rects = kids.map((el) => el.getBoundingClientRect());
-    pointerId = e.pointerId;
-    try { container.setPointerCapture(e.pointerId); } catch {}
-    item.setAttribute('data-dragging', '');
-    e.preventDefault();
+    try { container.setPointerCapture(pointerId); } catch {}
+    // pointerdown no longer suppresses the native drag-select, so hold it off here.
+    prevUserSelect = container.style.userSelect;
+    container.style.userSelect = 'none';
+    activeItem.setAttribute('data-dragging', '');
     notify('OnDragStart', fromIndex);
+    return true;
   }
 
   function onPointerMove(e) {
-    if (!dragging) return;
+    if (!pressing) return;
+    if (!dragging) {
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.sqrt(dx * dx + dy * dy) < PRESS_SLOP) return; // still a press; its click is safe
+      if (!engage()) { pressing = false; pressItem = null; return; }
+    }
     e.preventDefault();
     const next = indexFromPoint(e.clientX, e.clientY);
     if (next !== toIndex) {
@@ -2475,10 +2507,13 @@ export function createSortable(container, options, dotNetRef) {
   }
 
   function finish(commit) {
+    pressing = false;
+    pressItem = null;
     if (!dragging) return;
     dragging = false;
     try { if (pointerId != null) container.releasePointerCapture(pointerId); } catch {}
     pointerId = null;
+    container.style.userSelect = prevUserSelect;
     if (activeItem) activeItem.removeAttribute('data-dragging');
     clearDropTargets();
     const from = fromIndex;
@@ -2492,7 +2527,8 @@ export function createSortable(container, options, dotNetRef) {
   }
 
   function onPointerUp(e) {
-    if (!dragging) return;
+    if (!pressing) return;
+    if (!dragging) { pressing = false; pressItem = null; return; } // a click on a row, not a drag
     e.preventDefault();
     finish(true);
   }

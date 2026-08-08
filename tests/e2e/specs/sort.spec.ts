@@ -50,8 +50,11 @@ test('Sortable: pointer drag paints data-dragging on the item and data-drop-targ
 
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
-  await expect(research).toHaveAttribute('data-dragging', ''); // set on pointerdown
+  // A press alone is not a drag: the engine waits for real travel, which is what keeps
+  // a control inside the row clickable.
+  await expect(research).not.toHaveAttribute('data-dragging', /.*/);
   await page.mouse.move(b.x + b.width / 2, b.y + b.height - 4, { steps: 8 });
+  await expect(research).toHaveAttribute('data-dragging', ''); // set once it became a drag
   // exactly one slot is marked in the brain section while hovering
   await expect(page.locator('[data-testid="brain-vertical"] [data-drop-target]')).toHaveCount(1);
   await page.mouse.up();
