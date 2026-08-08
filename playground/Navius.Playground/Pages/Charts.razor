@@ -17,10 +17,12 @@
     <section class="space-y-3" data-demo="pie">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Pie</h2>
         <div class="w-full max-w-md">
-            <ZitsChartContainer Config="_browserConfig">
-                <ZitsPieChart Data="_browserData" DataKey="visitors" />
+            <ZitsChartContainer Config="_browserConfig" Selectable Animate Bloom="ChartBloom.Aura" BloomOnHover Sparkles>
+                <div class="flex h-full w-full flex-col gap-2">
+                    <ZitsPieChart Data="_browserData" DataKey="visitors" />
+                    <ZitsChartLegend />
+                </div>
             </ZitsChartContainer>
-            <ZitsChartLegend />
         </div>
     </section>
 
@@ -28,17 +30,19 @@
     <section class="space-y-3" data-demo="donut">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Donut (InnerRadius + center total)</h2>
         <div class="w-full max-w-md">
-            <ZitsChartContainer Config="_browserConfig">
-                <ZitsPieChart Data="_browserData" DataKey="visitors" InnerRadius="24" OuterRadius="42">
-                    <CenterContent>
-                        <div data-center>
-                            <div class="text-2xl font-bold leading-none">@_browserTotal</div>
-                            <div class="text-xs text-muted-foreground">Visitors</div>
-                        </div>
-                    </CenterContent>
-                </ZitsPieChart>
+            <ZitsChartContainer Config="_browserConfig" Selectable Animate Bloom="ChartBloom.Aura" BloomOnHover Sparkles>
+                <div class="flex h-full w-full flex-col gap-2">
+                    <ZitsPieChart Data="_browserData" DataKey="visitors" InnerRadius="24" OuterRadius="42">
+                        <CenterContent>
+                            <div data-center>
+                                <div class="text-2xl font-bold leading-none">@_browserTotal</div>
+                                <div class="text-xs text-muted-foreground">Visitors</div>
+                            </div>
+                        </CenterContent>
+                    </ZitsPieChart>
+                    <ZitsChartLegend />
+                </div>
             </ZitsChartContainer>
-            <ZitsChartLegend />
         </div>
     </section>
 
@@ -46,10 +50,12 @@
     <section class="space-y-3" data-demo="radar">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Radar (2 series · 6 axes)</h2>
         <div class="w-full max-w-md">
-            <ZitsChartContainer Config="_radarConfig">
-                <ZitsRadarChart Data="_radarData" />
+            <ZitsChartContainer Config="_radarConfig" Selectable Animate Bloom="ChartBloom.Aura" BloomOnHover Sparkles>
+                <div class="flex h-full w-full flex-col gap-2">
+                    <ZitsRadarChart Data="_radarData" />
+                    <ZitsChartLegend />
+                </div>
             </ZitsChartContainer>
-            <ZitsChartLegend />
         </div>
     </section>
 
@@ -58,9 +64,11 @@
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">RadialBar (rounded caps)</h2>
         <div class="w-full max-w-md">
             <ZitsChartContainer Config="_browserConfig">
-                <ZitsRadialBarChart Data="_browserData" DataKey="visitors" CornerRadius="2" />
+                <div class="flex h-full w-full flex-col gap-2">
+                    <ZitsRadialBarChart Data="_browserData" DataKey="visitors" CornerRadius="2" />
+                    <ZitsChartLegend />
+                </div>
             </ZitsChartContainer>
-            <ZitsChartLegend />
         </div>
     </section>
 
@@ -69,9 +77,11 @@
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Scatter (2 series · x/y)</h2>
         <div class="w-full max-w-md">
             <ZitsChartContainer Config="_scatterConfig">
-                <ZitsScatterChart Data="_scatterData" XKey="x" YKey="y" />
+                <div class="flex h-full w-full flex-col gap-2">
+                    <ZitsScatterChart Data="_scatterData" XKey="x" YKey="y" />
+                    <ZitsChartLegend />
+                </div>
             </ZitsChartContainer>
-            <ZitsChartLegend />
         </div>
     </section>
 </div>
@@ -81,10 +91,10 @@
     // (the slice/ring colours via var(--color-<key>)); the config maps them to labels.
     private static readonly ChartConfig _browserConfig = new()
     {
-        ["chrome"] = new ChartSeries("Chrome", "#e76f51"),
-        ["safari"] = new ChartSeries("Safari", "#f4a261"),
-        ["firefox"] = new ChartSeries("Firefox", "#e9c46a"),
-        ["edge"] = new ChartSeries("Edge", "#2a9d8f"),
+        ["chrome"] = new ChartSeries("Chrome", "#e76f51") { FillVariant = ChartFillVariant.Gradient },
+        ["safari"] = new ChartSeries("Safari", "#f4a261") { FillVariant = ChartFillVariant.Dotted },
+        ["firefox"] = new ChartSeries("Firefox", "#e9c46a") { FillVariant = ChartFillVariant.Hatched },
+        ["edge"] = new ChartSeries("Edge", "#2a9d8f") { FillVariant = ChartFillVariant.Gradient },
         ["other"] = new ChartSeries("Other", "#264653"),
     };
 
@@ -103,8 +113,8 @@
     // Desktop vs mobile across six months: drives Radar (categories are the Labels).
     private static readonly ChartConfig _radarConfig = new()
     {
-        ["desktop"] = new ChartSeries("Desktop", "#e76f51"),
-        ["mobile"] = new ChartSeries("Mobile", "#2a9d8f"),
+        ["desktop"] = new ChartSeries("Desktop", "#e76f51") { FillVariant = ChartFillVariant.Gradient },
+        ["mobile"] = new ChartSeries("Mobile", "#2a9d8f") { FillVariant = ChartFillVariant.Hatched },
     };
 
     private static readonly ChartDataPoint[] _radarData =
