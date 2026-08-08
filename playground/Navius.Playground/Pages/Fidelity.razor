@@ -96,10 +96,10 @@
     <section class="space-y-3" data-demo="chart">
         <h2 class="font-mono text-xs uppercase tracking-widest text-muted-foreground">Chart (bar · 2 series)</h2>
         <div class="w-full max-w-2xl">
-            <ZitsChartContainer Config="_chartConfig">
+            <ZitsChartContainer Config="_chartConfig" Selectable Animate Bloom="ChartBloom.Low" Sparkles>
                 <div class="flex h-full w-full flex-col gap-2">
                     <ZitsBarChart Data="_chartData" />
-                    <ZitsChartLegend />
+                    <ZitsChartLegend IsClickable />
                 </div>
             </ZitsChartContainer>
         </div>
@@ -175,8 +175,8 @@
     // ---- Chart -------------------------------------------------------------
     private static readonly ChartConfig _chartConfig = new()
     {
-        ["desktop"] = new ChartSeries("Desktop", "var(--chart-1)"),
-        ["mobile"] = new ChartSeries("Mobile", "var(--chart-2)"),
+        ["desktop"] = new ChartSeries("Desktop", "var(--chart-1)") { FillVariant = ChartFillVariant.Gradient },
+        ["mobile"] = new ChartSeries("Mobile", "var(--chart-2)") { FillVariant = ChartFillVariant.Hatched },
     };
 
     private static readonly ChartDataPoint[] _chartData =
