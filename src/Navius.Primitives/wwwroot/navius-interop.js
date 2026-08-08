@@ -1422,6 +1422,9 @@ export function createCarousel(viewport, dotNetRef, options) {
   }
 
   // --- Drag ---
+  const PRESS_SLOP = 5; // px of travel before a press becomes a drag
+
+  let pressing = false; // a press is being tracked, but may still turn out to be a click
   let dragging = false;
   let startPos = 0;
   let startTranslate = 0;
@@ -1443,17 +1446,19 @@ export function createCarousel(viewport, dotNetRef, options) {
 
   function onPointerDown(e) {
     if (e.button !== 0) return;
-    dragging = true;
+    // Track the press, but claim nothing yet: taking the pointer here would retarget
+    // the compatibility mouse events to the viewport, killing the click of any
+    // control inside a slide.
+    pressing = true;
+    dragging = false;
     startPos = lastPos = eventPos(e);
     startTranslate = currentTranslate;
     lastTime = e.timeStamp || performance.now();
     velocity = 0;
-    try { viewport.setPointerCapture(e.pointerId); } catch {}
-    track.style.transition = 'none';
   }
 
   function onPointerMove(e) {
-    if (!dragging) return;
+    if (!pressing) return;
     const pos = eventPos(e);
     const now = e.timeStamp || performance.now();
     const dt = now - lastTime;
@@ -1461,13 +1466,21 @@ export function createCarousel(viewport, dotNetRef, options) {
     lastPos = pos;
     lastTime = now;
     const delta = pos - startPos;
+    if (!dragging) {
+      if (Math.abs(delta) < PRESS_SLOP) return; // still a press; its click is safe
+      dragging = true;
+      try { viewport.setPointerCapture(e.pointerId); } catch {}
+      track.style.transition = 'none';
+    }
     setTransform(rubber(startTranslate + delta), false);
     viewport.style.setProperty('--navius-carousel-drag-offset', `${delta}px`);
     e.preventDefault();
   }
 
   function onPointerUp(e) {
-    if (!dragging) return;
+    if (!pressing) return;
+    pressing = false;
+    if (!dragging) return; // a click on a slide, not a drag
     dragging = false;
     try { viewport.releasePointerCapture(e.pointerId); } catch {}
     viewport.style.removeProperty('--navius-carousel-drag-offset');
@@ -1548,13 +1561,16 @@ export function createCarousel(viewport, dotNetRef, options) {
 // transform. On release the engine compares the dragged distance against
 // `dismissThreshold` (a fraction of the sheet's size on that axis): past it fires
 // OnDismiss (leaving the offset in place so C#'s close animation continues from
-// there), otherwise it snaps back and fires OnReset. A drag that never moved is
-// treated as a tap and ignored so inner clicks still work. Mirrors
+// there), otherwise it snaps back and fires OnReset. A press that never travels
+// DRAG_THRESHOLD px toward the dismiss edge is a tap: the engine never takes the
+// pointer, so controls inside the sheet keep their clicks. Mirrors
 // createToastInteractions' pointer-capture + threshold model. For Drawer.
 export function createSheetSwipe(content, dotNetRef, options) {
   const opts = Object.assign({ side: 'bottom', dismissThreshold: 0.25 }, options || {});
   const side = opts.side;
   const horizontal = side === 'left' || side === 'right';
+
+  const DRAG_THRESHOLD = 5; // px of dismiss-direction travel before a press becomes a drag
 
   let dragging = false;
   let moved = false;
@@ -1598,47 +1614,55 @@ export function createSheetSwipe(content, dotNetRef, options) {
 
   function onPointerDown(e) {
     if (e.button !== 0) return;
+    // Track the press, but claim nothing yet. Taking the pointer here would retarget
+    // the compatibility mouse events to the sheet, and `click` with them — every
+    // button, link and field inside the drawer would go dead.
     dragging = true;
     moved = false;
     startX = e.clientX;
     startY = e.clientY;
-    try { content.setPointerCapture(e.pointerId); } catch {}
-    content.style.transition = 'none';
   }
 
   function onPointerMove(e) {
     if (!dragging) return;
     const amount = projected(e.clientX - startX, e.clientY - startY);
-    if (amount > 0) {
-      if (!moved) content.setAttribute('data-swiping', ''); // Base UI: data-swiping during a drag
+    if (!moved) {
+      if (amount < DRAG_THRESHOLD) return; // still a press; the click it may become is safe
+      // Past the threshold this is unambiguously a drag, so take the pointer now.
       moved = true;
-      setOffset(amount);
-      e.preventDefault();
-    } else if (moved) {
-      setOffset(0);
+      try { content.setPointerCapture(e.pointerId); } catch {}
+      content.style.transition = 'none';
+      content.setAttribute('data-swiping', ''); // Base UI: data-swiping during a drag
     }
+    setOffset(amount);
+    e.preventDefault();
   }
 
   function onPointerUp(e) {
     if (!dragging) return;
     dragging = false;
+    if (!moved) return; // a tap, not a drag — nothing was captured or offset
+    moved = false;
     try { content.releasePointerCapture(e.pointerId); } catch {}
     content.removeAttribute('data-swiping');
-    if (!moved) {
-      clearOffset();
-      return; // a tap, not a drag
-    }
     const amount = projected(e.clientX - startX, e.clientY - startY);
     const size = horizontal ? content.offsetWidth : content.offsetHeight;
     const passed = size > 0 && amount / size >= opts.dismissThreshold;
+    // Either way the inline transition lock has to go, or the sheet keeps it for
+    // the rest of its life and loses its open/close animation.
+    content.style.transition = '';
     if (passed) {
-      notify('OnDismiss'); // leave the offset so the exit animation continues
+      notify('OnDismiss'); // leave the offset so the exit animation continues from here
     } else {
-      content.style.transition = ''; // restore the stylesheet transition to ease back
       clearOffset();
       notify('OnReset');
     }
   }
+
+  // A dismissed sheet keeps its drag offset so the exit animation continues from
+  // there; if that element stays mounted, clear it as the next open engages.
+  clearOffset();
+  content.style.transition = '';
 
   content.addEventListener('pointerdown', onPointerDown);
   content.addEventListener('pointermove', onPointerMove);
