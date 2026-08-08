@@ -13,6 +13,17 @@ preview and are not signalled by semver alone.
 
 ## Navius.Primitives
 
+### 0.3.0-preview.7
+- Fix Sortable swallowing clicks on controls inside a row — the last of the
+  pointer-capture family fixed in preview.6. The engine captured the pointer on
+  `pointerdown`, so a row's own edit/delete button never fired, and its
+  `preventDefault` also stopped the control taking focus. The drag now engages once
+  the press has travelled past a threshold, which additionally means a plain click no
+  longer emits a spurious `OnDragStart`/`OnCancel` pair.
+- `data-dragging` and `OnDragStart` now land on the first real movement rather than on
+  press. Consumers styling `data-dragging` see it a few pixels later; nothing else in
+  the contract changes.
+
 ### 0.3.0-preview.6
 - Fix Drawer swallowing every click inside the sheet. The swipe engine took pointer
   capture on `pointerdown`, which retargets the compatibility mouse events — and
