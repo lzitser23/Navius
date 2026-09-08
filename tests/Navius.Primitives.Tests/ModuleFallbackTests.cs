@@ -70,6 +70,20 @@ public class ModuleFallbackTests
         var cause = Assert.IsType<JSException>(error.InnerException);
         Assert.Contains(ModulePaths.Package, cause.Message);
     }
+
+    [Fact]
+    public async Task Disposal_after_a_failed_import_does_not_replay_the_import_error()
+    {
+        var js = new PathAwareJsRuntime { FailingImports = { ModulePaths.Package, ModulePaths.Vendored } };
+        var interop = new NaviusJsInterop(js);
+        await Assert.ThrowsAsync<InvalidOperationException>(interop.LockScrollAsync);
+
+        // The failed import is cached in the Lazy, and a component disposes its interop on
+        // teardown: awaiting that task again would throw the same error out of DisposeAsync.
+        await interop.DisposeAsync();
+
+        Assert.Equal(new[] { ModulePaths.Package, ModulePaths.Vendored }, js.ImportedPaths);
+    }
 }
 
 /// <summary>

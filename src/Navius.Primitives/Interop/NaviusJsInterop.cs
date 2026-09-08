@@ -541,7 +541,10 @@ public sealed class NaviusJsInterop : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (!_module.IsValueCreated)
+        // Only a successfully completed import owns a module to release. The import task
+        // is cached in the Lazy, so re-awaiting a failed one here would replay its error
+        // on disposal (throwing out of the component's teardown) instead of tearing down.
+        if (!_module.IsValueCreated || !_module.Value.IsCompletedSuccessfully)
         {
             return;
         }
